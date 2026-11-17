@@ -53,7 +53,11 @@ func _on_train_spearman_pressed() -> void:
 
 
 func _on_train_archer_pressed() -> void:
-	_barracks_enqueue("archer")
+	var range_b := get_tree().get_first_node_in_group("archery_ranges") as ArcheryRange
+	if range_b == null:
+		NotificationManager.show_message("Nejdřív postav Střelnici.")
+		return
+	range_b.enqueue_unit("archer")
 
 
 func _on_train_villager_pressed() -> void:

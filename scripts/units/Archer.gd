@@ -1,7 +1,9 @@
 extends Unit
 class_name Archer
 
-## DESIGN: Lučištník — 25 D + 45 Z, 35 s, HP 30, útok 4, dosah 160 px.
+## DESIGN: Lučištník — 25 D + 45 Z, 35 s, HP 30, útok 4, dosah 160 px. Střílí projektilem.
+
+const PROJECTILE_SCENE := preload("res://scenes/combat/Projectile.tscn")
 
 
 func _ready() -> void:
@@ -13,5 +15,22 @@ func _ready() -> void:
 	can_attack = true
 	super._ready()
 	add_to_group("soldiers")
+	add_to_group("archers")
 	if has_node("Visual"):
 		$Visual.color = Color(0.55, 0.35, 0.15, 1.0) if team == 0 else Color(0.55, 0.15, 0.35, 1.0)
+
+
+func _try_strike() -> void:
+	if _attack_timer > 0.0 or not is_instance_valid(attack_target):
+		return
+	if "team" in attack_target and int(attack_target.get("team")) == team:
+		attack_target = null
+		return
+	_attack_timer = attack_cooldown
+	var proj: Projectile = PROJECTILE_SCENE.instantiate() as Projectile
+	var parent := get_parent()
+	if parent == null:
+		parent = get_tree().current_scene
+	parent.add_child(proj)
+	proj.setup(global_position, attack_target.global_position, attack_damage, team, attack_target)
+	print("[COMBAT] archer loosed arrow at %s" % attack_target.name)

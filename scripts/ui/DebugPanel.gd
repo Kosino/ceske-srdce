@@ -51,6 +51,8 @@ func _refresh_build_status() -> void:
 	var lines: PackedStringArray = []
 	var barracks := get_tree().get_first_node_in_group("barracks") as Barracks
 	lines.append("Kasárna: %s" % (barracks.get_queue_summary() if barracks else "žádná"))
+	var archery := get_tree().get_first_node_in_group("archery_ranges") as ArcheryRange
+	lines.append("Střelnice: %s" % (archery.get_queue_summary() if archery else "žádná"))
 	var hall := get_tree().get_first_node_in_group("player_town_hall") as DropOff
 	lines.append("Radnice: %s" % (hall.get_queue_summary() if hall else "žádná"))
 	build_label.text = "\n".join(lines)
@@ -79,6 +81,10 @@ func _on_place_barracks_pressed() -> void:
 	_begin("barracks")
 
 
+func _on_place_archery_pressed() -> void:
+	_begin("archery_range")
+
+
 func _on_place_lumber_pressed() -> void:
 	_begin("lumber_camp")
 
@@ -96,7 +102,11 @@ func _on_train_spearman_pressed() -> void:
 
 
 func _on_train_archer_pressed() -> void:
-	_barracks_enqueue("archer")
+	var range_b := get_tree().get_first_node_in_group("archery_ranges") as ArcheryRange
+	if range_b == null:
+		NotificationManager.show_message("Nejdřív postav Střelnici.")
+		return
+	range_b.enqueue_unit("archer")
 
 
 func _on_train_villager_pressed() -> void:

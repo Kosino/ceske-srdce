@@ -4,6 +4,9 @@ const VILLAGER_SCENE := preload("res://scenes/units/Villager.tscn")
 const RESOURCE_SCENE := preload("res://scenes/world/ResourceNode.tscn")
 const DROPOFF_SCENE := preload("res://scenes/world/DropOff.tscn")
 const SOLDIER_SCENE := preload("res://scenes/units/Soldier.tscn")
+const ARCHER_SCENE := preload("res://scenes/units/Archer.tscn")
+const BARRACKS_SCENE := preload("res://scenes/buildings/Barracks.tscn")
+const PROJECTILE_SCENE := preload("res://scenes/combat/Projectile.tscn")
 
 @onready var units: Node2D = $Units
 @onready var building_placer: BuildingPlacer = $BuildingPlacer
@@ -17,6 +20,8 @@ func _ready() -> void:
 	await _run_friendly_target_smoke()
 	await _run_gather_rmb_smoke()
 	await _run_construction_smoke()
+	await _run_projectile_smoke()
+	await _run_archer_barracks_block_smoke()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 stavění/trénink.")
 
 
@@ -101,7 +106,7 @@ func _run_gather_rmb_smoke() -> void:
 		print("[TEST] FAIL gather setup missing wood/villagers")
 		return
 
-	# Place villagers near the node so navigation isn't flaky in headless.
+	# Place villagers near the node so navigation is not flaky in headless.
 	for i in villagers.size():
 		villagers[i].global_position = wood.global_position + Vector2(18.0 + float(i) * 10.0, 8.0)
 
@@ -191,3 +196,64 @@ func _run_construction_smoke() -> void:
 		print("[TEST] PASS building completes after time")
 	else:
 		print("[TEST] FAIL construction smoke")
+
+
+## Projectile deals damage on impact when target stays at aim point.
+func _run_projectile_smoke() -> void:
+	await get_tree().physics_frame
+	var enemy: Soldier = SOLDIER_SCENE.instantiate()
+	enemy.team = 1
+	enemy.contribute_population = false
+	enemy.position = Vector2(700, 600)
+	units.add_child(enemy)
+	await get_tree().physics_frame
+	var hp_before := enemy.hp
+
+	var proj: Projectile = PROJECTILE_SCENE.instantiate() as Projectile
+	units.add_child(proj)
+	var origin := enemy.global_position + Vector2(-120, 0)
+	proj.setup(origin, enemy.global_position, 4.0, 0, enemy)
+
+	var hit := false
+	for _i in range(40):
+		await get_tree().create_timer(0.05).timeout
+		if not is_instance_valid(enemy):
+			hit = true
+			break
+		if enemy.hp < hp_before - 0.1:
+			hit = true
+			break
+
+	var hp_after := enemy.hp if is_instance_valid(enemy) else 0.0
+	print("[TEST] projectile hp %.1f -> %.1f hit=%s" % [hp_before, hp_after, hit])
+	if hit:
+		print("[TEST] PASS projectile deals damage")
+	else:
+		print("[TEST] FAIL projectile deals damage")
+
+	if is_instance_valid(enemy):
+		enemy.queue_free()
+
+
+## Archer cannot be trained at Barracks (moved to Strelnice).
+func _run_archer_barracks_block_smoke() -> void:
+	await get_tree().physics_frame
+	GameManager.add_population_cap(10)
+	GameManager.add_resource("wood", 50)
+	GameManager.add_resource("gold", 50)
+
+	var barracks: Barracks = BARRACKS_SCENE.instantiate()
+	barracks.position = Vector2(500, 500)
+	barracks.is_complete = true
+	units.add_child(barracks)
+	await get_tree().physics_frame
+
+	var refused := not barracks.enqueue_unit("archer")
+	var still_empty := barracks.queue.is_empty()
+	print("[TEST] barracks_archer refused=%s queue_empty=%s" % [refused, still_empty])
+	if refused and still_empty:
+		print("[TEST] PASS Archer cannot train at Barracks")
+	else:
+		print("[TEST] FAIL Archer cannot train at Barracks")
+
+	barracks.queue_free()

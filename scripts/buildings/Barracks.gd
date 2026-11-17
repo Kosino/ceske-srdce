@@ -6,14 +6,12 @@ signal unit_spawned(unit: Node2D)
 
 const SOLDIER_SCENE := preload("res://scenes/units/Soldier.tscn")
 const SPEARMAN_SCENE := preload("res://scenes/units/Spearman.tscn")
-const ARCHER_SCENE := preload("res://scenes/units/Archer.tscn")
 const MAX_QUEUE := 5
 
-## DESIGN unit defs: id -> {cost, time, scene, label}
+## DESIGN: Kasárna trénuje jen Zbrojnoše a Kopiníka (Lučištník → Střelnice).
 const UNIT_DEFS := {
 	"soldier": {"cost": {"food": 60, "gold": 20}, "time": 21.0, "label": "zbrojnoš"},
 	"spearman": {"cost": {"food": 35, "wood": 25}, "time": 22.0, "label": "kopiník"},
-	"archer": {"cost": {"wood": 25, "gold": 45}, "time": 35.0, "label": "lučištník"},
 }
 
 var queue: Array[String] = []
@@ -25,7 +23,7 @@ func _ready() -> void:
 	building_id = "barracks"
 	display_name = "Kasárna"
 	footprint = Vector2(80, 80)
-	max_hp = 1500.0
+	max_hp = 1200.0
 	build_time = 50.0
 	super._ready()
 	add_to_group("barracks")
@@ -51,12 +49,16 @@ func enqueue_spearman() -> bool:
 
 
 func enqueue_archer() -> bool:
-	return enqueue_unit("archer")
+	NotificationManager.show_message("Lučištník se trénuje na Střelnici.")
+	return false
 
 
 func enqueue_unit(unit_id: String) -> bool:
 	if not is_complete:
 		NotificationManager.show_message("Kasárna ještě není dokončená.")
+		return false
+	if unit_id == "archer":
+		NotificationManager.show_message("Lučištník se trénuje na Střelnici.")
 		return false
 	if unit_id not in UNIT_DEFS:
 		return false
@@ -117,7 +119,5 @@ func _instantiate_unit(unit_id: String) -> Node2D:
 			return SOLDIER_SCENE.instantiate()
 		"spearman":
 			return SPEARMAN_SCENE.instantiate()
-		"archer":
-			return ARCHER_SCENE.instantiate()
 		_:
 			return null
