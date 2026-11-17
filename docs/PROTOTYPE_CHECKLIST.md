@@ -1,10 +1,10 @@
 # Checklist prvního prototypu
 
 ## Základy
-- [ ] GameManager (resources, population, age)
-- [ ] Debug panel
-- [ ] Kamera (WASD + zoom)
-- [ ] NavigationRegion2D na mapě
+- [x] GameManager (resources, population, age)
+- [x] Debug panel
+- [x] Kamera (WASD + zoom)
+- [x] NavigationRegion2D na mapě
 
 ## Gathering
 - [ ] Vesničan se pohybuje (NavigationAgent2D)

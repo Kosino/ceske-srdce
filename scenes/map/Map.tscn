@@ -1,0 +1,70 @@
+[gd_scene load_steps=4 format=3 uid="uid://bqmapceskesrdce01"]
+
+[ext_resource type="Script" path="res://scripts/map/Map.gd" id="1_map"]
+[ext_resource type="Script" path="res://scripts/camera/RTSCamera.gd" id="2_camera"]
+[ext_resource type="Script" path="res://scripts/ui/DebugPanel.gd" id="3_debug"]
+
+[node name="Map" type="Node2D"]
+script = ExtResource("1_map")
+
+[node name="Ground" type="Polygon2D" parent="."]
+z_index = -10
+color = Color(0.321569, 0.482353, 0.270588, 1)
+polygon = PackedVector2Array(0, 0, 2000, 0, 2000, 2000, 0, 2000)
+
+[node name="NavigationRegion2D" type="NavigationRegion2D" parent="."]
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position = Vector2(1000, 1000)
+zoom = Vector2(0.75, 0.75)
+script = ExtResource("2_camera")
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="DebugPanel" type="PanelContainer" parent="UI"]
+anchors_preset = 0
+offset_left = 12.0
+offset_top = 12.0
+offset_right = 360.0
+offset_bottom = 150.0
+script = ExtResource("3_debug")
+
+[node name="Margin" type="MarginContainer" parent="UI/DebugPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 8
+
+[node name="VBox" type="VBoxContainer" parent="UI/DebugPanel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="UI/DebugPanel/Margin/VBox"]
+layout_mode = 2
+text = "Debug"
+
+[node name="InfoLabel" type="Label" parent="UI/DebugPanel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "…"
+
+[node name="Buttons" type="HBoxContainer" parent="UI/DebugPanel/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="AddFood" type="Button" parent="UI/DebugPanel/Margin/VBox/Buttons"]
+layout_mode = 2
+text = "+50 Food"
+
+[node name="AddWood" type="Button" parent="UI/DebugPanel/Margin/VBox/Buttons"]
+layout_mode = 2
+text = "+50 Wood"
+
+[node name="AdvanceAge" type="Button" parent="UI/DebugPanel/Margin/VBox/Buttons"]
+layout_mode = 2
+text = "Age+"
+
+[connection signal="pressed" from="UI/DebugPanel/Margin/VBox/Buttons/AddFood" to="UI/DebugPanel" method="_on_add_food_pressed"]
+[connection signal="pressed" from="UI/DebugPanel/Margin/VBox/Buttons/AddWood" to="UI/DebugPanel" method="_on_add_wood_pressed"]
+[connection signal="pressed" from="UI/DebugPanel/Margin/VBox/Buttons/AdvanceAge" to="UI/DebugPanel" method="_on_advance_age_pressed"]

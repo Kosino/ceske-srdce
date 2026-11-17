@@ -34,3 +34,18 @@ func spend(cost: Dictionary) -> void:
 func change_population(delta: int) -> void:
 	population = clampi(population + delta, 0, population_max)
 	population_changed.emit()
+
+
+func set_age(age: int) -> void:
+	var next := clampi(age, 1, 4)
+	if next == current_age:
+		return
+	current_age = next
+	age_changed.emit()
+
+
+func advance_age() -> bool:
+	if current_age >= 4:
+		return false
+	set_age(current_age + 1)
+	return true
