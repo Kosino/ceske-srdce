@@ -18,9 +18,6 @@ func _ready() -> void:
 
 
 func _spawn_core_demo() -> void:
-	# Extra resources so demo can place Pila/Mlýn/Kasárna (DESIGN costs).
-	GameManager.add_resource("wood", 250)
-	GameManager.add_resource("food", 50)
 	var hall: DropOff = DROPOFF_SCENE.instantiate()
 	hall.team = 0
 	hall.position = Vector2(900, 700)
