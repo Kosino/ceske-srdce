@@ -1,9 +1,13 @@
-[gd_scene load_steps=5 format=3 uid="uid://bqmapceskesrdce01"]
+[gd_scene load_steps=8 format=3 uid="uid://bqmapceskesrdce01"]
 
 [ext_resource type="Script" path="res://scripts/map/Map.gd" id="1_map"]
 [ext_resource type="Script" path="res://scripts/camera/RTSCamera.gd" id="2_camera"]
 [ext_resource type="Script" path="res://scripts/ui/DebugPanel.gd" id="3_debug"]
 [ext_resource type="Script" path="res://scripts/buildings/BuildingPlacer.gd" id="4_placer"]
+[ext_resource type="Script" path="res://scripts/input/SelectionController.gd" id="5_select"]
+[ext_resource type="Script" path="res://scripts/ui/CommandPanel.gd" id="6_command"]
+[ext_resource type="Script" path="res://scripts/ai/SimpleEnemyAI.gd" id="7_ai"]
+[ext_resource type="Script" path="res://scripts/game/VictoryController.gd" id="8_victory"]
 
 [node name="Map" type="Node2D"]
 script = ExtResource("1_map")
@@ -19,6 +23,15 @@ polygon = PackedVector2Array(0, 0, 2000, 0, 2000, 2000, 0, 2000)
 
 [node name="BuildingPlacer" type="Node2D" parent="."]
 script = ExtResource("4_placer")
+
+[node name="SelectionController" type="Node2D" parent="."]
+script = ExtResource("5_select")
+
+[node name="SimpleEnemyAI" type="Node" parent="."]
+script = ExtResource("7_ai")
+
+[node name="VictoryController" type="Node" parent="."]
+script = ExtResource("8_victory")
 
 [node name="Camera2D" type="Camera2D" parent="."]
 position = Vector2(1000, 1000)
@@ -92,9 +105,48 @@ text = "Kasárna"
 layout_mode = 2
 text = "Train"
 
+[node name="CommandPanel" type="PanelContainer" parent="UI"]
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -180.0
+offset_top = -110.0
+offset_right = 180.0
+offset_bottom = -12.0
+grow_horizontal = 2
+grow_vertical = 0
+script = ExtResource("6_command")
+
+[node name="CommandMargin" type="MarginContainer" parent="UI/CommandPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 8
+
+[node name="CommandVBox" type="VBoxContainer" parent="UI/CommandPanel/CommandMargin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="CommandTitle" type="Label" parent="UI/CommandPanel/CommandMargin/CommandVBox"]
+layout_mode = 2
+text = "Command"
+
+[node name="CommandSummary" type="Label" parent="UI/CommandPanel/CommandMargin/CommandVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Výběr: …"
+
+[node name="StopButton" type="Button" parent="UI/CommandPanel/CommandMargin/CommandVBox"]
+layout_mode = 2
+text = "Stop"
+
 [connection signal="pressed" from="UI/DebugPanel/Margin/VBox/Buttons/AddFood" to="UI/DebugPanel" method="_on_add_food_pressed"]
 [connection signal="pressed" from="UI/DebugPanel/Margin/VBox/Buttons/AddWood" to="UI/DebugPanel" method="_on_add_wood_pressed"]
 [connection signal="pressed" from="UI/DebugPanel/Margin/VBox/Buttons/AdvanceAge" to="UI/DebugPanel" method="_on_advance_age_pressed"]
 [connection signal="pressed" from="UI/DebugPanel/Margin/VBox/BuildButtons/PlaceHouse" to="UI/DebugPanel" method="_on_place_house_pressed"]
 [connection signal="pressed" from="UI/DebugPanel/Margin/VBox/BuildButtons/PlaceBarracks" to="UI/DebugPanel" method="_on_place_barracks_pressed"]
 [connection signal="pressed" from="UI/DebugPanel/Margin/VBox/BuildButtons/TrainSoldier" to="UI/DebugPanel" method="_on_train_soldier_pressed"]
+[connection signal="pressed" from="UI/CommandPanel/CommandMargin/CommandVBox/StopButton" to="UI/CommandPanel" method="_on_stop_pressed"]

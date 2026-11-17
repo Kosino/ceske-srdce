@@ -17,6 +17,7 @@ var _harvest_accumulator: float = 0.0
 
 
 func _ready() -> void:
+	can_attack = false
 	super._ready()
 	_refresh_carry_label()
 

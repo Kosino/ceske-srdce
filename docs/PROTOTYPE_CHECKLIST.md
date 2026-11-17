@@ -20,8 +20,8 @@
 - [x] Spawn jednotky
 
 ## Combat a výběr
-- [ ] HP + damage + smrt
-- [ ] Box select / single select
-- [ ] CommandPanel reaguje na výběr
-- [ ] Jednoduchá AI
-- [ ] Victory (zničení Radnice)
+- [x] HP + damage + smrt
+- [x] Box select / single select
+- [x] CommandPanel reaguje na výběr
+- [x] Jednoduchá AI
+- [x] Victory (zničení Radnice)
