@@ -1,0 +1,22 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/buildings/Barracks.gd" id="1_barracks"]
+
+[node name="Barracks" type="Node2D"]
+script = ExtResource("1_barracks")
+
+[node name="Visual" type="Polygon2D" parent="."]
+color = Color(0.45, 0.42, 0.4, 1)
+polygon = PackedVector2Array(-40, -28, 40, -28, 40, 32, -40, 32)
+
+[node name="Banner" type="Polygon2D" parent="."]
+color = Color(0.7, 0.15, 0.15, 1)
+polygon = PackedVector2Array(-8, -52, 8, -52, 8, -28, -8, -28)
+
+[node name="Label" type="Label" parent="."]
+offset_left = -44.0
+offset_top = 34.0
+offset_right = 44.0
+offset_bottom = 58.0
+horizontal_alignment = 1
+text = "Kasarna"

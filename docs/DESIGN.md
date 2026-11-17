@@ -43,4 +43,4 @@ Těžba za sekundu na vesničana: dřevo 0.40, jídlo z keřů 0.30, farma 0.33,
 | Mlýn | 100 D | 35 s | 1000 | drop-off jídlo, farmy |
 | Kasárna | 175 D | 50 s | 1200 | Zbrojnoš, Kopiník, Lučištník (Střelnice až ve Fázi 2) |
 
-Poznámka: population_max se bude počítat z Radnice + Domů (implementace s BuildingPlacerem).
+Poznámka: `population_max` = Radnice +5 a každý Dům +5, strop 200 (`GameManager.add_population_cap` / `can_add_population`).

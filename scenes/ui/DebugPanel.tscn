@@ -8,8 +8,8 @@ script = ExtResource("1_debug")
 [node name="Panel" type="PanelContainer" parent="."]
 offset_left = 12.0
 offset_top = 12.0
-offset_right = 210.0
-offset_bottom = 188.0
+offset_right = 280.0
+offset_bottom = 320.0
 
 [node name="Margin" type="MarginContainer" parent="Panel"]
 layout_mode = 2
@@ -34,3 +34,46 @@ Age: 1"
 [node name="FpsLabel" type="Label" parent="Panel/Margin/VBox"]
 layout_mode = 2
 text = "FPS: 0"
+
+[node name="BuildLabel" type="Label" parent="Panel/Margin/VBox"]
+layout_mode = 2
+text = "Kasarna: ..."
+
+[node name="TestButtons" type="HBoxContainer" parent="Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="AddFood" type="Button" parent="Panel/Margin/VBox/TestButtons"]
+layout_mode = 2
+text = "+50 Food"
+
+[node name="AddWood" type="Button" parent="Panel/Margin/VBox/TestButtons"]
+layout_mode = 2
+text = "+50 Wood"
+
+[node name="AdvanceAge" type="Button" parent="Panel/Margin/VBox/TestButtons"]
+layout_mode = 2
+text = "Age+"
+
+[node name="BuildButtons" type="HBoxContainer" parent="Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="PlaceHouse" type="Button" parent="Panel/Margin/VBox/BuildButtons"]
+layout_mode = 2
+text = "Dum"
+
+[node name="PlaceBarracks" type="Button" parent="Panel/Margin/VBox/BuildButtons"]
+layout_mode = 2
+text = "Kasarna"
+
+[node name="TrainSoldier" type="Button" parent="Panel/Margin/VBox/BuildButtons"]
+layout_mode = 2
+text = "Train"
+
+[connection signal="pressed" from="Panel/Margin/VBox/TestButtons/AddFood" to="." method="_on_add_food_pressed"]
+[connection signal="pressed" from="Panel/Margin/VBox/TestButtons/AddWood" to="." method="_on_add_wood_pressed"]
+[connection signal="pressed" from="Panel/Margin/VBox/TestButtons/AdvanceAge" to="." method="_on_advance_age_pressed"]
+[connection signal="pressed" from="Panel/Margin/VBox/BuildButtons/PlaceHouse" to="." method="_on_place_house_pressed"]
+[connection signal="pressed" from="Panel/Margin/VBox/BuildButtons/PlaceBarracks" to="." method="_on_place_barracks_pressed"]
+[connection signal="pressed" from="Panel/Margin/VBox/BuildButtons/TrainSoldier" to="." method="_on_train_soldier_pressed"]

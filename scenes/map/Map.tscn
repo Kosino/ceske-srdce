@@ -1,8 +1,13 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=9 format=3]
 
-[ext_resource type="PackedScene" path="res://scenes/units/Unit.tscn" id="1_unit"]
+[ext_resource type="Script" path="res://scripts/map/Map.gd" id="1_map"]
 [ext_resource type="Script" path="res://scripts/camera/RTSCamera.gd" id="2_camera"]
 [ext_resource type="PackedScene" path="res://scenes/ui/DebugPanel.tscn" id="3_debug"]
+[ext_resource type="Script" path="res://scripts/buildings/BuildingPlacer.gd" id="4_placer"]
+[ext_resource type="Script" path="res://scripts/input/SelectionController.gd" id="5_select"]
+[ext_resource type="Script" path="res://scripts/ai/SimpleEnemyAI.gd" id="6_ai"]
+[ext_resource type="Script" path="res://scripts/game/VictoryController.gd" id="7_victory"]
+[ext_resource type="Script" path="res://scripts/ui/CommandPanel.gd" id="8_command"]
 
 [sub_resource type="NavigationPolygon" id="NavigationPolygon_map"]
 vertices = PackedVector2Array(0, 0, 3000, 0, 3000, 3000, 0, 3000)
@@ -11,6 +16,7 @@ outlines = Array[PackedVector2Array]([PackedVector2Array(0, 0, 3000, 0, 3000, 30
 agent_radius = 8.0
 
 [node name="Map" type="Node2D"]
+script = ExtResource("1_map")
 
 [node name="Ground" type="Polygon2D" parent="."]
 color = Color(0.3, 0.46, 0.22, 1)
@@ -21,19 +27,62 @@ navigation_polygon = SubResource("NavigationPolygon_map")
 
 [node name="Units" type="Node2D" parent="."]
 
-[node name="Unit1" parent="Units" instance=ExtResource("1_unit")]
-position = Vector2(860, 680)
+[node name="BuildingPlacer" type="Node2D" parent="."]
+script = ExtResource("4_placer")
 
-[node name="Unit2" parent="Units" instance=ExtResource("1_unit")]
-position = Vector2(920, 680)
-modulate = Color(0.95, 0.78, 0.35, 1)
+[node name="SelectionController" type="Node2D" parent="."]
+script = ExtResource("5_select")
 
-[node name="Unit3" parent="Units" instance=ExtResource("1_unit")]
-position = Vector2(890, 740)
-modulate = Color(0.85, 0.4, 0.3, 1)
+[node name="SimpleEnemyAI" type="Node" parent="."]
+script = ExtResource("6_ai")
+
+[node name="VictoryController" type="Node" parent="."]
+script = ExtResource("7_victory")
 
 [node name="Camera2D" type="Camera2D" parent="."]
 position = Vector2(900, 700)
 script = ExtResource("2_camera")
 
 [node name="DebugPanel" parent="." instance=ExtResource("3_debug")]
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="CommandPanel" type="PanelContainer" parent="UI"]
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -180.0
+offset_top = -110.0
+offset_right = 180.0
+offset_bottom = -12.0
+grow_horizontal = 2
+grow_vertical = 0
+script = ExtResource("8_command")
+
+[node name="CommandMargin" type="MarginContainer" parent="UI/CommandPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 8
+
+[node name="CommandVBox" type="VBoxContainer" parent="UI/CommandPanel/CommandMargin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="CommandTitle" type="Label" parent="UI/CommandPanel/CommandMargin/CommandVBox"]
+layout_mode = 2
+text = "Command"
+
+[node name="CommandSummary" type="Label" parent="UI/CommandPanel/CommandMargin/CommandVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Vyber: ..."
+
+[node name="StopButton" type="Button" parent="UI/CommandPanel/CommandMargin/CommandVBox"]
+layout_mode = 2
+text = "Stop"
+
+[connection signal="pressed" from="UI/CommandPanel/CommandMargin/CommandVBox/StopButton" to="UI/CommandPanel" method="_on_stop_pressed"]
