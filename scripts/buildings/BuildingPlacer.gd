@@ -5,16 +5,22 @@ signal building_placed(building: Building)
 
 const HOUSE_SCENE := preload("res://scenes/buildings/House.tscn")
 const BARRACKS_SCENE := preload("res://scenes/buildings/Barracks.tscn")
+const LUMBER_SCENE := preload("res://scenes/buildings/LumberCamp.tscn")
+const MILL_SCENE := preload("res://scenes/buildings/Mill.tscn")
 
-## DESIGN costs.
+## DESIGN costs (build time not simulated in placer — instant place).
 const COSTS := {
 	"house": {"wood": 25},
 	"barracks": {"wood": 175},
+	"lumber_camp": {"wood": 100},
+	"mill": {"wood": 100},
 }
 
 const FOOTPRINTS := {
 	"house": Vector2(56, 56),
 	"barracks": Vector2(80, 80),
+	"lumber_camp": Vector2(72, 72),
+	"mill": Vector2(72, 72),
 }
 
 @export var map_size: Vector2 = Vector2(3000, 3000)
@@ -98,6 +104,10 @@ func _instantiate_building(building_type: String) -> Building:
 			return HOUSE_SCENE.instantiate() as Building
 		"barracks":
 			return BARRACKS_SCENE.instantiate() as Building
+		"lumber_camp":
+			return LUMBER_SCENE.instantiate() as Building
+		"mill":
+			return MILL_SCENE.instantiate() as Building
 		_:
 			return null
 

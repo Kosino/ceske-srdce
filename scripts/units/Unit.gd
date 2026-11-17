@@ -10,6 +10,8 @@ signal died(unit: Unit)
 @export var attack_range: float = 36.0
 @export var attack_cooldown: float = 0.8
 @export var can_attack: bool = true
+@export var is_cavalry: bool = false
+@export var bonus_vs_cavalry: float = 0.0
 ## When false, population was already reserved (e.g. production queue).
 @export var contribute_population: bool = true
 
@@ -104,9 +106,12 @@ func _try_strike() -> void:
 	if _attack_timer > 0.0 or not is_instance_valid(attack_target):
 		return
 	_attack_timer = attack_cooldown
+	var damage := attack_damage
+	if attack_target is Unit and (attack_target as Unit).is_cavalry:
+		damage += bonus_vs_cavalry
 	if attack_target.has_method("take_damage"):
-		attack_target.call("take_damage", attack_damage)
-		print("[COMBAT] team%d hit %s for %.1f" % [team, attack_target.name, attack_damage])
+		attack_target.call("take_damage", damage)
+		print("[COMBAT] team%d hit %s for %.1f" % [team, attack_target.name, damage])
 	if not is_instance_valid(attack_target):
 		attack_target = null
 

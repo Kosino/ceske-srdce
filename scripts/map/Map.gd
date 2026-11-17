@@ -14,13 +14,17 @@ func _ready() -> void:
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	_spawn_core_demo()
-	NotificationManager.show_message("LMB výběr, RMB pohyb/útok. Debug: F3. Dům/Kasárna/Train.")
+	NotificationManager.show_message("F3 debug. Command: Train Z/K/L/V. Pila/Mlýn drop-off.")
 
 
 func _spawn_core_demo() -> void:
+	# Extra resources so demo can place Pila/Mlýn/Kasárna (DESIGN costs).
+	GameManager.add_resource("wood", 250)
+	GameManager.add_resource("food", 50)
 	var hall: DropOff = DROPOFF_SCENE.instantiate()
 	hall.team = 0
 	hall.position = Vector2(900, 700)
+	hall.spawn_parent = units
 	units.add_child(hall)
 	victory.watch_new_hall(hall)
 
@@ -39,12 +43,16 @@ func _spawn_core_demo() -> void:
 	var villager: Villager = VILLAGER_SCENE.instantiate()
 	villager.position = Vector2(940, 720)
 	units.add_child(villager)
-	villager.assign_gather(wood, hall)
+	villager.assign_gather(wood)
 
 	building_placer.place_at("house", Vector2(780, 640))
+	building_placer.place_at("lumber_camp", Vector2(1000, 560))
+	building_placer.place_at("mill", Vector2(820, 860))
 	var barracks := building_placer.place_at("barracks", Vector2(1020, 780))
 	if barracks is Barracks:
-		(barracks as Barracks).enqueue_soldier()
+		var b := barracks as Barracks
+		b.enqueue_soldier()
+		b.enqueue_spearman()
 
 	# Combat demo: enemy hall uses reduced HP so victory is verifiable in headless.
 	var enemy_hall: DropOff = DROPOFF_SCENE.instantiate()

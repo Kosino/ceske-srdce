@@ -5,10 +5,16 @@ signal queue_changed
 signal unit_spawned(unit: Node2D)
 
 const SOLDIER_SCENE := preload("res://scenes/units/Soldier.tscn")
-## DESIGN: Zbrojnoš 60 J + 20 Z, 21 s.
-const SOLDIER_COST := {"food": 60, "gold": 20}
-const TRAIN_TIME := 21.0
+const SPEARMAN_SCENE := preload("res://scenes/units/Spearman.tscn")
+const ARCHER_SCENE := preload("res://scenes/units/Archer.tscn")
 const MAX_QUEUE := 5
+
+## DESIGN unit defs: id -> {cost, time, scene, label}
+const UNIT_DEFS := {
+	"soldier": {"cost": {"food": 60, "gold": 20}, "time": 21.0, "label": "zbrojnoš"},
+	"spearman": {"cost": {"food": 35, "wood": 25}, "time": 22.0, "label": "kopiník"},
+	"archer": {"cost": {"wood": 25, "gold": 45}, "time": 35.0, "label": "lučištník"},
+}
 
 var queue: Array[String] = []
 var train_remaining: float = 0.0
@@ -33,21 +39,36 @@ func _process(delta: float) -> void:
 
 
 func enqueue_soldier() -> bool:
+	return enqueue_unit("soldier")
+
+
+func enqueue_spearman() -> bool:
+	return enqueue_unit("spearman")
+
+
+func enqueue_archer() -> bool:
+	return enqueue_unit("archer")
+
+
+func enqueue_unit(unit_id: String) -> bool:
+	if unit_id not in UNIT_DEFS:
+		return false
 	if queue.size() >= MAX_QUEUE:
 		NotificationManager.show_message("Fronta kasáren je plná.")
 		return false
 	if not GameManager.can_add_population(1):
 		NotificationManager.show_message("Nedostatek populace (postav Dům).")
 		return false
-	if not GameManager.spend(SOLDIER_COST):
-		NotificationManager.show_message("Nedostatek surovin na zbrojnoše.")
+	var def: Dictionary = UNIT_DEFS[unit_id]
+	if not GameManager.spend(def["cost"]):
+		NotificationManager.show_message("Nedostatek surovin na %s." % def["label"])
 		return false
 	GameManager.change_population(1)
-	queue.append("soldier")
+	queue.append(unit_id)
 	if queue.size() == 1:
-		train_remaining = TRAIN_TIME
+		train_remaining = float(def["time"])
 	queue_changed.emit()
-	print("[PROD] queued soldier (queue=%d)" % queue.size())
+	print("[PROD] queued %s (queue=%d)" % [unit_id, queue.size()])
 	return true
 
 
@@ -60,17 +81,34 @@ func get_queue_summary() -> String:
 func _complete_training() -> void:
 	if queue.is_empty():
 		return
-	queue.pop_front()
-	var soldier: Node2D = SOLDIER_SCENE.instantiate()
-	if soldier is Unit:
-		(soldier as Unit).contribute_population = false
-		(soldier as Unit).team = team
+	var unit_id: String = queue.pop_front()
+	var unit := _instantiate_unit(unit_id)
+	if unit == null:
+		queue_changed.emit()
+		return
+	if unit is Unit:
+		(unit as Unit).contribute_population = false
+		(unit as Unit).team = team
 	var parent := spawn_parent if spawn_parent else get_parent()
-	soldier.position = global_position + Vector2(0, footprint.y * 0.5 + 24.0)
-	parent.add_child(soldier)
-	unit_spawned.emit(soldier)
-	print("[PROD] spawned soldier at %s" % str(soldier.position))
-	NotificationManager.show_message("Vycvičen zbrojnoš.")
+	unit.position = global_position + Vector2(0, footprint.y * 0.5 + 24.0)
+	parent.add_child(unit)
+	unit_spawned.emit(unit)
+	var label := str(UNIT_DEFS.get(unit_id, {}).get("label", unit_id))
+	print("[PROD] spawned %s at %s" % [unit_id, str(unit.position)])
+	NotificationManager.show_message("Vycvičen %s." % label)
 	queue_changed.emit()
 	if not queue.is_empty():
-		train_remaining = TRAIN_TIME
+		var next_id: String = queue[0]
+		train_remaining = float(UNIT_DEFS[next_id]["time"])
+
+
+func _instantiate_unit(unit_id: String) -> Node2D:
+	match unit_id:
+		"soldier":
+			return SOLDIER_SCENE.instantiate()
+		"spearman":
+			return SPEARMAN_SCENE.instantiate()
+		"archer":
+			return ARCHER_SCENE.instantiate()
+		_:
+			return null

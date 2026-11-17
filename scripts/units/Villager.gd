@@ -1,15 +1,20 @@
-﻿extends Unit
+extends Unit
 class_name Villager
 
 enum State { IDLE, MOVE_TO_RESOURCE, HARVESTING, MOVE_TO_DROPOFF }
 
+const HARVEST_RATES := {
+	"wood": 0.40,
+	"food": 0.30,
+	"gold": 0.35,
+	"stone": 0.35,
+}
+
 @export var carry_capacity: int = 10
-## DESIGN: drevo 0.40 / jidlo kere 0.30 za sekundu.
-@export var harvest_per_second: float = 0.40
 
 var state: State = State.IDLE
 var target_resource: ResourceNode
-var target_dropoff: DropOff
+var target_dropoff: Node2D
 var carried_type: String = ""
 var carried_amount: int = 0
 var _harvest_accumulator: float = 0.0
@@ -26,13 +31,16 @@ func _ready() -> void:
 	_refresh_carry_label()
 
 
-func assign_gather(resource: ResourceNode, dropoff: DropOff) -> void:
+func assign_gather(resource: ResourceNode, dropoff: Node2D = null) -> void:
 	target_resource = resource
 	target_dropoff = dropoff
 	if is_instance_valid(target_resource):
-		harvest_per_second = 0.40 if target_resource.resource_type == "wood" else 0.30
 		target_resource.depleted.connect(_on_resource_depleted, CONNECT_ONE_SHOT)
 	_go_to_resource()
+
+
+func _harvest_rate_for(resource_type: String) -> float:
+	return float(HARVEST_RATES.get(resource_type, 0.30))
 
 
 func _physics_process(delta: float) -> void:
@@ -78,13 +86,13 @@ func _begin_harvest() -> void:
 
 func _harvest(delta: float) -> void:
 	if not is_instance_valid(target_resource) or target_resource.is_depleted():
-		if carried_amount > 0 and is_instance_valid(target_dropoff):
+		if carried_amount > 0:
 			_go_to_dropoff()
 		else:
 			state = State.IDLE
 		return
 
-	_harvest_accumulator += harvest_per_second * delta
+	_harvest_accumulator += _harvest_rate_for(carried_type) * delta
 	var chunk := int(_harvest_accumulator)
 	if chunk <= 0:
 		return
@@ -100,9 +108,11 @@ func _harvest(delta: float) -> void:
 
 
 func _go_to_dropoff() -> void:
+	target_dropoff = _find_nearest_dropoff(carried_type)
 	if not is_instance_valid(target_dropoff):
 		state = State.IDLE
 		stop_movement()
+		NotificationManager.show_message("Není drop-off pro %s" % carried_type)
 		return
 	state = State.MOVE_TO_DROPOFF
 	set_movement_target(target_dropoff.global_position)
@@ -119,16 +129,39 @@ func _deposit() -> void:
 	_go_to_resource()
 
 
+func _find_nearest_dropoff(resource_type: String) -> Node2D:
+	var best: Node2D = null
+	var best_dist := INF
+	for node in get_tree().get_nodes_in_group("dropoffs"):
+		if not (node is Node2D):
+			continue
+		if "team" in node and int(node.get("team")) != team:
+			continue
+		if node.has_method("accepts") and not node.call("accepts", resource_type):
+			continue
+		var d := global_position.distance_to((node as Node2D).global_position)
+		if d < best_dist:
+			best_dist = d
+			best = node
+	return best
+
+
 func _reached_resource() -> bool:
 	if not is_instance_valid(target_resource):
 		return false
 	return global_position.distance_to(target_resource.global_position) <= target_resource.gather_radius
 
 
+func _dropoff_radius(node: Node2D) -> float:
+	if "dropoff_radius" in node:
+		return float(node.get("dropoff_radius"))
+	return 48.0
+
+
 func _reached_dropoff() -> bool:
 	if not is_instance_valid(target_dropoff):
 		return false
-	return global_position.distance_to(target_dropoff.global_position) <= target_dropoff.dropoff_radius
+	return global_position.distance_to(target_dropoff.global_position) <= _dropoff_radius(target_dropoff)
 
 
 func _on_resource_depleted() -> void:

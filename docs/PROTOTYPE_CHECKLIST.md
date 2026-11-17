@@ -12,11 +12,15 @@
 - [x] Nosí do drop-off
 - [x] Resources se přičítají
 - [x] Automatický návrat
+- [x] Těžba dle typu (wood/food/gold/stone rates)
+- [x] Drop-off dle typu (Radnice / Pila / Mlýn)
 
 ## Stavění a produkce
 - [x] BuildingPlacer + ghost
 - [x] Postavení Kasáren / Domu
-- [x] Production queue
+- [x] Postavení Pily / Mlýna
+- [x] Production queue (Kasárna: Zbrojnoš / Kopiník / Lučištník)
+- [x] Radnice trénuje vesničany
 - [x] Spawn jednotky
 
 ## Combat a výběr
