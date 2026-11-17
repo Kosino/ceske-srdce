@@ -8,7 +8,7 @@ var food: int = 200
 var wood: int = 200
 var gold: int = 100
 var stone: int = 0
-var population: int = 3
+var population: int = 0
 var population_max: int = 15
 var current_age: int = 1
 
@@ -31,6 +31,15 @@ func spend(cost: Dictionary) -> void:
 	stone -= cost.get("stone", 0)
 	resources_changed.emit()
 
+func can_add_population(n: int) -> bool:
+	return population + n <= population_max
+
 func change_population(delta: int) -> void:
 	population = clampi(population + delta, 0, population_max)
 	population_changed.emit()
+
+func advance_age() -> void:
+	if current_age >= 4:
+		return
+	current_age += 1
+	age_changed.emit()

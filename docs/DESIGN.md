@@ -22,3 +22,25 @@
 
 ## Core loop
 Resources → Stavění → Produkce jednotek → Combat → Postup věků
+
+## Balance – prototyp (schváleno 2026-11-17)
+
+Měřítko: 1 dlaždice = 40 px. Vesničan nese 10 jednotek suroviny. Start: 200 J, 200 D, 100 Z, 0 K.
+Těžba za sekundu na vesničana: dřevo 0.40, jídlo z keřů 0.30, farma 0.33, zlato 0.35, kámen 0.35.
+
+| Jednotka | Cena | Čas | HP | Útok | Dosah | Rychlost |
+|----------|------|-----|----|------|-------|----------|
+| Vesničan | 50 J | 25 s | 25 | 3 | melee | 80 px/s |
+| Zbrojnoš | 60 J, 20 Z | 21 s | 45 | 6 | melee | 80 px/s |
+| Kopiník | 35 J, 25 D | 22 s | 45 | 3 (+15 vs jízda) | melee | 85 px/s |
+| Lučištník | 25 D, 45 Z | 35 s | 30 | 4 | 160 px | 80 px/s |
+
+| Budova | Cena | Stavba | HP | Funkce |
+|--------|------|--------|----|--------|
+| Radnice | start | – | 2400 | +5 populace, drop-off vše, trénuje vesničany |
+| Dům | 25 D | 25 s | 550 | +5 populace (strop 200) |
+| Pila | 100 D | 35 s | 1000 | drop-off dřevo |
+| Mlýn | 100 D | 35 s | 1000 | drop-off jídlo, farmy |
+| Kasárna | 175 D | 50 s | 1200 | Zbrojnoš, Kopiník, Lučištník (Střelnice až ve Fázi 2) |
+
+Poznámka: population_max se bude počítat z Radnice + Domů (implementace s BuildingPlacerem).
