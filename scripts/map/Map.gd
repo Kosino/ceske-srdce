@@ -7,6 +7,7 @@ const DROPOFF_SCENE := preload("res://scenes/world/DropOff.tscn")
 
 @onready var navigation_region: NavigationRegion2D = $NavigationRegion2D
 @onready var entities: Node2D = $Entities
+@onready var building_placer: BuildingPlacer = $BuildingPlacer
 
 
 func _ready() -> void:
@@ -14,7 +15,8 @@ func _ready() -> void:
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	_spawn_gathering_demo()
-	NotificationManager.show_message("Gathering demo: vesničan těží dřevo a nosí na radnici.")
+	_spawn_building_demo()
+	NotificationManager.show_message("Stavění: Dům/Kasárna z debug panelu, Train = fronta.")
 
 
 func _setup_navigation() -> void:
@@ -52,3 +54,13 @@ func _spawn_gathering_demo() -> void:
 	villager.position = Vector2(1040, 1000)
 	entities.add_child(villager)
 	villager.assign_gather(wood, dropoff)
+
+
+func _spawn_building_demo() -> void:
+	# Deterministic placement for headless validation + playable starting buildings.
+	building_placer.place_at("house", Vector2(880, 940))
+	var barracks := building_placer.place_at("barracks", Vector2(1120, 1080))
+	if barracks is Barracks:
+		var b := barracks as Barracks
+		b.enqueue_soldier()
+		b.enqueue_soldier()

@@ -23,17 +23,28 @@ func add_resource(type: String, amount: int) -> void:
 func can_afford(cost: Dictionary) -> bool:
 	return food >= cost.get("food", 0) and wood >= cost.get("wood", 0) and gold >= cost.get("gold", 0) and stone >= cost.get("stone", 0)
 
-func spend(cost: Dictionary) -> void:
-	if not can_afford(cost): return
+func spend(cost: Dictionary) -> bool:
+	if not can_afford(cost):
+		return false
 	food -= cost.get("food", 0)
 	wood -= cost.get("wood", 0)
 	gold -= cost.get("gold", 0)
 	stone -= cost.get("stone", 0)
 	resources_changed.emit()
+	return true
 
 func change_population(delta: int) -> void:
 	population = clampi(population + delta, 0, population_max)
 	population_changed.emit()
+
+
+func add_population_cap(amount: int) -> void:
+	population_max = maxi(population_max + amount, population)
+	population_changed.emit()
+
+
+func has_population_space(count: int = 1) -> bool:
+	return population + count <= population_max
 
 
 func set_age(age: int) -> void:

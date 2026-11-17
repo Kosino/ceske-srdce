@@ -14,10 +14,10 @@
 - [x] Automatický návrat
 
 ## Stavění a produkce
-- [ ] BuildingPlacer + ghost
-- [ ] Postavení Kasáren / Domu
-- [ ] Production queue
-- [ ] Spawn jednotky
+- [x] BuildingPlacer + ghost
+- [x] Postavení Kasáren / Domu
+- [x] Production queue
+- [x] Spawn jednotky
 
 ## Combat a výběr
 - [ ] HP + damage + smrt
