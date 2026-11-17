@@ -1,7 +1,7 @@
 extends CharacterBody2D
 
 @export var speed: float = 80.0
-@export var max_hp: float = 40.0
+@export var max_hp: float = 25.0
 var hp: float
 
 @onready var navigation_agent: NavigationAgent2D = $NavigationAgent2D
