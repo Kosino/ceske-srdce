@@ -1,0 +1,22 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/buildings/House.gd" id="1_house"]
+
+[node name="House" type="Node2D"]
+script = ExtResource("1_house")
+
+[node name="Visual" type="Polygon2D" parent="."]
+color = Color(0.72, 0.55, 0.32, 1)
+polygon = PackedVector2Array(-28, -18, 28, -18, 28, 22, -28, 22)
+
+[node name="Roof" type="Polygon2D" parent="."]
+color = Color(0.55, 0.2, 0.15, 1)
+polygon = PackedVector2Array(-34, -18, 0, -40, 34, -18)
+
+[node name="Label" type="Label" parent="."]
+offset_left = -36.0
+offset_top = 24.0
+offset_right = 36.0
+offset_bottom = 48.0
+horizontal_alignment = 1
+text = "Dum"
