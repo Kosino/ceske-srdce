@@ -25,12 +25,16 @@ func _ready() -> void:
 	building_id = "barracks"
 	display_name = "Kasárna"
 	footprint = Vector2(80, 80)
-	max_hp = 1200.0
+	max_hp = 1500.0
+	build_time = 50.0
 	super._ready()
 	add_to_group("barracks")
 
 
 func _process(delta: float) -> void:
+	super._process(delta)
+	if not is_complete:
+		return
 	if queue.is_empty():
 		return
 	train_remaining -= delta
@@ -51,6 +55,9 @@ func enqueue_archer() -> bool:
 
 
 func enqueue_unit(unit_id: String) -> bool:
+	if not is_complete:
+		NotificationManager.show_message("Kasárna ještě není dokončená.")
+		return false
 	if unit_id not in UNIT_DEFS:
 		return false
 	if queue.size() >= MAX_QUEUE:

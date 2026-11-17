@@ -1,20 +1,24 @@
 extends Unit
 class_name Villager
 
-enum State { IDLE, MOVING, MOVE_TO_RESOURCE, HARVESTING, MOVE_TO_DROPOFF }
+enum State { IDLE, MOVING, MOVE_TO_RESOURCE, HARVESTING, MOVE_TO_DROPOFF, MOVE_TO_BUILD, BUILDING }
 
+## DESIGN rates: wood 0.385/s, food 0.31/s. Carry 10.
 const HARVEST_RATES := {
-	"wood": 0.40,
-	"food": 0.30,
+	"wood": 0.385,
+	"food": 0.31,
 	"gold": 0.35,
 	"stone": 0.35,
 }
+
+const BUILD_RANGE := 40.0
 
 @export var carry_capacity: int = 10
 
 var state: State = State.IDLE
 var target_resource: ResourceNode
 var target_dropoff: Node2D
+var target_building: Building
 var carried_type: String = ""
 var carried_amount: int = 0
 var _harvest_accumulator: float = 0.0
@@ -28,6 +32,7 @@ func _ready() -> void:
 	speed = 80.0
 	attack_damage = 3.0
 	super._ready()
+	add_to_group("villagers")
 	_refresh_carry_label()
 
 
@@ -37,11 +42,30 @@ func assign_gather(resource: ResourceNode, dropoff: Node2D = null) -> void:
 	if not resource.has_method("harvest"):
 		print("[GATHER] refuse harvest target (not a resource): %s" % resource.name)
 		return
+	_leave_build_site()
 	target_resource = resource
 	target_dropoff = dropoff
 	if is_instance_valid(target_resource):
 		target_resource.depleted.connect(_on_resource_depleted, CONNECT_ONE_SHOT)
 	_go_to_resource()
+
+
+func assign_build(building: Building) -> void:
+	if building == null or not is_instance_valid(building) or building.is_complete:
+		return
+	_interrupt_gather_orders()
+	target_building = building
+	state = State.MOVE_TO_BUILD
+	attack_target = null
+	set_movement_target(building.global_position)
+	print("[BUILD] villager assigned to %s" % building.display_name)
+
+
+func notify_build_finished(building: Building) -> void:
+	if target_building == building:
+		_leave_build_site()
+		state = State.IDLE
+		stop_movement()
 
 
 func _harvest_rate_for(resource_type: String) -> float:
@@ -66,24 +90,43 @@ func _physics_process(delta: float) -> void:
 			_steer_toward_target()
 			if _reached_dropoff():
 				_deposit()
+		State.MOVE_TO_BUILD:
+			if not _building_valid():
+				_leave_build_site()
+				state = State.IDLE
+				stop_movement()
+				return
+			set_movement_target(target_building.global_position)
+			_steer_toward_target()
+			if global_position.distance_to(target_building.global_position) <= _build_reach():
+				_begin_building()
+		State.BUILDING:
+			stop_movement()
+			if not _building_valid() or target_building.is_complete:
+				_leave_build_site()
+				state = State.IDLE
+				return
+			target_building.register_builder(self)
 		State.IDLE:
 			stop_movement()
 
 
 func command_move(world_pos: Vector2) -> void:
+	_leave_build_site()
 	_interrupt_gather_orders()
 	state = State.MOVING
 	super.command_move(world_pos)
 
 
 func command_stop() -> void:
+	_leave_build_site()
 	_interrupt_gather_orders()
 	state = State.IDLE
 	super.command_stop()
 
 
 func command_attack(target: Node2D) -> void:
-	# Villagers never attack; keep gather/move only.
+	# Villagers never attack; keep gather/move/build only.
 	print("[COMBAT] villager refuse attack -> %s" % (target.name if target else "null"))
 	return
 
@@ -91,6 +134,32 @@ func command_attack(target: Node2D) -> void:
 func _interrupt_gather_orders() -> void:
 	target_resource = null
 	target_dropoff = null
+
+
+func _leave_build_site() -> void:
+	if target_building != null and is_instance_valid(target_building):
+		target_building.unregister_builder(self)
+	target_building = null
+
+
+func _building_valid() -> bool:
+	return target_building != null and is_instance_valid(target_building)
+
+
+func _build_reach() -> float:
+	if not _building_valid():
+		return BUILD_RANGE
+	return BUILD_RANGE + target_building.footprint.length() * 0.2
+
+
+func _begin_building() -> void:
+	if not _building_valid() or target_building.is_complete:
+		_leave_build_site()
+		state = State.IDLE
+		return
+	state = State.BUILDING
+	stop_movement()
+	target_building.register_builder(self)
 
 
 func _go_to_resource() -> void:
@@ -104,6 +173,7 @@ func _go_to_resource() -> void:
 		state = State.IDLE
 		return
 	state = State.MOVE_TO_RESOURCE
+	attack_target = null
 	set_movement_target(target_resource.global_position)
 
 
@@ -120,6 +190,7 @@ func _begin_harvest() -> void:
 	carried_type = target_resource.resource_type
 	_harvest_accumulator = 0.0
 	stop_movement()
+	print("[GATHER] harvesting %s" % carried_type)
 
 
 func _harvest(delta: float) -> void:

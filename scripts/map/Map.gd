@@ -15,6 +15,8 @@ func _ready() -> void:
 	await get_tree().physics_frame
 	_spawn_core_demo()
 	await _run_friendly_target_smoke()
+	await _run_gather_rmb_smoke()
+	await _run_construction_smoke()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 stavění/trénink.")
 
 
@@ -81,3 +83,111 @@ func _run_friendly_target_smoke() -> void:
 		print("[TEST] villager_moving_state=%s" % [villager.state == Villager.State.MOVING])
 
 	soldier.queue_free()
+
+
+## RMB-style gather: issue_gather must enter harvest and reduce resource (not stay MOVING).
+func _run_gather_rmb_smoke() -> void:
+	await get_tree().physics_frame
+	var wood: ResourceNode = null
+	for n in get_tree().get_nodes_in_group("resources"):
+		if n is ResourceNode and (n as ResourceNode).resource_type == "wood":
+			wood = n as ResourceNode
+			break
+	var villagers: Array[Villager] = []
+	for n in get_tree().get_nodes_in_group("villagers"):
+		if n is Villager and (n as Villager).team == 0:
+			villagers.append(n as Villager)
+	if wood == null or villagers.is_empty():
+		print("[TEST] FAIL gather setup missing wood/villagers")
+		return
+
+	# Place villagers near the node so navigation isn't flaky in headless.
+	for i in villagers.size():
+		villagers[i].global_position = wood.global_position + Vector2(18.0 + float(i) * 10.0, 8.0)
+
+	var amount_before := wood.amount_remaining
+	SelectionManager.select_multiple(villagers)
+	SelectionManager.issue_gather(wood)
+	await get_tree().physics_frame
+
+	var ordered := 0
+	for v in villagers:
+		if v.state == Villager.State.MOVE_TO_RESOURCE or v.state == Villager.State.HARVESTING:
+			ordered += 1
+	print("[TEST] gather_rmb ordered=%d/%d state0=%s" % [ordered, villagers.size(), villagers[0].state])
+
+	var harvested := false
+	for _i in range(40):
+		await get_tree().create_timer(0.25).timeout
+		if not is_instance_valid(wood):
+			harvested = true
+			break
+		if wood.amount_remaining < amount_before:
+			harvested = true
+			break
+
+	var amount_after := wood.amount_remaining if is_instance_valid(wood) else 0
+	print("[TEST] gather_rmb amount %d -> %d harvested=%s" % [amount_before, amount_after, harvested])
+	if ordered > 0 and harvested:
+		print("[TEST] PASS gather after RMB adds resource progress")
+	else:
+		print("[TEST] FAIL gather after RMB")
+
+	SelectionManager.issue_stop()
+	await get_tree().physics_frame
+
+
+## Place house under construction; villager builds; completes after timed progress.
+func _run_construction_smoke() -> void:
+	await get_tree().physics_frame
+	var villager: Villager = null
+	for n in get_tree().get_nodes_in_group("villagers"):
+		if n is Villager and (n as Villager).team == 0:
+			villager = n as Villager
+			break
+	if villager == null or building_placer == null:
+		print("[TEST] FAIL construction setup")
+		return
+
+	SelectionManager.select_single(villager)
+	var place_pos := Vector2(1100, 780)
+	var house := building_placer.place_at("house", place_pos)
+	if house == null:
+		print("[TEST] FAIL house place")
+		return
+
+	# Keep DESIGN formula, but shorten base time so headless finishes quickly.
+	house.build_time = 2.0
+	villager.global_position = house.global_position + Vector2(30, 0)
+	villager.assign_build(house)
+
+	var started_incomplete := not house.is_complete and house.build_progress < 0.05
+	var low_hp := house.hp <= house.max_hp * 0.15 + 0.01
+	print("[TEST] construction placed incomplete=%s low_hp=%s progress=%.2f hp=%.1f" % [
+		started_incomplete, low_hp, house.build_progress, house.hp
+	])
+
+	await get_tree().create_timer(0.4).timeout
+	print("[TEST] construction villager_state=%s builders=%d" % [villager.state, house.builder_count()])
+
+	var progressed := false
+	var completed := false
+	for _i in range(40):
+		await get_tree().create_timer(0.25).timeout
+		if not is_instance_valid(house):
+			break
+		if house.build_progress > 0.05:
+			progressed = true
+		if house.is_complete:
+			completed = true
+			break
+
+	print("[TEST] construction progressed=%s completed=%s final_progress=%.2f" % [
+		progressed,
+		completed,
+		house.build_progress if is_instance_valid(house) else -1.0
+	])
+	if started_incomplete and low_hp and progressed and completed:
+		print("[TEST] PASS building completes after time")
+	else:
+		print("[TEST] FAIL construction smoke")

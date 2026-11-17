@@ -8,8 +8,18 @@ class_name ResourceCamp
 
 func _ready() -> void:
 	super._ready()
-	add_to_group("dropoffs")
+	if is_complete:
+		_enable_dropoff()
 
 
 func accepts(resource_type: String) -> bool:
-	return resource_type in accepted_resources
+	return is_complete and resource_type in accepted_resources
+
+
+func _on_construction_finished() -> void:
+	_enable_dropoff()
+
+
+func _enable_dropoff() -> void:
+	if not is_in_group("dropoffs"):
+		add_to_group("dropoffs")
