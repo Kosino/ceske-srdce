@@ -14,6 +14,8 @@ polygon = PackedVector2Array(0, 0, 2000, 0, 2000, 2000, 0, 2000)
 
 [node name="NavigationRegion2D" type="NavigationRegion2D" parent="."]
 
+[node name="Entities" type="Node2D" parent="."]
+
 [node name="Camera2D" type="Camera2D" parent="."]
 position = Vector2(1000, 1000)
 zoom = Vector2(0.75, 0.75)

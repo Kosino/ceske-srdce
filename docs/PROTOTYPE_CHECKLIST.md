@@ -7,11 +7,11 @@
 - [x] NavigationRegion2D na mapě
 
 ## Gathering
-- [ ] Vesničan se pohybuje (NavigationAgent2D)
-- [ ] Těží zdroj
-- [ ] Nosí do drop-off
-- [ ] Resources se přičítají
-- [ ] Automatický návrat
+- [x] Vesničan se pohybuje (NavigationAgent2D)
+- [x] Těží zdroj
+- [x] Nosí do drop-off
+- [x] Resources se přičítají
+- [x] Automatický návrat
 
 ## Stavění a produkce
 - [ ] BuildingPlacer + ghost
