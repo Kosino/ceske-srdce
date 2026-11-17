@@ -1,0 +1,13 @@
+config_version=5
+
+[application]
+
+config/name="České srdce"
+run/main_scene="res://scenes/map/Map.tscn"
+config/features=PackedStringArray("4.3", "Forward Plus")
+
+[autoload]
+
+GameManager="*res://autoload/GameManager.gd"
+SelectionManager="*res://autoload/SelectionManager.gd"
+NotificationManager="*res://autoload/NotificationManager.gd"
