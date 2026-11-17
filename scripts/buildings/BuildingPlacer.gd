@@ -5,16 +5,29 @@ signal building_placed(building: Building)
 
 const HOUSE_SCENE := preload("res://scenes/buildings/House.tscn")
 const BARRACKS_SCENE := preload("res://scenes/buildings/Barracks.tscn")
+const LUMBER_SCENE := preload("res://scenes/buildings/LumberCamp.tscn")
+const MILL_SCENE := preload("res://scenes/buildings/Mill.tscn")
 
-## DESIGN costs.
+## DESIGN costs and base build times (1 villager).
 const COSTS := {
 	"house": {"wood": 25},
 	"barracks": {"wood": 175},
+	"lumber_camp": {"wood": 100},
+	"mill": {"wood": 100},
+}
+
+const BUILD_TIMES := {
+	"house": 25.0,
+	"barracks": 50.0,
+	"lumber_camp": 35.0,
+	"mill": 35.0,
 }
 
 const FOOTPRINTS := {
 	"house": Vector2(56, 56),
 	"barracks": Vector2(80, 80),
+	"lumber_camp": Vector2(72, 72),
+	"mill": Vector2(72, 72),
 }
 
 @export var map_size: Vector2 = Vector2(3000, 3000)
@@ -60,13 +73,43 @@ func place_at(building_type: String, world_pos: Vector2) -> Building:
 	if building == null or entities == null:
 		return null
 	building.position = world_pos
+	# Mark incomplete before _ready so House/Pila/Mlýn skip pop/drop-off unlock.
+	building.is_complete = false
+	building.build_progress = 0.0
 	entities.add_child(building)
 	if building is Barracks:
 		(building as Barracks).spawn_parent = entities
-	print("[BUILD] placed %s at %s" % [building_type, str(world_pos)])
+	var build_t: float = float(BUILD_TIMES.get(building_type, building.build_time))
+	building.start_construction(build_t)
+	_assign_builders(building)
+	print("[BUILD] placed %s under construction (%.0fs) at %s" % [building_type, build_t, str(world_pos)])
 	building_placed.emit(building)
-	NotificationManager.show_message("Postaveno: %s" % building.display_name)
+	NotificationManager.show_message("Zakládám: %s" % building.display_name)
 	return building
+
+
+func _assign_builders(building: Building) -> void:
+	var assigned := false
+	for u in SelectionManager.selected_units:
+		if u is Villager and is_instance_valid(u):
+			(u as Villager).assign_build(building)
+			assigned = true
+	if assigned:
+		return
+	var best: Villager = null
+	var best_d := 220.0
+	for n in get_tree().get_nodes_in_group("villagers"):
+		if not (n is Villager):
+			continue
+		var v := n as Villager
+		if v.team != 0:
+			continue
+		var d := v.global_position.distance_to(building.global_position)
+		if d < best_d:
+			best_d = d
+			best = v
+	if best:
+		best.assign_build(building)
 
 
 func _process(_delta: float) -> void:
@@ -98,6 +141,10 @@ func _instantiate_building(building_type: String) -> Building:
 			return HOUSE_SCENE.instantiate() as Building
 		"barracks":
 			return BARRACKS_SCENE.instantiate() as Building
+		"lumber_camp":
+			return LUMBER_SCENE.instantiate() as Building
+		"mill":
+			return MILL_SCENE.instantiate() as Building
 		_:
 			return null
 

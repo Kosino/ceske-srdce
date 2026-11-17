@@ -8,8 +8,8 @@ script = ExtResource("1_debug")
 [node name="Panel" type="PanelContainer" parent="."]
 offset_left = 12.0
 offset_top = 12.0
-offset_right = 280.0
-offset_bottom = 320.0
+offset_right = 340.0
+offset_bottom = 400.0
 
 [node name="Margin" type="MarginContainer" parent="Panel"]
 layout_mode = 2
@@ -67,13 +67,42 @@ text = "Dum"
 layout_mode = 2
 text = "Kasarna"
 
-[node name="TrainSoldier" type="Button" parent="Panel/Margin/VBox/BuildButtons"]
+[node name="PlaceLumber" type="Button" parent="Panel/Margin/VBox/BuildButtons"]
 layout_mode = 2
-text = "Train"
+text = "Pila"
+
+[node name="PlaceMill" type="Button" parent="Panel/Margin/VBox/BuildButtons"]
+layout_mode = 2
+text = "Mlyn"
+
+[node name="TrainButtons" type="HBoxContainer" parent="Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="TrainSoldier" type="Button" parent="Panel/Margin/VBox/TrainButtons"]
+layout_mode = 2
+text = "Zbroj"
+
+[node name="TrainSpearman" type="Button" parent="Panel/Margin/VBox/TrainButtons"]
+layout_mode = 2
+text = "Kop"
+
+[node name="TrainArcher" type="Button" parent="Panel/Margin/VBox/TrainButtons"]
+layout_mode = 2
+text = "Luc"
+
+[node name="TrainVillager" type="Button" parent="Panel/Margin/VBox/TrainButtons"]
+layout_mode = 2
+text = "Vesn"
 
 [connection signal="pressed" from="Panel/Margin/VBox/TestButtons/AddFood" to="." method="_on_add_food_pressed"]
 [connection signal="pressed" from="Panel/Margin/VBox/TestButtons/AddWood" to="." method="_on_add_wood_pressed"]
 [connection signal="pressed" from="Panel/Margin/VBox/TestButtons/AdvanceAge" to="." method="_on_advance_age_pressed"]
 [connection signal="pressed" from="Panel/Margin/VBox/BuildButtons/PlaceHouse" to="." method="_on_place_house_pressed"]
 [connection signal="pressed" from="Panel/Margin/VBox/BuildButtons/PlaceBarracks" to="." method="_on_place_barracks_pressed"]
-[connection signal="pressed" from="Panel/Margin/VBox/BuildButtons/TrainSoldier" to="." method="_on_train_soldier_pressed"]
+[connection signal="pressed" from="Panel/Margin/VBox/BuildButtons/PlaceLumber" to="." method="_on_place_lumber_pressed"]
+[connection signal="pressed" from="Panel/Margin/VBox/BuildButtons/PlaceMill" to="." method="_on_place_mill_pressed"]
+[connection signal="pressed" from="Panel/Margin/VBox/TrainButtons/TrainSoldier" to="." method="_on_train_soldier_pressed"]
+[connection signal="pressed" from="Panel/Margin/VBox/TrainButtons/TrainSpearman" to="." method="_on_train_spearman_pressed"]
+[connection signal="pressed" from="Panel/Margin/VBox/TrainButtons/TrainArcher" to="." method="_on_train_archer_pressed"]
+[connection signal="pressed" from="Panel/Margin/VBox/TrainButtons/TrainVillager" to="." method="_on_train_villager_pressed"]

@@ -94,8 +94,51 @@ func _issue_right_click_command() -> void:
 	if enemy:
 		SelectionManager.issue_attack(enemy)
 		NotificationManager.show_message("Útok!")
-	else:
-		SelectionManager.issue_move(world_pos)
+		return
+	var resource := _find_resource_at(world_pos)
+	if resource:
+		SelectionManager.issue_gather(resource)
+		NotificationManager.show_message("Sklizeň: %s" % resource.resource_type)
+		return
+	var site := _find_unfinished_building_at(world_pos)
+	if site:
+		SelectionManager.issue_build(site)
+		NotificationManager.show_message("Stavba: %s" % site.display_name)
+		return
+	SelectionManager.issue_move(world_pos)
+
+
+func _find_resource_at(world_pos: Vector2) -> ResourceNode:
+	var best: ResourceNode = null
+	var best_dist := 40.0
+	for node in get_tree().get_nodes_in_group("resources"):
+		if not (node is ResourceNode):
+			continue
+		var res := node as ResourceNode
+		if res.is_depleted():
+			continue
+		var d := res.global_position.distance_to(world_pos)
+		if d < best_dist + res.gather_radius:
+			best_dist = d
+			best = res
+	return best
+
+
+func _find_unfinished_building_at(world_pos: Vector2) -> Building:
+	var best: Building = null
+	var best_dist := 40.0
+	for node in get_tree().get_nodes_in_group("player_buildings"):
+		if not (node is Building):
+			continue
+		var b := node as Building
+		if b.is_complete:
+			continue
+		var radius := b.footprint.length() * 0.35
+		var d := b.global_position.distance_to(world_pos)
+		if d < best_dist + radius:
+			best_dist = d
+			best = b
+	return best
 
 
 func _find_enemy_at(world_pos: Vector2) -> Node2D:

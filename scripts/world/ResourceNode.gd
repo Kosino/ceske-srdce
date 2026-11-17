@@ -1,4 +1,4 @@
-﻿extends Node2D
+extends Node2D
 class_name ResourceNode
 
 signal depleted
@@ -12,6 +12,7 @@ signal depleted
 
 
 func _ready() -> void:
+	add_to_group("resources")
 	_refresh_label()
 	if visual:
 		match resource_type:

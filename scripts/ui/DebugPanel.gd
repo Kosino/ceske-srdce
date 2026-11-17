@@ -48,11 +48,12 @@ func _refresh_fps() -> void:
 func _refresh_build_status() -> void:
 	if build_label == null:
 		return
+	var lines: PackedStringArray = []
 	var barracks := get_tree().get_first_node_in_group("barracks") as Barracks
-	if barracks:
-		build_label.text = "Kasárna: %s" % barracks.get_queue_summary()
-	else:
-		build_label.text = "Kasárna: žádná"
+	lines.append("Kasárna: %s" % (barracks.get_queue_summary() if barracks else "žádná"))
+	var hall := get_tree().get_first_node_in_group("player_town_hall") as DropOff
+	lines.append("Radnice: %s" % (hall.get_queue_summary() if hall else "žádná"))
+	build_label.text = "\n".join(lines)
 
 
 func _on_add_food_pressed() -> void:
@@ -71,23 +72,53 @@ func _on_advance_age_pressed() -> void:
 
 
 func _on_place_house_pressed() -> void:
-	var placer := _placer()
-	if placer:
-		placer.begin_place("house")
+	_begin("house")
 
 
 func _on_place_barracks_pressed() -> void:
-	var placer := _placer()
-	if placer:
-		placer.begin_place("barracks")
+	_begin("barracks")
+
+
+func _on_place_lumber_pressed() -> void:
+	_begin("lumber_camp")
+
+
+func _on_place_mill_pressed() -> void:
+	_begin("mill")
 
 
 func _on_train_soldier_pressed() -> void:
+	_barracks_enqueue("soldier")
+
+
+func _on_train_spearman_pressed() -> void:
+	_barracks_enqueue("spearman")
+
+
+func _on_train_archer_pressed() -> void:
+	_barracks_enqueue("archer")
+
+
+func _on_train_villager_pressed() -> void:
+	var hall := get_tree().get_first_node_in_group("player_town_hall") as DropOff
+	if hall == null:
+		NotificationManager.show_message("Nemáš radnici.")
+		return
+	hall.enqueue_villager()
+
+
+func _begin(building_type: String) -> void:
+	var placer := _placer()
+	if placer:
+		placer.begin_place(building_type)
+
+
+func _barracks_enqueue(unit_id: String) -> void:
 	var barracks := get_tree().get_first_node_in_group("barracks") as Barracks
 	if barracks == null:
 		NotificationManager.show_message("Nejdřív postav Kasárnu.")
 		return
-	barracks.enqueue_soldier()
+	barracks.enqueue_unit(unit_id)
 
 
 func _placer() -> BuildingPlacer:

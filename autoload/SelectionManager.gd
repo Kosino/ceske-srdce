@@ -40,6 +40,22 @@ func issue_attack(target: Node2D) -> void:
 			u.command_attack(target)
 
 
+func issue_gather(resource: ResourceNode) -> void:
+	if resource == null or not is_instance_valid(resource) or resource.is_depleted():
+		return
+	for u in selected_units:
+		if is_instance_valid(u) and u is Villager:
+			(u as Villager).assign_gather(resource)
+
+
+func issue_build(building: Building) -> void:
+	if building == null or not is_instance_valid(building) or building.is_complete:
+		return
+	for u in selected_units:
+		if is_instance_valid(u) and u is Villager:
+			(u as Villager).assign_build(building)
+
+
 func issue_stop() -> void:
 	for u in selected_units:
 		if is_instance_valid(u) and u.has_method("command_stop"):
