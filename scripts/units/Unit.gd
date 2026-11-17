@@ -26,16 +26,20 @@ var _attack_timer: float = 0.0
 func _ready() -> void:
 	hp = max_hp
 	add_to_group("units")
+	_register_team_groups()
+	if navigation_agent:
+		navigation_agent.velocity_computed.connect(_on_velocity_computed)
+		navigation_agent.avoidance_enabled = true
+		navigation_agent.max_speed = speed
+
+
+func _register_team_groups() -> void:
 	if team == 0:
 		add_to_group("player_units")
 		if contribute_population:
 			GameManager.change_population(1)
 	else:
 		add_to_group("enemy_units")
-	if navigation_agent:
-		navigation_agent.velocity_computed.connect(_on_velocity_computed)
-		navigation_agent.avoidance_enabled = true
-		navigation_agent.max_speed = speed
 
 
 func _draw() -> void:
@@ -64,15 +68,32 @@ func stop_movement() -> void:
 	velocity = Vector2.ZERO
 
 
+func is_navigation_finished() -> bool:
+	return navigation_agent == null or navigation_agent.is_navigation_finished()
+
+
 func command_move(world_pos: Vector2) -> void:
 	attack_target = null
 	set_movement_target(world_pos)
 
 
+func is_friendly_target(target: Node2D) -> bool:
+	if target == null or not is_instance_valid(target):
+		return true
+	if "team" in target and int(target.get("team")) == team:
+		return true
+	if team == 0 and (target.is_in_group("player_buildings") or target.is_in_group("player_town_hall") or target.is_in_group("player_units")):
+		return true
+	if team != 0 and (target.is_in_group("enemy_buildings") or target.is_in_group("enemy_town_hall") or target.is_in_group("enemy_units")):
+		return true
+	return false
+
+
 func command_attack(target: Node2D) -> void:
 	if not can_attack or target == null or not is_instance_valid(target):
 		return
-	if "team" in target and int(target.get("team")) == team:
+	if is_friendly_target(target):
+		print("[COMBAT] refuse friendly fire team=%d -> %s" % [team, target.name])
 		return
 	attack_target = target
 	set_movement_target(target.global_position)
@@ -86,6 +107,11 @@ func command_stop() -> void:
 func _physics_process(delta: float) -> void:
 	_attack_timer = maxf(_attack_timer - delta, 0.0)
 	if can_attack and is_instance_valid(attack_target):
+		if is_friendly_target(attack_target):
+			print("[COMBAT] clear friendly attack_target %s" % attack_target.name)
+			attack_target = null
+			stop_movement()
+			return
 		_chase_and_attack()
 	else:
 		attack_target = null
@@ -104,6 +130,10 @@ func _chase_and_attack() -> void:
 
 func _try_strike() -> void:
 	if _attack_timer > 0.0 or not is_instance_valid(attack_target):
+		return
+	if is_friendly_target(attack_target):
+		print("[COMBAT] refuse strike friendly %s" % attack_target.name)
+		attack_target = null
 		return
 	_attack_timer = attack_cooldown
 	var damage := attack_damage

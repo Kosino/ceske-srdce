@@ -1,7 +1,7 @@
 extends Unit
 class_name Villager
 
-enum State { IDLE, MOVE_TO_RESOURCE, HARVESTING, MOVE_TO_DROPOFF }
+enum State { IDLE, MOVING, MOVE_TO_RESOURCE, HARVESTING, MOVE_TO_DROPOFF }
 
 const HARVEST_RATES := {
 	"wood": 0.40,
@@ -32,6 +32,11 @@ func _ready() -> void:
 
 
 func assign_gather(resource: ResourceNode, dropoff: Node2D = null) -> void:
+	if resource == null or not is_instance_valid(resource):
+		return
+	if not resource.has_method("harvest"):
+		print("[GATHER] refuse harvest target (not a resource): %s" % resource.name)
+		return
 	target_resource = resource
 	target_dropoff = dropoff
 	if is_instance_valid(target_resource):
@@ -45,6 +50,11 @@ func _harvest_rate_for(resource_type: String) -> float:
 
 func _physics_process(delta: float) -> void:
 	match state:
+		State.MOVING:
+			_steer_toward_target()
+			if is_navigation_finished():
+				state = State.IDLE
+				stop_movement()
 		State.MOVE_TO_RESOURCE:
 			_steer_toward_target()
 			if _reached_resource():
@@ -61,8 +71,26 @@ func _physics_process(delta: float) -> void:
 
 
 func command_move(world_pos: Vector2) -> void:
-	state = State.IDLE
+	_interrupt_gather_orders()
+	state = State.MOVING
 	super.command_move(world_pos)
+
+
+func command_stop() -> void:
+	_interrupt_gather_orders()
+	state = State.IDLE
+	super.command_stop()
+
+
+func command_attack(target: Node2D) -> void:
+	# Villagers never attack; keep gather/move only.
+	print("[COMBAT] villager refuse attack -> %s" % (target.name if target else "null"))
+	return
+
+
+func _interrupt_gather_orders() -> void:
+	target_resource = null
+	target_dropoff = null
 
 
 func _go_to_resource() -> void:
@@ -70,12 +98,22 @@ func _go_to_resource() -> void:
 		state = State.IDLE
 		stop_movement()
 		return
+	if not (target_resource is ResourceNode):
+		print("[GATHER] refuse non-resource gather target")
+		target_resource = null
+		state = State.IDLE
+		return
 	state = State.MOVE_TO_RESOURCE
 	set_movement_target(target_resource.global_position)
 
 
 func _begin_harvest() -> void:
 	if not is_instance_valid(target_resource) or target_resource.is_depleted():
+		state = State.IDLE
+		return
+	if not target_resource.has_method("harvest"):
+		print("[GATHER] refuse harvesting non-resource %s" % target_resource.name)
+		target_resource = null
 		state = State.IDLE
 		return
 	state = State.HARVESTING

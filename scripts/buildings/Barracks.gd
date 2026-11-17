@@ -92,6 +92,8 @@ func _complete_training() -> void:
 	var parent := spawn_parent if spawn_parent else get_parent()
 	unit.position = global_position + Vector2(0, footprint.y * 0.5 + 24.0)
 	parent.add_child(unit)
+	if unit is Unit and (unit as Unit).team == 0 and not unit.is_in_group("player_units"):
+		unit.add_to_group("player_units")
 	unit_spawned.emit(unit)
 	var label := str(UNIT_DEFS.get(unit_id, {}).get("label", unit_id))
 	print("[PROD] spawned %s at %s" % [unit_id, str(unit.position)])

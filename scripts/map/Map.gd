@@ -14,10 +14,12 @@ func _ready() -> void:
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	_spawn_core_demo()
-	NotificationManager.show_message("F3 debug. Command: Train Z/K/L/V. Pila/Mlýn drop-off.")
+	await _run_friendly_target_smoke()
+	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 stavění/trénink.")
 
 
 func _spawn_core_demo() -> void:
+	# DESIGN start: only Radnice, villagers, and resource nodes (no prebuilt House/Pila/combat).
 	var hall: DropOff = DROPOFF_SCENE.instantiate()
 	hall.team = 0
 	hall.position = Vector2(900, 700)
@@ -37,39 +39,45 @@ func _spawn_core_demo() -> void:
 	food.position = Vector2(760, 820)
 	units.add_child(food)
 
-	var villager: Villager = VILLAGER_SCENE.instantiate()
-	villager.position = Vector2(940, 720)
-	units.add_child(villager)
-	villager.assign_gather(wood)
+	for offset in [Vector2(940, 720), Vector2(920, 740), Vector2(960, 740)]:
+		var villager: Villager = VILLAGER_SCENE.instantiate()
+		villager.position = offset
+		units.add_child(villager)
 
-	building_placer.place_at("house", Vector2(780, 640))
-	building_placer.place_at("lumber_camp", Vector2(1000, 560))
-	building_placer.place_at("mill", Vector2(820, 860))
-	var barracks := building_placer.place_at("barracks", Vector2(1020, 780))
-	if barracks is Barracks:
-		var b := barracks as Barracks
-		b.enqueue_soldier()
-		b.enqueue_spearman()
 
-	# Combat demo: enemy hall uses reduced HP so victory is verifiable in headless.
-	var enemy_hall: DropOff = DROPOFF_SCENE.instantiate()
-	enemy_hall.team = 1
-	enemy_hall.max_hp = 90.0
-	enemy_hall.population_bonus = 0
-	enemy_hall.position = Vector2(1220, 900)
-	units.add_child(enemy_hall)
-	victory.watch_new_hall(enemy_hall)
+## Headless/manual regression: own buildings must not take friendly damage.
+func _run_friendly_target_smoke() -> void:
+	await get_tree().physics_frame
+	var hall := get_tree().get_first_node_in_group("player_town_hall") as DropOff
+	if hall == null:
+		print("[TEST] FAIL no player town hall")
+		return
+	var hp_before := hall.hp
 
-	var enemy: Soldier = SOLDIER_SCENE.instantiate()
-	enemy.team = 1
-	enemy.contribute_population = false
-	enemy.position = Vector2(1160, 860)
-	units.add_child(enemy)
+	var soldier: Soldier = SOLDIER_SCENE.instantiate()
+	soldier.team = 0
+	soldier.contribute_population = false
+	soldier.position = hall.global_position + Vector2(40, 40)
+	units.add_child(soldier)
+	await get_tree().physics_frame
 
-	for offset in [Vector2(1080, 820), Vector2(1100, 840)]:
-		var ally: Soldier = SOLDIER_SCENE.instantiate()
-		ally.team = 0
-		ally.contribute_population = true
-		ally.position = offset
-		units.add_child(ally)
-		ally.command_attack(enemy_hall)
+	soldier.command_attack(hall)
+	await get_tree().create_timer(0.3).timeout
+
+	var refused := soldier.attack_target == null
+	var hp_ok := is_equal_approx(hall.hp, hp_before)
+	print("[TEST] friendly_fire refused=%s hp_unchanged=%s (hp=%.1f)" % [refused, hp_ok, hall.hp])
+	if not refused or not hp_ok:
+		print("[TEST] FAIL friendly fire check")
+	else:
+		print("[TEST] PASS friendly fire check")
+
+	var villager := get_tree().get_first_node_in_group("player_units") as Villager
+	if villager:
+		villager.command_attack(hall)
+		print("[TEST] villager_attack_target_null=%s" % [villager.attack_target == null])
+		villager.command_move(hall.global_position + Vector2(80, 0))
+		await get_tree().physics_frame
+		print("[TEST] villager_moving_state=%s" % [villager.state == Villager.State.MOVING])
+
+	soldier.queue_free()

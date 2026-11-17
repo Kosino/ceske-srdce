@@ -87,14 +87,16 @@ func _complete_training() -> void:
 	if queue.is_empty():
 		return
 	queue.pop_front()
-	var villager: Node2D = VILLAGER_SCENE.instantiate()
-	if villager is Unit:
-		(villager as Unit).contribute_population = false
-		(villager as Unit).team = team
+	var villager: Villager = VILLAGER_SCENE.instantiate() as Villager
+	villager.contribute_population = false
+	villager.team = team
 	var parent := spawn_parent if spawn_parent else get_parent()
 	villager.position = global_position + Vector2(0, 56.0)
 	parent.add_child(villager)
-	print("[PROD] spawned villager at %s" % str(villager.position))
+	# Ensure selectable after spawn (team groups from Unit._ready).
+	if villager.team == 0 and not villager.is_in_group("player_units"):
+		villager.add_to_group("player_units")
+	print("[PROD] spawned villager at %s groups_ok=%s" % [str(villager.position), villager.is_in_group("player_units")])
 	NotificationManager.show_message("Vycvičen vesničan.")
 	queue_changed.emit()
 	if not queue.is_empty():
