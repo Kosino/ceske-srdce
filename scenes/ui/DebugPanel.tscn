@@ -75,6 +75,10 @@ text = "Pila"
 layout_mode = 2
 text = "Mlyn"
 
+[node name="PlaceArchery" type="Button" parent="Panel/Margin/VBox/BuildButtons"]
+layout_mode = 2
+text = "Strelnice"
+
 [node name="TrainButtons" type="HBoxContainer" parent="Panel/Margin/VBox"]
 layout_mode = 2
 theme_override_constants/separation = 4
@@ -102,6 +106,7 @@ text = "Vesn"
 [connection signal="pressed" from="Panel/Margin/VBox/BuildButtons/PlaceBarracks" to="." method="_on_place_barracks_pressed"]
 [connection signal="pressed" from="Panel/Margin/VBox/BuildButtons/PlaceLumber" to="." method="_on_place_lumber_pressed"]
 [connection signal="pressed" from="Panel/Margin/VBox/BuildButtons/PlaceMill" to="." method="_on_place_mill_pressed"]
+[connection signal="pressed" from="Panel/Margin/VBox/BuildButtons/PlaceArchery" to="." method="_on_place_archery_pressed"]
 [connection signal="pressed" from="Panel/Margin/VBox/TrainButtons/TrainSoldier" to="." method="_on_train_soldier_pressed"]
 [connection signal="pressed" from="Panel/Margin/VBox/TrainButtons/TrainSpearman" to="." method="_on_train_spearman_pressed"]
 [connection signal="pressed" from="Panel/Margin/VBox/TrainButtons/TrainArcher" to="." method="_on_train_archer_pressed"]
