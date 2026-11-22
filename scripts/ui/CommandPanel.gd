@@ -61,6 +61,9 @@ func _refresh_age_ui() -> void:
 
 
 func _refresh_research_button() -> void:
+	# Keep label in sync even if age was set without going through _refresh_age_ui.
+	if age_label:
+		age_label.text = "Věk: %s (%d)" % [GameManager.get_age_name(), GameManager.current_age]
 	if research_button == null:
 		return
 	if GameManager.current_age >= AgeData.MAX_AGE:
