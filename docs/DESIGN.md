@@ -27,9 +27,11 @@ Postup věku: výzkum v Radnici (fronta; během výzkumu Radnice netrénuje). Po
 | Od věku | Budovy | Jednotky |
 |---------|--------|----------|
 | 1 Velká Morava | Dům, Pila, Mlýn, Kasárna | Vesničan, Zbrojnoš |
-| 2 Přemyslovci | Střelnice | Kopiník, Lučištník |
-| 3 Husitství | *(data-only)* stable, blacksmith, monastery | *(data-only)* knight, monk |
+| 2 Přemyslovci | Střelnice, Kovárna | Kopiník, Lučištník |
+| 3 Husitství | *(data-only)* stable, monastery | *(data-only)* knight, monk |
 | 4 Habsburkové | *(data-only)* castle, university | *(data-only)* siege |
+
+**NÁVRH – Kovárna (Honza schvaluje čísla):** 150 D, 40 s, HP 1800, footprint 80×80. Zatím jen stavba (gate věk 2→3); žádné techy. Sprite: `assets/sprites/buildings/blacksmith.png` (63×96).
 
 ## Civilizace (multiplayer)
 | Civilizace   | Unikátní jednotka          | Hlavní síla          |
@@ -62,6 +64,7 @@ Těžba za sekundu na vesničana: dřevo 0.40, jídlo z keřů 0.30, farma 0.33,
 | Mlýn | 100 D | 35 s | 1000 | drop-off jídlo, farmy |
 | Kasárna | 175 D | 50 s | 1200 | Zbrojnoš, Kopiník |
 | Střelnice | 175 D | 50 s | 1200 | Lučištník |
+| Kovárna *(NÁVRH)* | 150 D | 40 s | 1800 | věk 2 gate; techy později |
 
 Poznámka: `population_max` = Radnice +5 a každý Dům +5, strop 200 (`GameManager.add_population_cap` / `can_add_population`).
 Lučištník střílí šípem na zamčenou pozici cíle v okamžiku výstřelu; zásah jen pokud cíl u dopadu zůstal (jinak miss). Žádný friendly fire.

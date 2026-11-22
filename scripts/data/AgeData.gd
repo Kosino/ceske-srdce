@@ -26,9 +26,9 @@ const BUILDING_UNLOCK_AGE := {
 	"mill": 1,
 	"barracks": 1,
 	"archery_range": 2,
+	"blacksmith": 2,
 	# Age 3+ placeholders (data-only; no scenes yet):
 	"stable": 3,
-	"blacksmith": 3,
 	"monastery": 3,
 	"castle": 4,
 	"university": 4,

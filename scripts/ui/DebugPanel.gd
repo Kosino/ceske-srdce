@@ -4,6 +4,8 @@ extends CanvasLayer
 @onready var fps_label: Label = $Panel/Margin/VBox/FpsLabel
 @onready var build_label: Label = $Panel/Margin/VBox/BuildLabel
 
+var _fps_accum: float = 0.0
+
 
 func _ready() -> void:
 	GameManager.resources_changed.connect(_refresh_stats)
@@ -13,8 +15,12 @@ func _ready() -> void:
 	_refresh_fps()
 
 
-func _process(_delta: float) -> void:
-	if visible:
+func _process(delta: float) -> void:
+	if not visible:
+		return
+	_fps_accum += delta
+	if _fps_accum >= 0.25:
+		_fps_accum = 0.0
 		_refresh_fps()
 		_refresh_build_status()
 
@@ -84,6 +90,10 @@ func _on_place_barracks_pressed() -> void:
 
 func _on_place_archery_pressed() -> void:
 	_begin("archery_range")
+
+
+func _on_place_blacksmith_pressed() -> void:
+	_begin("blacksmith")
 
 
 func _on_place_lumber_pressed() -> void:
