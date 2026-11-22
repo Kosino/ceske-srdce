@@ -67,7 +67,8 @@ func _on_add_wood_pressed() -> void:
 
 
 func _on_advance_age_pressed() -> void:
-	if GameManager.current_age >= 4:
+	## Debug cheat: instant age advance (skips Radnice research).
+	if GameManager.current_age >= AgeData.MAX_AGE:
 		NotificationManager.show_message("Už jsi v posledním věku.")
 		return
 	GameManager.advance_age()

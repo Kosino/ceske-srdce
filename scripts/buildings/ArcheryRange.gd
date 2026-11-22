@@ -49,6 +49,11 @@ func enqueue_unit(unit_id: String) -> bool:
 	if unit_id not in UNIT_DEFS:
 		NotificationManager.show_message("Střelnice trénuje jen lučištníky.")
 		return false
+	if not GameManager.is_unit_unlocked(unit_id):
+		NotificationManager.show_message(
+			"Zamčeno do věku %s." % AgeData.age_name(AgeData.unit_unlock_age(unit_id))
+		)
+		return false
 	if queue.size() >= MAX_QUEUE:
 		NotificationManager.show_message("Fronta střelnice je plná.")
 		return false

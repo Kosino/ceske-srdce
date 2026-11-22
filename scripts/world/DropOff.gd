@@ -3,6 +3,7 @@ class_name DropOff
 
 signal destroyed(hall: DropOff)
 signal queue_changed
+signal research_changed
 
 const VILLAGER_SCENE := preload("res://scenes/units/Villager.tscn")
 ## DESIGN: Vesničan 50 J, 25 s.
@@ -22,6 +23,10 @@ var hp: float
 var queue: Array[String] = []
 var train_remaining: float = 0.0
 var spawn_parent: Node2D
+## Age research occupies Radnice; blocks villager training while active.
+var researching_age: bool = false
+var research_remaining: float = 0.0
+var research_target_age: int = 0
 
 
 func _ready() -> void:
@@ -58,7 +63,14 @@ func accepts(resource_type: String) -> bool:
 
 
 func _process(delta: float) -> void:
-	if team != 0 or queue.is_empty():
+	if team != 0:
+		return
+	if researching_age:
+		research_remaining -= delta
+		if research_remaining <= 0.0:
+			_complete_age_research()
+		return
+	if queue.is_empty():
 		return
 	train_remaining -= delta
 	if train_remaining <= 0.0:
@@ -67,6 +79,12 @@ func _process(delta: float) -> void:
 
 func enqueue_villager() -> bool:
 	if team != 0:
+		return false
+	if researching_age:
+		NotificationManager.show_message("Radnice zkoumá věk — nelze trénovat.")
+		return false
+	if not GameManager.is_unit_unlocked("villager"):
+		NotificationManager.show_message("Vesničan je zamčený věkem.")
 		return false
 	if queue.size() >= MAX_QUEUE:
 		NotificationManager.show_message("Fronta radnice je plná.")
@@ -86,10 +104,63 @@ func enqueue_villager() -> bool:
 	return true
 
 
+func start_age_research(time_override: float = -1.0) -> bool:
+	if team != 0:
+		return false
+	if researching_age:
+		NotificationManager.show_message("Výzkum věku už běží.")
+		return false
+	if GameManager.current_age >= AgeData.MAX_AGE:
+		NotificationManager.show_message("Už jsi v posledním věku.")
+		return false
+	if not queue.is_empty():
+		NotificationManager.show_message("Nejdřív vyprázdni frontu radnice.")
+		return false
+	var have := GameManager.count_age_buildings(GameManager.current_age)
+	if have < AgeData.BUILDINGS_REQUIRED_TO_ADVANCE:
+		NotificationManager.show_message(
+			"Potřebuješ %d budovy z věku %s (máš %d)." % [
+				AgeData.BUILDINGS_REQUIRED_TO_ADVANCE,
+				GameManager.get_age_name(),
+				have,
+			]
+		)
+		return false
+	var def := AgeData.research_def_for_next(GameManager.current_age)
+	if def.is_empty():
+		return false
+	var cost: Dictionary = def.get("cost", {})
+	if not GameManager.spend(cost):
+		NotificationManager.show_message("Nedostatek surovin na výzkum věku.")
+		return false
+	researching_age = true
+	research_target_age = AgeData.next_age(GameManager.current_age)
+	research_remaining = time_override if time_override > 0.0 else float(def.get("time", 130.0))
+	research_changed.emit()
+	queue_changed.emit()
+	print("[AGE] research started -> %d (%.1fs)" % [research_target_age, research_remaining])
+	NotificationManager.show_message("Výzkum: %s" % AgeData.age_name(research_target_age))
+	return true
+
+
 func get_queue_summary() -> String:
+	if researching_age:
+		return "věk %.1fs" % maxf(research_remaining, 0.0)
 	if queue.is_empty():
 		return "fronta prázdná"
 	return "fronta %d | %.1fs" % [queue.size(), maxf(train_remaining, 0.0)]
+
+
+func _complete_age_research() -> void:
+	researching_age = false
+	research_remaining = 0.0
+	var target := research_target_age
+	research_target_age = 0
+	research_changed.emit()
+	queue_changed.emit()
+	if GameManager.current_age < target:
+		GameManager.advance_age()
+	NotificationManager.show_message("Nový věk: %s" % GameManager.get_age_name())
 
 
 func _complete_training() -> void:
