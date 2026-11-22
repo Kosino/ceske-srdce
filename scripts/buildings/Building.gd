@@ -26,6 +26,8 @@ var _repairers: Dictionary = {} # instance_id -> Villager
 ## UI focus — fortifications hide name/HP unless selected/hovered/damaged.
 var ui_selected: bool = false
 var ui_hovered: bool = false
+## Zednictví (+10% HP) applied once per building.
+var masonry_applied: bool = false
 
 
 func _ready() -> void:
@@ -46,6 +48,20 @@ func _ready() -> void:
 	else:
 		add_to_group("enemy_buildings")
 	_refresh_label()
+	GameManager.apply_researched_techs_to_building(self)
+
+
+## University Zednictví: multiply max HP (and current HP) once.
+func apply_masonry_bonus(mult: float) -> void:
+	if masonry_applied or mult <= 1.0:
+		return
+	masonry_applied = true
+	var ratio := 1.0
+	if max_hp > 0.0:
+		ratio = hp / max_hp
+	max_hp = max_hp * mult
+	hp = max_hp * ratio
+	queue_redraw()
 
 
 func start_construction(time_sec: float = -1.0) -> void:

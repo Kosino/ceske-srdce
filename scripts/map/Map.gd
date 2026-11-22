@@ -84,6 +84,8 @@ func _ready() -> void:
 		await prepare_art_v2_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--monk-shot"):
 		await prepare_monk_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--university-shot"):
+		await prepare_university_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--formation-shot"):
 		await prepare_formation_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--ai-shot"):
@@ -258,7 +260,7 @@ func prepare_walls_screenshot() -> void:
 	_save_shot("walls.png", 0)
 
 
-## Klášter + Tržiště + Univerzita + Mnich healing (age34 sprites).
+## Close-up: Mnich healing a clearly wounded ally (low HP bar).
 func prepare_monk_screenshot() -> void:
 	DisplayServer.window_set_size(Vector2i(1280, 720))
 	var debug := get_node_or_null("DebugPanel")
@@ -268,54 +270,96 @@ func prepare_monk_screenshot() -> void:
 		if n is Node2D:
 			(n as Node2D).visible = false
 			(n as Node2D).position = Vector2(-4000, -4000)
+	for n in get_tree().get_nodes_in_group("villagers"):
+		if n is Villager and (n as Villager).team == 0:
+			(n as Villager).visible = false
+			(n as Villager).position = Vector2(-4000, -4000)
 	GameManager.current_age = 3
-	GameManager.add_resource("wood", 400)
 	GameManager.add_resource("gold", 200)
-	var origin := Vector2(1000, 700)
+	var origin := Vector2(1100, 740)
 	var monastery: Monastery = preload("res://scenes/buildings/Monastery.tscn").instantiate() as Monastery
 	monastery.team = 0
 	monastery.is_complete = true
 	monastery.spawn_parent = units
-	monastery.position = origin
+	monastery.position = origin + Vector2(-160, -80)
+	units.add_child(monastery)
+	var ally: Soldier = SOLDIER_SCENE.instantiate() as Soldier
+	ally.team = 0
+	ally.contribute_population = false
+	ally.position = origin
+	units.add_child(ally)
+	var monk: Monk = preload("res://scenes/units/Monk.tscn").instantiate() as Monk
+	monk.team = 0
+	monk.contribute_population = false
+	monk.position = origin + Vector2(-40, 0)
+	units.add_child(monk)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	# Keep ally critically wounded for the shot (heal visibly in progress).
+	ally.hp = 8.0
+	ally.queue_redraw()
+	monk._facing = "right"
+	monk._apply_facing_texture()
+	SelectionManager.select_single(monk)
+	monk.assign_heal(ally)
+	monk.monk_state = Monk.MonkState.HEALING
+	monk.heal_target = ally
+	monk.stop_movement()
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	if cam:
+		cam.set_zoom_clamped(1.85)
+		cam.center_at(origin + Vector2(-10, -20))
+	await get_tree().create_timer(0.35).timeout
+	# Re-assert critically low HP so the bar reads as wounded in the shot.
+	ally.hp = 5.0
+	ally.queue_redraw()
+	monk.queue_redraw()
+	NotificationManager.show_message("Léčení!")
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_save_shot("monk.png", 0)
+
+
+## Univerzita selected with research buttons visible.
+func prepare_university_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	for n in get_tree().get_nodes_in_group("player_town_hall"):
+		if n is Node2D:
+			(n as Node2D).visible = false
+			(n as Node2D).position = Vector2(-4000, -4000)
+	GameManager.current_age = 4
+	GameManager.wood = 800
+	GameManager.gold = 400
+	GameManager.stone = 400
+	var origin := Vector2(1020, 700)
+	var university: University = preload("res://scenes/buildings/University.tscn").instantiate() as University
+	university.team = 0
+	university.is_complete = true
+	university.position = origin
+	units.add_child(university)
+	var monastery: Monastery = preload("res://scenes/buildings/Monastery.tscn").instantiate() as Monastery
+	monastery.team = 0
+	monastery.is_complete = true
+	monastery.position = origin + Vector2(-150, 10)
 	units.add_child(monastery)
 	var market: Market = preload("res://scenes/buildings/Market.tscn").instantiate() as Market
 	market.team = 0
 	market.is_complete = true
-	market.position = origin + Vector2(140, -20)
+	market.position = origin + Vector2(150, 5)
 	units.add_child(market)
-	var university: University = preload("res://scenes/buildings/University.tscn").instantiate() as University
-	university.team = 0
-	university.is_complete = true
-	university.position = origin + Vector2(280, 10)
-	units.add_child(university)
-	var monk: Monk = preload("res://scenes/units/Monk.tscn").instantiate() as Monk
-	monk.team = 0
-	monk.contribute_population = false
-	monk.position = origin + Vector2(40, 90)
-	units.add_child(monk)
-	var ally: Soldier = SOLDIER_SCENE.instantiate() as Soldier
-	ally.team = 0
-	ally.contribute_population = false
-	ally.position = monk.global_position + Vector2(70, 10)
-	units.add_child(ally)
 	await get_tree().physics_frame
-	ally.hp = ally.max_hp * 0.35
-	ally.queue_redraw()
-	var foe: Soldier = SOLDIER_SCENE.instantiate() as Soldier
-	foe.team = 1
-	foe.contribute_population = false
-	foe.position = monk.global_position + Vector2(160, 20)
-	units.add_child(foe)
-	await get_tree().physics_frame
-	SelectionManager.select_building(monastery)
-	monk.assign_heal(ally)
+	SelectionManager.select_building(university)
+	university.enqueue_tech(TechData.MASONRY)
 	var cam := get_node_or_null("Camera2D") as RTSCamera
 	if cam:
-		cam.set_zoom_clamped(1.05)
-		cam.center_at(origin + Vector2(120, 50))
-	await get_tree().create_timer(0.9).timeout
+		cam.set_zoom_clamped(1.15)
+		cam.center_at(origin + Vector2(0, 20))
+	await get_tree().create_timer(0.7).timeout
 	await get_tree().process_frame
-	_save_shot("monk.png", 0)
+	_save_shot("university.png", 0)
 
 
 ## All buildings side-by-side + labeled units (art pass). No TC overlap.
@@ -2300,6 +2344,81 @@ func _run_age34_monk_smoke() -> void:
 		trade_ok = market.trade_wood_for_gold(100) and GameManager.wood == 100 and GameManager.gold == 120
 	print("[TEST] market_trade wood=%d gold=%d ok=%s" % [GameManager.wood, GameManager.gold, trade_ok])
 
+	# University techs (same research system as Blacksmith).
+	GameManager.wood = 800
+	GameManager.gold = 400
+	GameManager.stone = 400
+	var hut: Building = preload("res://scenes/buildings/House.tscn").instantiate() as Building
+	hut.team = 0
+	hut.is_complete = true
+	hut.position = PLAYER_TC_POS + Vector2(-160, 160)
+	units.add_child(hut)
+	await get_tree().physics_frame
+	var hut_max0 := hut.max_hp
+	var tower: WatchTower = preload("res://scenes/buildings/WatchTower.tscn").instantiate() as WatchTower
+	tower.team = 0
+	tower.is_complete = true
+	tower.spawn_parent = units
+	tower.position = PLAYER_TC_POS + Vector2(120, 220)
+	units.add_child(tower)
+	await get_tree().physics_frame
+	var tower_dmg0 := tower.attack_damage
+	var tower_rng0 := tower.attack_range_px
+	var archer: Archer = ARCHER_SCENE.instantiate() as Archer
+	archer.team = 0
+	archer.contribute_population = false
+	archer.position = PLAYER_TC_POS + Vector2(40, 220)
+	units.add_child(archer)
+	await get_tree().physics_frame
+	var archer_rng0 := archer.attack_range
+
+	var uni_tech_ok: bool = false
+	if university:
+		var wood_u0 := GameManager.wood
+		var stone_u0 := GameManager.stone
+		var started_m := university.enqueue_tech(TechData.MASONRY)
+		if started_m:
+			university.research_remaining = 0.0
+			university._complete_research()
+		await get_tree().process_frame
+		var masonry_ok := (
+			started_m
+			and GameManager.has_tech(0, TechData.MASONRY)
+			and GameManager.wood == wood_u0 - 150
+			and GameManager.stone == stone_u0 - 175
+			and hut.max_hp >= hut_max0 * 1.10 - 0.01
+		)
+		var started_b := university.enqueue_tech(TechData.BALLISTICS)
+		if started_b:
+			university.research_remaining = 0.0
+			university._complete_research()
+		await get_tree().process_frame
+		var ball_ok := (
+			started_b
+			and GameManager.has_tech(0, TechData.BALLISTICS)
+			and archer.attack_range >= archer_rng0 + 39.0
+			and tower.attack_range_px >= tower_rng0 + 39.0
+		)
+		var started_t := university.enqueue_tech(TechData.TOWER_ENGINE)
+		if started_t:
+			university.research_remaining = 0.0
+			university._complete_research()
+		await get_tree().process_frame
+		var engine_ok := (
+			started_t
+			and GameManager.has_tech(0, TechData.TOWER_ENGINE)
+			and tower.attack_damage >= tower_dmg0 + 1.99
+			and tower.attack_range_px >= tower_rng0 + 79.0
+		)
+		var twice := university.enqueue_tech(TechData.MASONRY)
+		uni_tech_ok = masonry_ok and ball_ok and engine_ok and not twice
+		print(
+			"[TEST] uni_techs masonry=%s ball=%s engine=%s twice_block=%s"
+			% [masonry_ok, ball_ok, engine_ok, not twice]
+		)
+	else:
+		print("[TEST] uni_techs skipped (no university)")
+
 	# Sprites wired (Honza art pipeline).
 	var art_ok: bool = true
 	for b in [monastery, market, university]:
@@ -2323,18 +2442,22 @@ func _run_age34_monk_smoke() -> void:
 
 	var all_ok: bool = (
 		design_ok and uni_block_ok and place_ok and uni_place_ok
-		and spend_ok and train_ok and heal_ok and convert_ok and trade_ok and art_ok
+		and spend_ok and train_ok and heal_ok and convert_ok and trade_ok
+		and uni_tech_ok and art_ok
 	)
 	print(
-		"[TEST] age34 design=%s uni_lock=%s place=%s uni4=%s spend=%s train=%s heal=%s convert=%s trade=%s art=%s"
-		% [design_ok, uni_block_ok, place_ok, uni_place_ok, spend_ok, train_ok, heal_ok, convert_ok, trade_ok, art_ok]
+		"[TEST] age34 design=%s uni_lock=%s place=%s uni4=%s spend=%s train=%s heal=%s convert=%s trade=%s techs=%s art=%s"
+		% [
+			design_ok, uni_block_ok, place_ok, uni_place_ok, spend_ok, train_ok,
+			heal_ok, convert_ok, trade_ok, uni_tech_ok, art_ok
+		]
 	)
 	if all_ok:
 		print("[TEST] PASS age 3–4 buildings + monk heal/convert")
 	else:
 		print("[TEST] FAIL age 3–4 buildings + monk heal/convert")
 
-	for n in [monastery, market, university, monk, ally, foe]:
+	for n in [monastery, market, university, monk, ally, foe, hut, tower, archer]:
 		if n != null and is_instance_valid(n):
 			n.queue_free()
 	await get_tree().physics_frame

@@ -4,13 +4,17 @@ class_name WatchTower
 
 const PROJECTILE_SCENE := preload("res://scenes/combat/Projectile.tscn")
 const TEX_TOWER := preload("res://assets/sprites/buildings/watch_tower.png")
-const ATTACK_DAMAGE := 5.0
-const ATTACK_RANGE := 7.0 * 40.0
+const BASE_ATTACK_DAMAGE := 5.0
+const BASE_ATTACK_RANGE := 7.0 * 40.0
 const ATTACK_COOLDOWN := 1.0
 
 var spawn_parent: Node2D
 var build_cost: Dictionary = {"stone": 125, "wood": 25}
 var _attack_timer: float = 0.0
+var attack_damage: float = BASE_ATTACK_DAMAGE
+var attack_range_px: float = BASE_ATTACK_RANGE
+## Tech ids already applied to this tower (idempotent).
+var _applied_tower_techs: Dictionary = {}
 
 
 func _ready() -> void:
@@ -27,6 +31,28 @@ func _ready() -> void:
 		_visual.texture = TEX_TOWER
 	super._ready()
 	add_to_group("watch_towers")
+
+
+func apply_tower_attack_bonus(amount: float, tech_id: String = "") -> void:
+	if amount <= 0.0:
+		return
+	var key := tech_id if tech_id != "" else "atk_%.2f" % amount
+	if _applied_tower_techs.get(key, false):
+		return
+	_applied_tower_techs[key] = true
+	attack_damage += amount
+
+
+func apply_tower_range_bonus(amount: float, tech_id: String = "") -> void:
+	if amount <= 0.0:
+		return
+	var key := tech_id if tech_id != "" else "rng_%.2f" % amount
+	# Range bonuses from different techs share prefix — use full key.
+	var full := "rng_%s" % key
+	if _applied_tower_techs.get(full, false):
+		return
+	_applied_tower_techs[full] = true
+	attack_range_px += amount
 
 
 func _process(delta: float) -> void:
@@ -50,13 +76,13 @@ func _try_auto_attack() -> void:
 		parent = get_tree().current_scene
 	parent.add_child(proj)
 	var origin := global_position + Vector2(0, -footprint.y * 0.35)
-	proj.setup(origin, target.global_position, ATTACK_DAMAGE, team, target)
+	proj.setup(origin, target.global_position, attack_damage, team, target)
 	print("[COMBAT] tower loosed arrow at %s" % target.name)
 
 
 func _nearest_enemy() -> Node2D:
 	var best: Node2D = null
-	var best_d := ATTACK_RANGE
+	var best_d := attack_range_px
 	var groups: Array
 	if team == 0:
 		groups = ["enemy_units", "enemy_buildings", "enemy_town_hall"]

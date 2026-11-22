@@ -71,6 +71,7 @@ func mark_tech_researched(team: int, tech_id: String) -> void:
 		return
 	(_researched[team] as Dictionary)[tech_id] = true
 	_apply_tech_to_team_units(team, tech_id)
+	_apply_tech_to_team_buildings(team, tech_id)
 	tech_researched.emit(team, tech_id)
 	print("[TECH] team%d researched %s" % [team, tech_id])
 
@@ -84,6 +85,15 @@ func apply_researched_techs_to_unit(unit: Unit) -> void:
 			_apply_tech_to_unit(unit, str(tech_id))
 
 
+func apply_researched_techs_to_building(building: Building) -> void:
+	if building == null:
+		return
+	var bag: Dictionary = _researched.get(building.team, {})
+	for tech_id in bag.keys():
+		if bag[tech_id]:
+			_apply_tech_to_building(building, str(tech_id))
+
+
 func _apply_tech_to_team_units(team: int, tech_id: String) -> void:
 	var tree := get_tree()
 	if tree == null:
@@ -92,6 +102,16 @@ func _apply_tech_to_team_units(team: int, tech_id: String) -> void:
 	for n in tree.get_nodes_in_group(group):
 		if n is Unit:
 			_apply_tech_to_unit(n as Unit, tech_id)
+
+
+func _apply_tech_to_team_buildings(team: int, tech_id: String) -> void:
+	var tree := get_tree()
+	if tree == null:
+		return
+	var group := "player_buildings" if team == 0 else "enemy_buildings"
+	for n in tree.get_nodes_in_group(group):
+		if n is Building:
+			_apply_tech_to_building(n as Building, tech_id)
 
 
 func _apply_tech_to_unit(unit: Unit, tech_id: String) -> void:
@@ -110,6 +130,22 @@ func _apply_tech_to_unit(unit: Unit, tech_id: String) -> void:
 		unit.melee_armor += float(def["melee_armor"])
 	if def.has("pierce_armor"):
 		unit.pierce_armor += float(def["pierce_armor"])
+	if def.has("attack_range"):
+		unit.attack_range += float(def["attack_range"])
+
+
+func _apply_tech_to_building(building: Building, tech_id: String) -> void:
+	var def := TechData.tech_def(tech_id)
+	if def.is_empty() or building == null:
+		return
+	if def.has("building_hp_mult"):
+		building.apply_masonry_bonus(float(def["building_hp_mult"]))
+	if building is WatchTower:
+		var tower := building as WatchTower
+		if def.has("tower_attack"):
+			tower.apply_tower_attack_bonus(float(def["tower_attack"]), tech_id)
+		if def.has("tower_range"):
+			tower.apply_tower_range_bonus(float(def["tower_range"]), tech_id)
 
 
 func add_resource(type: String, amount: int) -> void:
