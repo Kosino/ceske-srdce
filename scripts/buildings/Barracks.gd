@@ -83,9 +83,9 @@ func enqueue_unit(unit_id: String) -> bool:
 	return true
 
 
-## Enemy AI training — caller already paid from AI stockpile (no GameManager).
+## AI training — caller already paid from AI stockpile (no GameManager).
 func ai_enqueue_unit(unit_id: String) -> bool:
-	if team == 0 or not is_complete or unit_id not in UNIT_DEFS:
+	if not is_complete or unit_id not in UNIT_DEFS:
 		return false
 	if queue.size() >= MAX_QUEUE:
 		return false

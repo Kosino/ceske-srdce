@@ -11,6 +11,7 @@ config/features=PackedStringArray("4.7", "Forward Plus")
 GameManager="*res://autoload/GameManager.gd"
 SelectionManager="*res://autoload/SelectionManager.gd"
 NotificationManager="*res://autoload/NotificationManager.gd"
+BalanceSim="*res://autoload/BalanceSim.gd"
 
 [rendering]
 

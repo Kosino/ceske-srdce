@@ -23,6 +23,10 @@ func _ready() -> void:
 	_select_civ(enemy_option, CivData.DEFAULT_ENEMY)
 
 	if DisplayServer.get_name() == "headless":
+		if BalanceSim.active:
+			# Balance suite / sim-smoke — skip menu civ smoke, go straight to Map.
+			get_tree().change_scene_to_file(MAP_SCENE)
+			return
 		await _run_menu_civ_smoke()
 		# Reset defaults so Map smokes stay stable, then load Map (runs all headless tests).
 		GameManager.player_civ = CivData.DEFAULT_PLAYER
@@ -33,6 +37,9 @@ func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.has("--menu-shot"):
 		await _capture_menu_shot()
+		return
+	if args.has("--sim") or args.has("--sim-smoke"):
+		get_tree().change_scene_to_file(MAP_SCENE)
 		return
 	# Feature screenshots that need the map.
 	for flag in [

@@ -73,6 +73,22 @@ func enqueue_unit(unit_id: String) -> bool:
 	return true
 
 
+## AI — caller already paid from AI stockpile.
+func ai_enqueue_unit(unit_id: String) -> bool:
+	if not is_complete or unit_id not in UNIT_DEFS:
+		return false
+	if queue.size() >= MAX_QUEUE:
+		return false
+	var def: Dictionary = UNIT_DEFS[unit_id]
+	var t := 1.2 if DisplayServer.get_name() == "headless" else float(def["time"])
+	queue.append(unit_id)
+	if queue.size() == 1:
+		train_remaining = t
+	queue_changed.emit()
+	print("[AI-PROD] archery queued %s (queue=%d)" % [unit_id, queue.size()])
+	return true
+
+
 func get_queue_summary() -> String:
 	if queue.is_empty():
 		return "fronta prázdná"
