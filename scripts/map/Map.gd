@@ -46,10 +46,13 @@ func _ready() -> void:
 		await _run_hud_layout_smoke()
 		await _run_victory_smoke()
 		await _run_defeat_smoke()
+		await _run_camera_minimap_smoke()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--hud-shot"):
 		await prepare_hud_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--victory-shot"):
 		await prepare_victory_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--camera-shot"):
+		await prepare_camera_minimap_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--formation-shot"):
 		await prepare_formation_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--ai-shot"):
@@ -57,6 +60,26 @@ func _ready() -> void:
 	else:
 		await _sample_windowed_fps()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 debug.")
+
+
+## Camera moved + minimap frame visible (feature in action).
+func prepare_camera_minimap_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	var mini := get_node_or_null("UI/Minimap") as Minimap
+	await get_tree().create_timer(0.3).timeout
+	if cam:
+		cam.set_zoom_clamped(0.85)
+		cam.center_at(Vector2(1500, 1100))
+	if mini:
+		# Click-equivalent pan so the frame sits clearly elsewhere on the minimap.
+		mini.move_camera_to_minimap(Vector2(110, 95))
+	await get_tree().create_timer(0.4).timeout
+	await get_tree().process_frame
+	_save_shot("camera_minimap.png", 0)
 
 
 ## Windowed screenshot of victory overlay (enemy hall + units cleared).
@@ -845,6 +868,65 @@ func _run_hud_layout_smoke() -> void:
 		print("[TEST] PASS HUD layout + villager builds + DebugPanel hidden")
 	else:
 		print("[TEST] FAIL HUD layout + villager builds + DebugPanel hidden")
+
+
+## Camera clamp + zoom limits + minimap LMB → camera position.
+func _run_camera_minimap_smoke() -> void:
+	await get_tree().physics_frame
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	var mini := get_node_or_null("UI/Minimap") as Minimap
+	if cam == null or mini == null:
+		print("[TEST] FAIL camera/minimap: missing nodes")
+		return
+
+	# Zoom limits 0.6–1.5
+	cam.set_zoom_clamped(0.1)
+	var zoom_lo_ok := is_equal_approx(cam.zoom.x, cam.min_zoom) and cam.min_zoom >= 0.59
+	cam.set_zoom_clamped(9.0)
+	var zoom_hi_ok := is_equal_approx(cam.zoom.x, cam.max_zoom) and cam.max_zoom <= 1.51
+	cam.set_zoom_clamped(1.0)
+
+	# Clamp to map: push far outside, then clamp.
+	cam.position = Vector2(-5000, -5000)
+	cam.clamp_position_now()
+	var half := cam.view_half_extents()
+	var clamp_lo_ok := (
+		cam.position.x >= cam.map_rect.position.x + half.x - 0.5
+		and cam.position.y >= cam.map_rect.position.y + half.y - 0.5
+	)
+	cam.position = Vector2(9000, 9000)
+	cam.clamp_position_now()
+	half = cam.view_half_extents()
+	var clamp_hi_ok := (
+		cam.position.x <= cam.map_rect.end.x - half.x + 0.5
+		and cam.position.y <= cam.map_rect.end.y - half.y + 0.5
+	)
+
+	# Minimap click → camera near mapped world point.
+	cam.set_zoom_clamped(1.0)
+	var local := Vector2(111, 64) # ~75% x, 50% y of 148×128 draw
+	var target := mini.minimap_to_world(local)
+	mini.move_camera_to_minimap(local)
+	await get_tree().process_frame
+	var cam_ok := cam.position.distance_to(target) < 8.0
+	# Re-clamp may nudge if near edges; for mid-map target should match.
+	if not cam_ok:
+		# Allow clamp-adjusted center for half-extents.
+		cam_ok = cam.position.distance_to(Vector2(
+			clampf(target.x, cam.map_rect.position.x + half.x, cam.map_rect.end.x - half.x),
+			clampf(target.y, cam.map_rect.position.y + half.y, cam.map_rect.end.y - half.y)
+		)) < 8.0
+
+	var edge_ok := is_equal_approx(cam.edge_margin, 20.0)
+	var ok := zoom_lo_ok and zoom_hi_ok and clamp_lo_ok and clamp_hi_ok and cam_ok and edge_ok
+	print(
+		"[TEST] camera zoom_lo=%s zoom_hi=%s clamp_lo=%s clamp_hi=%s minimap=%s edge=%s"
+		% [zoom_lo_ok, zoom_hi_ok, clamp_lo_ok, clamp_hi_ok, cam_ok, edge_ok]
+	)
+	if ok:
+		print("[TEST] PASS camera clamp + zoom + minimap click")
+	else:
+		print("[TEST] FAIL camera clamp + zoom + minimap click")
 
 
 ## Win = enemy hall down + no enemy units; overlay Vítězství!

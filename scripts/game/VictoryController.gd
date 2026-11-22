@@ -109,10 +109,10 @@ func _show_overlay(won: bool, secs: float) -> void:
 
 	var panel := PanelContainer.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.offset_left = -180.0
-	panel.offset_top = -120.0
-	panel.offset_right = 180.0
-	panel.offset_bottom = 120.0
+	panel.offset_left = -220.0
+	panel.offset_top = -130.0
+	panel.offset_right = 220.0
+	panel.offset_bottom = 130.0
 	_overlay.add_child(panel)
 
 	var margin := MarginContainer.new()
@@ -140,19 +140,21 @@ func _show_overlay(won: bool, secs: float) -> void:
 	vbox.add_child(_time_label)
 
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
+	row.add_theme_constant_override("separation", 16)
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	vbox.add_child(row)
 
 	var again := Button.new()
 	again.name = "AgainButton"
 	again.text = "Znovu"
+	again.custom_minimum_size = Vector2(140, 36)
 	again.pressed.connect(_on_again_pressed)
 	row.add_child(again)
 
 	var menu := Button.new()
 	menu.name = "MenuButton"
 	menu.text = "Hlavní menu"
+	menu.custom_minimum_size = Vector2(140, 36)
 	menu.pressed.connect(_on_menu_pressed)
 	row.add_child(menu)
 
