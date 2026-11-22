@@ -30,7 +30,7 @@
 
 ## Fáze 4: Obsah
 - Gold/stone mines + seeded map + Mining Camp / Pila ✅
-- Blacksmith techs (infantry attack/armor)
+- Blacksmith techs (infantry attack/armor) ✅
 - Stable + cavalry
 - Unique civ units
 - Walls/towers

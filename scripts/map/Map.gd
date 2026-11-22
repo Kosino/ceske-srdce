@@ -54,6 +54,7 @@ func _ready() -> void:
 		await _run_defeat_smoke()
 		await _run_camera_minimap_smoke()
 		await _run_map_mines_smoke()
+		await _run_blacksmith_tech_smoke()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--hud-shot"):
 		await prepare_hud_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--victory-shot"):
@@ -62,6 +63,8 @@ func _ready() -> void:
 		await prepare_camera_minimap_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--mines-shot"):
 		await prepare_mines_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--blacksmith-shot"):
+		await prepare_blacksmith_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--formation-shot"):
 		await prepare_formation_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--ai-shot"):
@@ -69,6 +72,33 @@ func _ready() -> void:
 	else:
 		await _sample_windowed_fps()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 debug.")
+
+
+## Blacksmith selected with research running (feature in action).
+func prepare_blacksmith_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	GameManager.current_age = 2
+	GameManager.add_resource("food", 200)
+	var smith: Blacksmith = preload("res://scenes/buildings/Blacksmith.tscn").instantiate() as Blacksmith
+	smith.team = 0
+	smith.position = PLAYER_TC_POS + Vector2(140, 40)
+	smith.is_complete = true
+	units.add_child(smith)
+	await get_tree().physics_frame
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	if cam:
+		cam.set_zoom_clamped(1.05)
+		cam.center_at(smith.global_position)
+	SelectionManager.select_building(smith)
+	smith.enqueue_tech(TechData.FORGING)
+	# Keep research visible (don't finish yet).
+	smith.research_remaining = maxf(smith.research_remaining, 28.0)
+	await get_tree().create_timer(0.6).timeout
+	await get_tree().process_frame
+	_save_shot("blacksmith.png", 0)
 
 
 ## Gold + stone mines with villagers mining (no overlapping world labels).
@@ -969,6 +999,90 @@ func _run_hud_layout_smoke() -> void:
 		print("[TEST] FAIL HUD layout + villager builds + DebugPanel hidden")
 
 
+## Blacksmith techs: spend, apply to existing+new, armor min 1, no double research.
+func _run_blacksmith_tech_smoke() -> void:
+	await get_tree().physics_frame
+	GameManager.current_age = 2
+	GameManager.add_resource("food", 400)
+	GameManager.add_resource("gold", 100)
+
+	var smith: Blacksmith = preload("res://scenes/buildings/Blacksmith.tscn").instantiate() as Blacksmith
+	smith.team = 0
+	smith.position = PLAYER_TC_POS + Vector2(160, 60)
+	smith.is_complete = true
+	units.add_child(smith)
+	await get_tree().physics_frame
+
+	var soldier: Soldier = SOLDIER_SCENE.instantiate() as Soldier
+	soldier.team = 0
+	soldier.contribute_population = false
+	soldier.position = PLAYER_TC_POS + Vector2(80, 80)
+	units.add_child(soldier)
+	await get_tree().physics_frame
+	var atk_before := soldier.attack_damage
+	var armor_m_before := soldier.melee_armor
+	var armor_p_before := soldier.pierce_armor
+
+	var food_before := GameManager.food
+	var started := smith.enqueue_tech(TechData.FORGING)
+	var spent_ok := started and GameManager.food == food_before - 150
+	# Force completion (headless process timing is flaky with pause/timers).
+	if started:
+		smith.research_remaining = 0.0
+		smith._complete_research()
+	await get_tree().process_frame
+	var forging_ok := GameManager.has_tech(0, TechData.FORGING) and soldier.attack_damage >= atk_before + 0.99
+
+	# Chain mail on same soldier.
+	food_before = GameManager.food
+	var started2 := smith.enqueue_tech(TechData.CHAIN_MAIL)
+	if started2:
+		smith.research_remaining = 0.0
+		smith._complete_research()
+	await get_tree().process_frame
+	var mail_ok := (
+		started2
+		and GameManager.has_tech(0, TechData.CHAIN_MAIL)
+		and soldier.melee_armor >= armor_m_before + 0.99
+		and soldier.pierce_armor >= armor_p_before + 0.99
+	)
+
+	# New soldier inherits techs.
+	var soldier2: Soldier = SOLDIER_SCENE.instantiate() as Soldier
+	soldier2.team = 0
+	soldier2.contribute_population = false
+	soldier2.position = PLAYER_TC_POS + Vector2(100, 100)
+	units.add_child(soldier2)
+	await get_tree().physics_frame
+	var new_ok := soldier2.attack_damage >= 6.99 and soldier2.melee_armor >= 0.99
+
+	# Armor reduces damage, floor 1.
+	var hp_before := soldier2.hp
+	soldier2.take_damage(3.0, "melee") # 3 - 1 armor = 2
+	var reduced_ok := is_equal_approx(soldier2.hp, hp_before - 2.0)
+	hp_before = soldier2.hp
+	soldier2.take_damage(1.0, "melee") # 1 - 1 = 0 → min 1
+	var min_ok := is_equal_approx(soldier2.hp, hp_before - 1.0)
+
+	# Cannot research twice.
+	var food_mid := GameManager.food
+	var again := smith.enqueue_tech(TechData.FORGING)
+	var twice_ok := not again and GameManager.food == food_mid
+
+	print(
+		"[TEST] blacksmith spent=%s forging=%s mail=%s new=%s dmg=%s min1=%s twice=%s"
+		% [spent_ok, forging_ok, mail_ok, new_ok, reduced_ok, min_ok, twice_ok]
+	)
+	if spent_ok and forging_ok and mail_ok and new_ok and reduced_ok and min_ok and twice_ok:
+		print("[TEST] PASS blacksmith techs + armor")
+	else:
+		print("[TEST] FAIL blacksmith techs + armor")
+
+	soldier.queue_free()
+	soldier2.queue_free()
+	smith.queue_free()
+
+
 ## Seeded map: same seed → same layout; TC fairness; gold harvest + mining camp deposit.
 func _run_map_mines_smoke() -> void:
 	await get_tree().physics_frame
@@ -986,14 +1100,16 @@ func _run_map_mines_smoke() -> void:
 	var seed_ok := fp1 == fp2 and not fp1.is_empty()
 	holder.queue_free()
 
-	var wood_p := map_generator.count_near(PLAYER_TC_POS, "wood")
-	var wood_e := map_generator.count_near(ENEMY_TC_POS, "wood")
-	var food_p := map_generator.count_near(PLAYER_TC_POS, "food")
-	var food_e := map_generator.count_near(ENEMY_TC_POS, "food")
-	var gold_p := map_generator.count_near(PLAYER_TC_POS, "gold")
-	var gold_e := map_generator.count_near(ENEMY_TC_POS, "gold")
-	var stone_p := map_generator.count_near(PLAYER_TC_POS, "stone")
-	var stone_e := map_generator.count_near(ENEMY_TC_POS, "stone")
+	# TC packs within ~12 tiles; count slightly wider for organic forest edges.
+	var fair_r := 14.0
+	var wood_p := map_generator.count_near(PLAYER_TC_POS, "wood", fair_r)
+	var wood_e := map_generator.count_near(ENEMY_TC_POS, "wood", fair_r)
+	var food_p := map_generator.count_near(PLAYER_TC_POS, "food", fair_r)
+	var food_e := map_generator.count_near(ENEMY_TC_POS, "food", fair_r)
+	var gold_p := map_generator.count_near(PLAYER_TC_POS, "gold", fair_r)
+	var gold_e := map_generator.count_near(ENEMY_TC_POS, "gold", fair_r)
+	var stone_p := map_generator.count_near(PLAYER_TC_POS, "stone", fair_r)
+	var stone_e := map_generator.count_near(ENEMY_TC_POS, "stone", fair_r)
 	var fair_ok := (
 		wood_p == wood_e and wood_p >= 20
 		and food_p == food_e and food_p >= 6

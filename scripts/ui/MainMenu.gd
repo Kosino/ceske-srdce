@@ -36,7 +36,8 @@ func _ready() -> void:
 		return
 	# Feature screenshots that need the map.
 	for flag in [
-		"--hud-shot", "--victory-shot", "--formation-shot", "--ai-shot", "--camera-shot", "--mines-shot"
+		"--hud-shot", "--victory-shot", "--formation-shot", "--ai-shot",
+		"--camera-shot", "--mines-shot", "--blacksmith-shot"
 	]:
 		if args.has(flag):
 			get_tree().change_scene_to_file(MAP_SCENE)

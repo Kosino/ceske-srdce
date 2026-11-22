@@ -197,7 +197,7 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2(-40.0, bar_y), Vector2(80.0 * ratio, 5.0)), _hp_fill_color())
 
 
-func take_damage(amount: float) -> void:
+func take_damage(amount: float, _dmg_type: String = "melee") -> void:
 	hp -= amount
 	queue_redraw()
 	if hp <= 0.0:

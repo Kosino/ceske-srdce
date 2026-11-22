@@ -13,6 +13,10 @@ signal died(unit: Unit)
 @export var can_attack: bool = true
 @export var is_cavalry: bool = false
 @export var bonus_vs_cavalry: float = 0.0
+## "melee" or "pierce" — archers pierce, others melee.
+@export var attack_type: String = "melee"
+@export var melee_armor: float = 0.0
+@export var pierce_armor: float = 0.0
 ## When false, population was already reserved (e.g. production queue).
 @export var contribute_population: bool = true
 
@@ -31,6 +35,7 @@ var _move_speed_cap: float = -1.0
 
 func _ready() -> void:
 	GameManager.apply_civ_unit_bonuses(self)
+	GameManager.apply_researched_techs_to_unit(self)
 	hp = max_hp
 	_visual = get_node_or_null("Visual") as Sprite2D
 	add_to_group("units")
@@ -210,8 +215,8 @@ func _try_strike() -> void:
 	if attack_target is Unit and (attack_target as Unit).is_cavalry:
 		damage += bonus_vs_cavalry
 	if attack_target.has_method("take_damage"):
-		attack_target.call("take_damage", damage)
-		print("[COMBAT] team%d hit %s for %.1f" % [team, attack_target.name, damage])
+		attack_target.call("take_damage", damage, attack_type)
+		print("[COMBAT] team%d hit %s for %.1f (%s)" % [team, attack_target.name, damage, attack_type])
 	if not is_instance_valid(attack_target):
 		attack_target = null
 
@@ -241,8 +246,10 @@ func _on_velocity_computed(safe_velocity: Vector2) -> void:
 	move_and_slide()
 
 
-func take_damage(amount: float) -> void:
-	hp -= amount
+func take_damage(amount: float, dmg_type: String = "melee") -> void:
+	var armor := pierce_armor if dmg_type == "pierce" else melee_armor
+	var dealt := maxf(1.0, amount - armor)
+	hp -= dealt
 	queue_redraw()
 	if hp <= 0.0:
 		die()
