@@ -28,8 +28,8 @@ Postup věku: výzkum v Radnici (fronta; během výzkumu Radnice netrénuje). Po
 |---------|--------|----------|
 | 1 Velká Morava | Dům, Pila, Mlýn, Kasárna | Vesničan, Zbrojnoš |
 | 2 Přemyslovci | Střelnice, Kovárna, Stáj | Kopiník, Lučištník, Lehký jezdec |
-| 3 Husitství | Hrad; *(data-only)* monastery | Rytíř; unikátní jednotky; *(data-only)* monk |
-| 4 Habsburkové | *(data-only)* university | *(data-only)* siege |
+| 3 Husitství | Hrad, Klášter, Tržiště *(NÁVRH)* | Rytíř; unikátní jednotky; Mnich |
+| 4 Habsburkové | Univerzita *(NÁVRH techs)* | *(data-only)* siege |
 
 **Schváleno 2026-11-22 – Hrad:** 650 K, 120 s, HP 4800, 160×160, věk 3; šípy 8 pierce / 8 dlaždic; +10 populace. Trénuje unikátní jednotku civilizace (35 s). AI od věku 3 staví Hrad při kameni a míchá unikáty do vln.
 
@@ -54,6 +54,14 @@ Civ bonusy + Kovárna platí i na unikáty (Kalené hroty na válečný vůz).
 | Kroužková zbroj | pěchota +1 melee / +1 pierce zbroj | 100 J | 40 s |
 | Kalené hroty | +1 útok lukostřelců | 100 J + 50 Z | 40 s |
 Platí na existující i nově vycvičené jednotky. AI po postavení Kovárny zkoumá Kovářství a Kroužkovou zbroj.
+
+**Univerzita – výzkum *(NÁVRH AoE II-like)*:** stejný systém jako Kovárna (fronta 1, jednou za tým). Platí na existující i nové budovy/jednotky/věže.
+
+| Tech | Efekt | Cena | Čas |
+|------|-------|------|-----|
+| Zednictví | +10 % HP budovy + zdi | 150 D + 175 K | 60 s |
+| Balistika | lukostřelci + věže +1 dlaždice dosahu *(zjednodušení; lead-target později)* | 300 D + 175 Z | 60 s |
+| Strojní věž | věže +2 útok a +1 dlaždice dosahu | 200 D + 100 K | 50 s |
 
 ## Civilizace (multiplayer)
 | Civilizace   | Unikátní jednotka          | Hlavní síla          |
@@ -140,6 +148,13 @@ Těžba za sekundu na vesničana: dřevo 0.40, jídlo z keřů 0.30, farma 0.33,
 | Kamenná zeď *(Schváleno 2026-11-22)* | 5 K / dlaždice | 8 s | 1800 | 40×40, věk 2; drag; blokuje cestu |
 | Brána *(Schváleno 2026-11-22)* | 30 K | 10 s | 1500 | nahrazuje 3 segmenty; vlastní jednotky projdou, nepřátelé ne |
 | Strážní věž *(Schváleno 2026-11-22)* | 125 K + 25 D | 40 s | 1000 | 40×40, věk 2; útok 5 pierce / dosah 7 dlaždic |
+| Klášter *(NÁVRH AoE II-like)* | 175 D | 40 s | 2100 | 80×80, věk 3; trénuje Mnicha |
+| Tržiště *(NÁVRH AoE II-like)* | 175 D | 60 s | 2100 | 80×80, věk 3; obchod (základ) |
+| Univerzita *(NÁVRH AoE II-like)* | 200 D | 60 s | 2100 | 80×80, věk 4; techy Zednictví / Balistika / Strojní věž |
+
+| Jednotka | Cena | Čas | HP | Funkce |
+|----------|------|-----|----|--------|
+| Mnich *(NÁVRH AoE II-like)* | 100 Z | 51 s | 30 | věk 3 (Klášter); léčení + konverze; bez klasického útoku; rychlost 56 px/s (0.7×); heal 4 HP/s / dosah 4 dlaždice; konverze ~8 s |
 
 Oprava: vesničan RMB na poškozenou vlastní budovu/zeď — +1 HP/s; plná oprava stojí 25 % stavební ceny (odečítá se průběžně).
 

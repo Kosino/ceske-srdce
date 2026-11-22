@@ -46,6 +46,12 @@ func _refresh(_units: Array = []) -> void:
 			var smith := b as Blacksmith
 			var prog := smith.research_progress_line()
 			line2 = prog if prog != "" else "Výzkum technologií"
+		elif b is University:
+			var uni := b as University
+			var uprog := uni.research_progress_line()
+			line2 = uprog if uprog != "" else "Výzkum (Univerzita)"
+		elif b is Monastery:
+			line2 = (b as Monastery).get_queue_summary()
 		elif b is Stable:
 			line2 = (b as Stable).get_queue_summary()
 		elif b is Castle:
@@ -56,7 +62,7 @@ func _refresh(_units: Array = []) -> void:
 	if units.is_empty():
 		label.text = "Výběr: nic\nLMB výběr / box · RMB pohyb/útok"
 		return
-	var counts := {"soldier": 0, "spearman": 0, "archer": 0, "villager": 0, "other": 0}
+	var counts := {"soldier": 0, "spearman": 0, "archer": 0, "villager": 0, "monk": 0, "other": 0}
 	for u in units:
 		if u is Soldier:
 			counts["soldier"] += 1
@@ -66,6 +72,8 @@ func _refresh(_units: Array = []) -> void:
 			counts["archer"] += 1
 		elif u is Villager:
 			counts["villager"] += 1
+		elif u is Monk:
+			counts["monk"] += 1
 		else:
 			counts["other"] += 1
 	var parts: PackedStringArray = []
@@ -77,6 +85,8 @@ func _refresh(_units: Array = []) -> void:
 		parts.append("%d lučištník" % counts["archer"])
 	if counts["villager"] > 0:
 		parts.append("%d vesničan" % counts["villager"])
+	if counts["monk"] > 0:
+		parts.append("%d mnich" % counts["monk"])
 	if counts["other"] > 0:
 		parts.append("%d jiní" % counts["other"])
 	label.text = "Výběr: %s\nFormace: %s" % [

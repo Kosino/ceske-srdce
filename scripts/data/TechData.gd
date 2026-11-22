@@ -1,11 +1,15 @@
 extends Object
 class_name TechData
-## Blacksmith (and future) research definitions.
+## Blacksmith + University research definitions.
 
 
 const FORGING := "forging"
 const CHAIN_MAIL := "chain_mail"
 const FLETCHING := "fletching"
+
+const MASONRY := "masonry"
+const BALLISTICS := "ballistics"
+const TOWER_ENGINE := "tower_engine"
 
 const BLACKSMITH_TECHS := {
 	FORGING: {
@@ -32,15 +36,54 @@ const BLACKSMITH_TECHS := {
 	},
 }
 
+## Univerzita — NÁVRH AoE II-like (Fáze 4).
+const UNIVERSITY_TECHS := {
+	MASONRY: {
+		"name": "Zednictví",
+		"cost": {"wood": 150, "stone": 175},
+		"time": 60.0,
+		"building_hp_mult": 1.10,
+	},
+	BALLISTICS: {
+		"name": "Balistika",
+		"cost": {"wood": 300, "gold": 175},
+		"time": 60.0,
+		## Simplified: +1 tile range for archers + towers (lead-target later).
+		"attack_range": 40.0,
+		"tower_range": 40.0,
+		"affects": ["archer"],
+	},
+	TOWER_ENGINE: {
+		"name": "Strojní věž",
+		"cost": {"wood": 200, "stone": 100},
+		"time": 50.0,
+		"tower_attack": 2.0,
+		"tower_range": 40.0,
+	},
+}
+
 const BLACKSMITH_ORDER := [FORGING, CHAIN_MAIL, FLETCHING]
+const UNIVERSITY_ORDER := [MASONRY, BALLISTICS, TOWER_ENGINE]
 
 
 static func tech_name(tech_id: String) -> String:
-	return str(BLACKSMITH_TECHS.get(tech_id, {}).get("name", tech_id))
+	return str(tech_def(tech_id).get("name", tech_id))
 
 
 static func tech_def(tech_id: String) -> Dictionary:
-	return BLACKSMITH_TECHS.get(tech_id, {})
+	if BLACKSMITH_TECHS.has(tech_id):
+		return BLACKSMITH_TECHS[tech_id]
+	if UNIVERSITY_TECHS.has(tech_id):
+		return UNIVERSITY_TECHS[tech_id]
+	return {}
+
+
+static func is_blacksmith_tech(tech_id: String) -> bool:
+	return BLACKSMITH_TECHS.has(tech_id)
+
+
+static func is_university_tech(tech_id: String) -> bool:
+	return UNIVERSITY_TECHS.has(tech_id)
 
 
 static func unit_role(unit: Unit) -> String:

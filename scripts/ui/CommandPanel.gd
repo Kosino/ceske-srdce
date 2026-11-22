@@ -16,6 +16,9 @@ const BUILD_BUTTONS := [
 	{"id": "blacksmith", "name": "Kovárna"},
 	{"id": "stable", "name": "Stáj"},
 	{"id": "castle", "name": "Hrad"},
+	{"id": "monastery", "name": "Klášter"},
+	{"id": "market", "name": "Tržiště"},
+	{"id": "university", "name": "Univerzita"},
 ]
 
 @onready var age_label: Label = %AgeLabel
@@ -30,14 +33,21 @@ const BUILD_BUTTONS := [
 var _formation_buttons: Dictionary = {} # kind -> Button
 var _build_buttons: Dictionary = {} # building_id -> Button
 var _tech_buttons: Dictionary = {} # tech_id -> Button
+var _uni_tech_buttons: Dictionary = {} # tech_id -> Button
 var _cavalry_buttons: Dictionary = {} # unit_id -> Button
 var _unique_button: Button
+var _monk_button: Button
+var _market_button: Button
 var _build_row: HBoxContainer
 var _tech_row: HBoxContainer
+var _uni_tech_row: HBoxContainer
 var _cavalry_row: HBoxContainer
 var _unique_row: HBoxContainer
+var _monk_row: HBoxContainer
+var _market_row: HBoxContainer
 var _research_refresh_accum: float = 0.0
 var _smith_connected: Blacksmith = null
+var _uni_connected: University = null
 
 
 func _ready() -> void:
@@ -47,10 +57,11 @@ func _ready() -> void:
 	SelectionManager.formation_changed.connect(_refresh_formation_buttons)
 	GameManager.age_changed.connect(_refresh_age_ui)
 	GameManager.tech_researched.connect(_on_tech_researched)
-	GameManager.resources_changed.connect(_refresh_tech_buttons)
+	GameManager.resources_changed.connect(_refresh_all_tech_buttons)
 	_ensure_formation_row()
 	_ensure_build_row()
 	_ensure_tech_row()
+	_ensure_uni_tech_row()
 	_refresh_age_ui()
 	_refresh_formation_buttons(SelectionManager.formation)
 	_refresh_context_ui()
@@ -63,10 +74,11 @@ func _process(delta: float) -> void:
 	_research_refresh_accum = 0.0
 	_refresh_research_button()
 	_refresh_build_costs()
-	_refresh_tech_buttons()
-	# Keep SelectionInfo research timer fresh while smith selected.
-	if SelectionManager.selected_building is Blacksmith:
-		SelectionManager.building_selection_changed.emit(SelectionManager.selected_building)
+	_refresh_all_tech_buttons()
+	# Keep SelectionInfo research timer fresh while research building selected.
+	var sel := SelectionManager.selected_building
+	if sel is Blacksmith or sel is University:
+		SelectionManager.building_selection_changed.emit(sel)
 
 
 func _on_context_changed(_units: Array) -> void:
@@ -75,11 +87,17 @@ func _on_context_changed(_units: Array) -> void:
 
 func _on_building_changed(_building: Node) -> void:
 	_connect_smith_signal(_building as Blacksmith)
+	_connect_uni_signal(_building as University)
 	_refresh_context_ui()
 
 
 func _on_tech_researched(_team: int, _tech_id: String) -> void:
+	_refresh_all_tech_buttons()
+
+
+func _refresh_all_tech_buttons(_a = null, _b = null) -> void:
 	_refresh_tech_buttons()
+	_refresh_uni_tech_buttons()
 
 
 func _ensure_formation_row() -> void:
@@ -134,12 +152,18 @@ func _refresh_context_ui() -> void:
 
 	var b := SelectionManager.selected_building
 	var is_smith := b is Blacksmith and (b as Blacksmith).is_complete
+	var is_university := b is University and (b as University).is_complete
 	var is_stable := b is Stable and (b as Stable).is_complete
 	var is_castle := b is Castle and (b as Castle).is_complete
 	if _tech_row:
 		_tech_row.visible = is_smith
 	if is_smith:
 		_refresh_tech_buttons()
+	_ensure_uni_tech_row()
+	if _uni_tech_row:
+		_uni_tech_row.visible = is_university
+	if is_university:
+		_refresh_uni_tech_buttons()
 	_ensure_cavalry_row()
 	if _cavalry_row:
 		_cavalry_row.visible = is_stable
@@ -150,8 +174,18 @@ func _refresh_context_ui() -> void:
 		_unique_row.visible = is_castle
 	if is_castle:
 		_refresh_unique_button()
+	var is_monastery := b is Monastery and (b as Monastery).is_complete
+	_ensure_monk_row()
+	if _monk_row:
+		_monk_row.visible = is_monastery
+	if is_monastery:
+		_refresh_monk_button()
+	var is_market := b is Market and (b as Market).is_complete
+	_ensure_market_row()
+	if _market_row:
+		_market_row.visible = is_market
 
-	var show_train := b != null and is_instance_valid(b) and not is_smith
+	var show_train := b != null and is_instance_valid(b) and not is_smith and not is_university
 	if train_row:
 		train_row.visible = show_train
 	if not show_train:
@@ -167,8 +201,8 @@ func _refresh_context_ui() -> void:
 		train_spearman.visible = is_barracks
 	if train_archer:
 		train_archer.visible = is_archery
-	# Hide generic train buttons when Stable/Castle selected.
-	if is_stable or is_castle:
+	# Hide generic train buttons when Stable/Castle/Monastery/Market selected.
+	if is_stable or is_castle or is_monastery or is_market:
 		if train_villager:
 			train_villager.visible = false
 		if train_soldier:
@@ -376,6 +410,82 @@ func _on_smith_research_changed() -> void:
 		SelectionManager.building_selection_changed.emit(SelectionManager.selected_building)
 
 
+func _ensure_uni_tech_row() -> void:
+	if command_vbox == null:
+		return
+	if command_vbox.has_node("UniTechRow"):
+		_uni_tech_row = command_vbox.get_node_or_null("UniTechRow") as HBoxContainer
+		for tech_id in TechData.UNIVERSITY_ORDER:
+			_uni_tech_buttons[tech_id] = _uni_tech_row.get_node_or_null("UniTech_%s" % tech_id) as Button
+		return
+	_uni_tech_row = HBoxContainer.new()
+	_uni_tech_row.name = "UniTechRow"
+	_uni_tech_row.add_theme_constant_override("separation", 4)
+	_uni_tech_row.visible = false
+	command_vbox.add_child(_uni_tech_row)
+	for tech_id in TechData.UNIVERSITY_ORDER:
+		var btn := Button.new()
+		btn.name = "UniTech_%s" % tech_id
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.pressed.connect(_on_uni_tech_pressed.bind(tech_id))
+		_uni_tech_row.add_child(btn)
+		_uni_tech_buttons[tech_id] = btn
+	_refresh_uni_tech_buttons()
+
+
+func _refresh_uni_tech_buttons(_a = null, _b = null) -> void:
+	if _uni_tech_row == null:
+		return
+	var uni := SelectionManager.selected_building as University
+	for tech_id in TechData.UNIVERSITY_ORDER:
+		var btn: Button = _uni_tech_buttons.get(tech_id)
+		if btn == null:
+			continue
+		var def := TechData.tech_def(tech_id)
+		var cost_txt := CivData.format_cost(def.get("cost", {}))
+		var done := GameManager.has_tech(0, tech_id)
+		btn.text = "%s\n%s" % [TechData.tech_name(tech_id), cost_txt]
+		if done:
+			btn.disabled = true
+			btn.modulate = Color(0.55, 0.55, 0.55)
+			btn.tooltip_text = "Už vyzkoumáno"
+		elif uni == null or not uni.can_enqueue(tech_id):
+			btn.disabled = true
+			btn.modulate = Color(0.65, 0.65, 0.65)
+			if uni and uni.is_researching():
+				btn.tooltip_text = "Fronta plná (1)"
+			else:
+				btn.tooltip_text = "Nedostatek surovin / nelze"
+		else:
+			btn.disabled = false
+			btn.modulate = Color.WHITE
+			btn.tooltip_text = cost_txt
+
+
+func _on_uni_tech_pressed(tech_id: String) -> void:
+	var uni := SelectionManager.selected_building as University
+	if uni == null:
+		NotificationManager.show_message("Vyber Univerzitu.")
+		return
+	uni.enqueue_tech(tech_id)
+	_refresh_uni_tech_buttons()
+
+
+func _connect_uni_signal(uni: University) -> void:
+	if _uni_connected and is_instance_valid(_uni_connected):
+		if _uni_connected.research_changed.is_connected(_on_uni_research_changed):
+			_uni_connected.research_changed.disconnect(_on_uni_research_changed)
+	_uni_connected = uni
+	if uni and not uni.research_changed.is_connected(_on_uni_research_changed):
+		uni.research_changed.connect(_on_uni_research_changed)
+
+
+func _on_uni_research_changed() -> void:
+	_refresh_uni_tech_buttons()
+	if SelectionManager.selected_building is University:
+		SelectionManager.building_selection_changed.emit(SelectionManager.selected_building)
+
+
 ## Test helpers
 func get_build_button(building_id: String) -> Button:
 	return _build_buttons.get(building_id) as Button
@@ -385,11 +495,19 @@ func get_tech_button(tech_id: String) -> Button:
 	return _tech_buttons.get(tech_id) as Button
 
 
+func get_uni_tech_button(tech_id: String) -> Button:
+	return _uni_tech_buttons.get(tech_id) as Button
+
+
 func is_build_row_visible() -> bool:
 	return _build_row != null and _build_row.visible
 
 func is_tech_row_visible() -> bool:
 	return _tech_row != null and _tech_row.visible
+
+
+func is_uni_tech_row_visible() -> bool:
+	return _uni_tech_row != null and _uni_tech_row.visible
 
 
 func _ensure_cavalry_row() -> void:
@@ -496,3 +614,67 @@ func _on_unique_train_pressed() -> void:
 		return
 	castle.enqueue_unique()
 	_refresh_unique_button()
+
+
+func _ensure_monk_row() -> void:
+	if command_vbox == null:
+		return
+	if command_vbox.has_node("MonkRow"):
+		_monk_row = command_vbox.get_node_or_null("MonkRow") as HBoxContainer
+		_monk_button = _monk_row.get_node_or_null("TrainMonk") as Button if _monk_row else null
+		return
+	_monk_row = HBoxContainer.new()
+	_monk_row.name = "MonkRow"
+	_monk_row.visible = false
+	command_vbox.add_child(_monk_row)
+	_monk_button = Button.new()
+	_monk_button.name = "TrainMonk"
+	_monk_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_monk_button.pressed.connect(_on_monk_train_pressed)
+	_monk_row.add_child(_monk_button)
+	_refresh_monk_button()
+
+
+func _refresh_monk_button() -> void:
+	if _monk_button == null:
+		return
+	_monk_button.text = "Mnich\n100 Z"
+	var unlocked := GameManager.is_unit_unlocked("monk")
+	_monk_button.disabled = not unlocked
+	_monk_button.tooltip_text = "100 Zlato" if unlocked else "Zamčeno do věku Husitství"
+
+
+func _on_monk_train_pressed() -> void:
+	var mon := SelectionManager.selected_building as Monastery
+	if mon == null:
+		NotificationManager.show_message("Vyber Klášter.")
+		return
+	mon.enqueue_monk()
+	_refresh_monk_button()
+
+
+func _ensure_market_row() -> void:
+	if command_vbox == null:
+		return
+	if command_vbox.has_node("MarketRow"):
+		_market_row = command_vbox.get_node_or_null("MarketRow") as HBoxContainer
+		_market_button = _market_row.get_node_or_null("TradeWood") as Button if _market_row else null
+		return
+	_market_row = HBoxContainer.new()
+	_market_row.name = "MarketRow"
+	_market_row.visible = false
+	command_vbox.add_child(_market_row)
+	_market_button = Button.new()
+	_market_button.name = "TradeWood"
+	_market_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_market_button.text = "Prodej dřeva\n100 D → Zlato"
+	_market_button.pressed.connect(_on_market_trade_pressed)
+	_market_row.add_child(_market_button)
+
+
+func _on_market_trade_pressed() -> void:
+	var mkt := SelectionManager.selected_building as Market
+	if mkt == null:
+		NotificationManager.show_message("Vyber Tržiště.")
+		return
+	mkt.trade_wood_for_gold(100)

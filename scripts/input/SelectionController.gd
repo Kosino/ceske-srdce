@@ -147,8 +147,17 @@ func _issue_right_click_command() -> void:
 	var enemy := _find_enemy_at(world_pos)
 	if enemy:
 		SelectionManager.issue_attack(enemy)
-		NotificationManager.show_message("Útok!")
+		NotificationManager.show_message("Útok!" if not _has_selected_monk() else "Konverze!")
 		return
+	# Monk heal: RMB on damaged friendly unit.
+	if _has_selected_monk():
+		var ally := _find_damaged_friendly_unit_at(world_pos)
+		if ally:
+			for u in SelectionManager.selected_units:
+				if u is Monk and is_instance_valid(u):
+					(u as Monk).assign_heal(ally)
+			NotificationManager.show_message("Léčení!")
+			return
 	var resource := _find_resource_at(world_pos)
 	if resource:
 		SelectionManager.issue_gather(resource)
@@ -165,6 +174,29 @@ func _issue_right_click_command() -> void:
 		NotificationManager.show_message("Oprava: %s" % repair.display_name)
 		return
 	SelectionManager.issue_move(world_pos)
+
+
+func _has_selected_monk() -> bool:
+	for u in SelectionManager.selected_units:
+		if u is Monk and is_instance_valid(u):
+			return true
+	return false
+
+
+func _find_damaged_friendly_unit_at(world_pos: Vector2) -> Unit:
+	var best: Unit = null
+	var best_dist := 36.0
+	for node in get_tree().get_nodes_in_group("player_units"):
+		if not (node is Unit) or node is Monk:
+			continue
+		var u := node as Unit
+		if u.hp >= u.max_hp - 0.5:
+			continue
+		var d := u.global_position.distance_to(world_pos)
+		if d < best_dist:
+			best_dist = d
+			best = u
+	return best
 
 
 func _find_resource_at(world_pos: Vector2) -> ResourceNode:

@@ -44,7 +44,7 @@ func research_progress_line() -> String:
 func can_enqueue(tech_id: String) -> bool:
 	if not is_complete:
 		return false
-	if tech_id not in TechData.BLACKSMITH_TECHS:
+	if not TechData.is_blacksmith_tech(tech_id):
 		return false
 	if GameManager.has_tech(team, tech_id):
 		return false
