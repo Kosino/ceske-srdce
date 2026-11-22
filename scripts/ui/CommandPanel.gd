@@ -10,6 +10,7 @@ const BUILD_BUTTONS := [
 	{"id": "barracks", "name": "Kasárna"},
 	{"id": "archery_range", "name": "Střelnice"},
 	{"id": "blacksmith", "name": "Kovárna"},
+	{"id": "stable", "name": "Stáj"},
 ]
 
 @onready var age_label: Label = %AgeLabel
@@ -24,8 +25,10 @@ const BUILD_BUTTONS := [
 var _formation_buttons: Dictionary = {} # kind -> Button
 var _build_buttons: Dictionary = {} # building_id -> Button
 var _tech_buttons: Dictionary = {} # tech_id -> Button
+var _cavalry_buttons: Dictionary = {} # unit_id -> Button
 var _build_row: HBoxContainer
 var _tech_row: HBoxContainer
+var _cavalry_row: HBoxContainer
 var _research_refresh_accum: float = 0.0
 var _smith_connected: Blacksmith = null
 
@@ -124,10 +127,16 @@ func _refresh_context_ui() -> void:
 
 	var b := SelectionManager.selected_building
 	var is_smith := b is Blacksmith and (b as Blacksmith).is_complete
+	var is_stable := b is Stable and (b as Stable).is_complete
 	if _tech_row:
 		_tech_row.visible = is_smith
 	if is_smith:
 		_refresh_tech_buttons()
+	_ensure_cavalry_row()
+	if _cavalry_row:
+		_cavalry_row.visible = is_stable
+	if is_stable:
+		_refresh_cavalry_buttons()
 
 	var show_train := b != null and is_instance_valid(b) and not is_smith
 	if train_row:
@@ -145,6 +154,16 @@ func _refresh_context_ui() -> void:
 		train_spearman.visible = is_barracks
 	if train_archer:
 		train_archer.visible = is_archery
+	# Hide generic train buttons when Stable selected (cavalry row used instead).
+	if is_stable:
+		if train_villager:
+			train_villager.visible = false
+		if train_soldier:
+			train_soldier.visible = false
+		if train_spearman:
+			train_spearman.visible = false
+		if train_archer:
+			train_archer.visible = false
 
 
 func _refresh_build_costs() -> void:
@@ -158,12 +177,18 @@ func _refresh_build_costs() -> void:
 		var cost_txt := CivData.format_cost(cost)
 		btn.text = "%s\n%s" % [def["name"], cost_txt]
 		var unlocked := GameManager.is_building_unlocked(bid)
-		btn.disabled = not unlocked
-		if unlocked:
-			btn.tooltip_text = "Cena (civ): %s" % cost_txt
-		else:
+		var prereq_ok := true
+		if bid == "stable":
+			var placer := get_tree().get_first_node_in_group("building_placer") as BuildingPlacer
+			prereq_ok = placer != null and placer._prereq_met("stable")
+		btn.disabled = not unlocked or not prereq_ok
+		if not unlocked:
 			var need_age := AgeData.building_unlock_age(bid)
 			btn.tooltip_text = "Zamčeno do věku %s (%d)" % [AgeData.age_name(need_age), need_age]
+		elif not prereq_ok:
+			btn.tooltip_text = "Vyžaduje dokončenou Kasárnu"
+		else:
+			btn.tooltip_text = "Cena (civ): %s" % cost_txt
 
 
 func _on_build_pressed(building_id: String) -> void:
@@ -352,3 +377,63 @@ func is_build_row_visible() -> bool:
 
 func is_tech_row_visible() -> bool:
 	return _tech_row != null and _tech_row.visible
+
+
+func _ensure_cavalry_row() -> void:
+	if command_vbox == null:
+		return
+	if command_vbox.has_node("CavalryRow"):
+		_cavalry_row = command_vbox.get_node_or_null("CavalryRow") as HBoxContainer
+		return
+	_cavalry_row = HBoxContainer.new()
+	_cavalry_row.name = "CavalryRow"
+	_cavalry_row.add_theme_constant_override("separation", 4)
+	_cavalry_row.visible = false
+	command_vbox.add_child(_cavalry_row)
+	for unit_id in ["light_cavalry", "knight"]:
+		var btn := Button.new()
+		btn.name = "Train_%s" % unit_id
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.pressed.connect(_on_cavalry_train_pressed.bind(unit_id))
+		_cavalry_row.add_child(btn)
+		_cavalry_buttons[unit_id] = btn
+	_refresh_cavalry_buttons()
+
+
+func _refresh_cavalry_buttons() -> void:
+	if _cavalry_row == null:
+		return
+	for unit_id in ["light_cavalry", "knight"]:
+		var btn: Button = _cavalry_buttons.get(unit_id)
+		if btn == null:
+			continue
+		var def: Dictionary = Stable.UNIT_DEFS.get(unit_id, {})
+		var cost_txt := CivData.format_cost(def.get("cost", {}))
+		btn.text = "%s\n%s" % [
+			"Lehký jezdec" if unit_id == "light_cavalry" else "Rytíř",
+			cost_txt,
+		]
+		var unlocked := GameManager.is_unit_unlocked(unit_id)
+		btn.disabled = not unlocked
+		btn.modulate = Color.WHITE if unlocked else Color(0.6, 0.6, 0.6)
+		if unlocked:
+			btn.tooltip_text = cost_txt
+		else:
+			var need := AgeData.unit_unlock_age(unit_id)
+			btn.tooltip_text = "Zamčeno do věku %s (%d)" % [AgeData.age_name(need), need]
+
+
+func _on_cavalry_train_pressed(unit_id: String) -> void:
+	var stable := SelectionManager.selected_building as Stable
+	if stable == null:
+		NotificationManager.show_message("Vyber Stáj.")
+		return
+	if not GameManager.is_unit_unlocked(unit_id):
+		var need := AgeData.unit_unlock_age(unit_id)
+		NotificationManager.show_message(
+			"Zamčeno do věku %s (%d)." % [AgeData.age_name(need), need]
+		)
+		_refresh_cavalry_buttons()
+		return
+	stable.enqueue_unit(unit_id)
+	_refresh_cavalry_buttons()

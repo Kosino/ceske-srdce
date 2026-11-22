@@ -15,6 +15,7 @@ const START_GOLD := 80
 const HOUSE_SCENE := preload("res://scenes/buildings/House.tscn")
 const BARRACKS_SCENE := preload("res://scenes/buildings/Barracks.tscn")
 const BLACKSMITH_SCENE := preload("res://scenes/buildings/Blacksmith.tscn")
+const STABLE_SCENE := preload("res://scenes/buildings/Stable.tscn")
 const VILLAGER_SCENE := preload("res://scenes/units/Villager.tscn")
 const DROPOFF_SCENE := preload("res://scenes/world/DropOff.tscn")
 const RESOURCE_SCENE := preload("res://scenes/world/ResourceNode.tscn")
@@ -127,6 +128,13 @@ func _tick_economy() -> void:
 		_try_place_building("barracks", base_position + Vector2(110, 90))
 	elif _count_enemy_buildings("blacksmith") < 1 and wood >= 150:
 		_try_place_building("blacksmith", base_position + Vector2(-100, -80))
+	elif (
+		GameManager.current_age >= 2
+		and _count_enemy_buildings("barracks") >= 1
+		and _count_enemy_buildings("stable") < 1
+		and wood >= 175
+	):
+		_try_place_building("stable", base_position + Vector2(120, -70))
 	_assign_builders()
 	_try_train()
 	_try_blacksmith_research()
@@ -150,6 +158,11 @@ func _try_place_building(building_id: String, pos: Vector2) -> bool:
 				return false
 			wood -= 150
 			building = BLACKSMITH_SCENE.instantiate() as Building
+		"stable":
+			if wood < 175:
+				return false
+			wood -= 175
+			building = STABLE_SCENE.instantiate() as Building
 		_:
 			return false
 	building.team = 1
@@ -161,6 +174,8 @@ func _try_place_building(building_id: String, pos: Vector2) -> bool:
 	building.start_construction(build_t)
 	if building is Barracks:
 		(building as Barracks).spawn_parent = _units_parent
+	elif building is Stable:
+		(building as Stable).spawn_parent = _units_parent
 	print("[AI] placing %s at %s (wood left %d)" % [building_id, str(pos), wood])
 	return true
 
@@ -224,13 +239,18 @@ func _assign_builders() -> void:
 
 func _try_train() -> void:
 	var barracks := _enemy_barracks()
-	if barracks == null or not barracks.is_complete:
-		return
-	# Prefer soldiers; costs match DESIGN (AI pool, not GameManager).
-	if food >= 60 and gold >= 20 and barracks.queue.size() < 3:
-		food -= 60
-		gold -= 20
-		barracks.ai_enqueue_unit("soldier")
+	if barracks != null and barracks.is_complete:
+		# Prefer soldiers; costs match DESIGN (AI pool, not GameManager).
+		if food >= 60 and gold >= 20 and barracks.queue.size() < 3:
+			food -= 60
+			gold -= 20
+			barracks.ai_enqueue_unit("soldier")
+	# From age 2: mix light cavalry from Stable.
+	if GameManager.current_age >= 2:
+		var stable := _enemy_stable()
+		if stable != null and stable.is_complete and food >= 80 and stable.queue.size() < 2:
+			food -= 80
+			stable.ai_enqueue_unit("light_cavalry")
 
 
 func _launch_wave(soldiers: Array) -> void:
@@ -252,9 +272,16 @@ func _launch_wave(soldiers: Array) -> void:
 func _enemy_soldiers() -> Array:
 	var out: Array = []
 	for n in get_tree().get_nodes_in_group("enemy_units"):
-		if n is Soldier or n is Spearman:
+		if n is Soldier or n is Spearman or n is LightCavalry or n is Knight:
 			out.append(n)
 	return out
+
+
+func _enemy_stable() -> Stable:
+	for n in get_tree().get_nodes_in_group("stables"):
+		if n is Stable and (n as Stable).team == 1:
+			return n as Stable
+	return null
 
 
 func _enemy_barracks() -> Barracks:

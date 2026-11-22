@@ -10,6 +10,7 @@ const LUMBER_SCENE := preload("res://scenes/buildings/LumberCamp.tscn")
 const MINING_SCENE := preload("res://scenes/buildings/MiningCamp.tscn")
 const MILL_SCENE := preload("res://scenes/buildings/Mill.tscn")
 const BLACKSMITH_SCENE := preload("res://scenes/buildings/Blacksmith.tscn")
+const STABLE_SCENE := preload("res://scenes/buildings/Stable.tscn")
 
 const GHOST_TEXTURES := {
 	"house": preload("res://assets/sprites/buildings/house.png"),
@@ -19,6 +20,7 @@ const GHOST_TEXTURES := {
 	"mining_camp": preload("res://assets/sprites/buildings/mining_camp.png"),
 	"mill": preload("res://assets/sprites/buildings/mill.png"),
 	"blacksmith": preload("res://assets/sprites/buildings/blacksmith.png"),
+	"stable": preload("res://assets/sprites/buildings/stable.png"),
 }
 
 ## DESIGN costs and base build times (1 villager).
@@ -29,7 +31,8 @@ const COSTS := {
 	"lumber_camp": {"wood": 100},
 	"mining_camp": {"wood": 100},
 	"mill": {"wood": 100},
-	"blacksmith": {"wood": 150}, # NÁVRH
+	"blacksmith": {"wood": 150},
+	"stable": {"wood": 175},
 }
 
 const BUILD_TIMES := {
@@ -39,7 +42,8 @@ const BUILD_TIMES := {
 	"lumber_camp": 25.0,
 	"mining_camp": 25.0,
 	"mill": 35.0,
-	"blacksmith": 40.0, # NÁVRH
+	"blacksmith": 40.0,
+	"stable": 45.0,
 }
 
 const FOOTPRINTS := {
@@ -50,6 +54,12 @@ const FOOTPRINTS := {
 	"mining_camp": Vector2(80, 80),
 	"mill": Vector2(72, 72),
 	"blacksmith": Vector2(80, 80),
+	"stable": Vector2(80, 80),
+}
+
+## Extra prerequisites beyond age unlock.
+const REQUIRES_BUILDING := {
+	"stable": "barracks",
 }
 
 @export var map_size: Vector2 = Vector2(3000, 3000)
@@ -79,6 +89,9 @@ func begin_place(building_type: String) -> void:
 			"Zamčeno do věku %s." % AgeData.age_name(AgeData.building_unlock_age(building_type))
 		)
 		return
+	if not _prereq_met(building_type):
+		NotificationManager.show_message("Nejdřív postav Kasárnu.")
+		return
 	placing_type = building_type
 	_configure_ghost(building_type)
 	_ghost.visible = true
@@ -100,6 +113,9 @@ func place_at(building_type: String, world_pos: Vector2) -> Building:
 		NotificationManager.show_message(
 			"Zamčeno do věku %s." % AgeData.age_name(AgeData.building_unlock_age(building_type))
 		)
+		return null
+	if not _prereq_met(building_type):
+		NotificationManager.show_message("Nejdřív postav Kasárnu.")
 		return null
 	if not _can_place(building_type, world_pos):
 		return null
@@ -192,8 +208,28 @@ func _instantiate_building(building_type: String) -> Building:
 			return MILL_SCENE.instantiate() as Building
 		"blacksmith":
 			return BLACKSMITH_SCENE.instantiate() as Building
+		"stable":
+			return STABLE_SCENE.instantiate() as Building
 		_:
 			return null
+
+
+func _prereq_met(building_type: String) -> bool:
+	if building_type not in REQUIRES_BUILDING:
+		return true
+	var need: String = str(REQUIRES_BUILDING[building_type])
+	var tree := get_tree()
+	if tree == null:
+		return false
+	for n in tree.get_nodes_in_group("player_buildings"):
+		if n is Building and (n as Building).building_id == need and (n as Building).is_complete:
+			return true
+	# Also accept group name match (barracks).
+	if need == "barracks":
+		for n in tree.get_nodes_in_group("barracks"):
+			if n is Building and (n as Building).team == 0 and (n as Building).is_complete:
+				return true
+	return false
 
 
 func _configure_ghost(building_type: String) -> void:
