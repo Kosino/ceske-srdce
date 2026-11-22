@@ -17,10 +17,16 @@ const MAP_TILES := 75 # 3000 / 40
 const SOURCE_GRASS_1 := 0
 const SOURCE_GRASS_2 := 1
 const SOURCE_DIRT := 2
+const PLAYER_TC_POS := Vector2(900, 700)
+const ENEMY_TC_POS := Vector2(2100, 700)
+const MAP_SEED := 4242
 
 @onready var units: Node2D = $Units
 @onready var building_placer: BuildingPlacer = $BuildingPlacer
 @onready var victory: VictoryController = $VictoryController
+
+var map_generator: MapGenerator
+var _dirt_tiles: Array[Vector2i] = []
 
 
 func _ready() -> void:
@@ -47,12 +53,15 @@ func _ready() -> void:
 		await _run_victory_smoke()
 		await _run_defeat_smoke()
 		await _run_camera_minimap_smoke()
+		await _run_map_mines_smoke()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--hud-shot"):
 		await prepare_hud_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--victory-shot"):
 		await prepare_victory_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--camera-shot"):
 		await prepare_camera_minimap_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--mines-shot"):
+		await prepare_mines_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--formation-shot"):
 		await prepare_formation_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--ai-shot"):
@@ -60,6 +69,43 @@ func _ready() -> void:
 	else:
 		await _sample_windowed_fps()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 debug.")
+
+
+## Villagers mining gold near a gold mine (feature in action).
+func prepare_mines_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	var gold: ResourceNode = null
+	for n in get_tree().get_nodes_in_group("gold_mines"):
+		if n is ResourceNode and (n as ResourceNode).global_position.distance_to(PLAYER_TC_POS) < 12.0 * float(TILE):
+			gold = n as ResourceNode
+			break
+	if gold == null:
+		for n in get_tree().get_nodes_in_group("gold_mines"):
+			if n is ResourceNode:
+				gold = n as ResourceNode
+				break
+	var villagers: Array[Villager] = []
+	for n in get_tree().get_nodes_in_group("player_units"):
+		if n is Villager:
+			villagers.append(n as Villager)
+	if gold and not villagers.is_empty():
+		var cam := get_node_or_null("Camera2D") as RTSCamera
+		if cam:
+			cam.set_zoom_clamped(1.1)
+			cam.center_at(gold.global_position)
+		for i in mini(3, villagers.size()):
+			villagers[i].global_position = gold.global_position + Vector2(20.0 + float(i) * 14.0, 10.0)
+		var pick: Array = []
+		for i in mini(3, villagers.size()):
+			pick.append(villagers[i])
+		SelectionManager.select_multiple(pick)
+		SelectionManager.issue_gather(gold)
+	await get_tree().create_timer(1.2).timeout
+	await get_tree().process_frame
+	_save_shot("map_mines.png", SelectionManager.selected_units.size())
 
 
 ## Camera moved + minimap frame visible (feature in action).
@@ -257,17 +303,27 @@ func _setup_terrain() -> void:
 			var source_id := SOURCE_GRASS_1 if (h & 1) == 0 else SOURCE_GRASS_2
 			layer.set_cell(Vector2i(x, y), source_id, Vector2i.ZERO)
 
-	# 1-tile dirt: south from Radnice bottom edge (~4), then spur toward wood/forest.
-	# Hall center ~ (22,17); footprint ~2×2 — start at y+2 so nothing under the building.
-	var hall := Vector2i(900 / TILE, 700 / TILE)
+	_dirt_tiles.clear()
+	_paint_dirt_spur(layer, Vector2i(int(PLAYER_TC_POS.x) / TILE, int(PLAYER_TC_POS.y) / TILE), false)
+	_paint_dirt_spur(layer, Vector2i(int(ENEMY_TC_POS.x) / TILE, int(ENEMY_TC_POS.y) / TILE), true)
+
+
+func _paint_dirt_spur(layer: TileMapLayer, hall: Vector2i, mirror_x: bool) -> void:
+	## 1-tile dirt south of TC, then spur toward nearby forest (mirrored for enemy).
 	for i in range(2, 6):
-		layer.set_cell(hall + Vector2i(0, i), SOURCE_DIRT, Vector2i.ZERO)
-	# Spur east toward wood at ~(1080,620) / tile (27,15), then north a bit into forest.
+		_set_dirt(layer, hall + Vector2i(0, i))
 	var spur_y := 4
+	var sx := -1 if mirror_x else 1
 	for dx in range(1, 5):
-		layer.set_cell(hall + Vector2i(dx, spur_y), SOURCE_DIRT, Vector2i.ZERO)
+		_set_dirt(layer, hall + Vector2i(sx * dx, spur_y))
 	for dy in range(1, 3):
-		layer.set_cell(hall + Vector2i(4, spur_y - dy), SOURCE_DIRT, Vector2i.ZERO)
+		_set_dirt(layer, hall + Vector2i(sx * 4, spur_y - dy))
+
+
+func _set_dirt(layer: TileMapLayer, tile: Vector2i) -> void:
+	layer.set_cell(tile, SOURCE_DIRT, Vector2i.ZERO)
+	if not _dirt_tiles.has(tile):
+		_dirt_tiles.append(tile)
 
 
 func _build_terrain_tileset() -> TileSet:
@@ -285,30 +341,35 @@ func _build_terrain_tileset() -> TileSet:
 
 
 func _spawn_core_demo() -> void:
-	# DESIGN start: only Radnice, villagers, and resource nodes (no prebuilt House/Pila/combat).
+	# DESIGN start: Radnice + villagers; resources from seeded MapGenerator.
 	var hall: DropOff = DROPOFF_SCENE.instantiate()
 	hall.team = 0
-	hall.position = Vector2(900, 700)
+	hall.position = PLAYER_TC_POS
 	hall.spawn_parent = units
 	units.add_child(hall)
 	victory.watch_new_hall(hall)
 
-	var wood: ResourceNode = RESOURCE_SCENE.instantiate()
-	wood.resource_type = "wood"
-	wood.amount_remaining = 200
-	wood.position = Vector2(1080, 620)
-	units.add_child(wood)
+	var enemy_hall: DropOff = DROPOFF_SCENE.instantiate()
+	enemy_hall.team = 1
+	enemy_hall.position = ENEMY_TC_POS
+	enemy_hall.spawn_parent = units
+	units.add_child(enemy_hall)
+	victory.watch_new_hall(enemy_hall)
 
-	var food: ResourceNode = RESOURCE_SCENE.instantiate()
-	food.resource_type = "food"
-	food.amount_remaining = 120
-	food.position = Vector2(760, 820)
-	units.add_child(food)
-
-	for offset in [Vector2(940, 720), Vector2(920, 740), Vector2(960, 740)]:
+	for offset in [Vector2(40, 20), Vector2(20, 40), Vector2(60, 40)]:
 		var villager: Villager = VILLAGER_SCENE.instantiate()
-		villager.position = offset
+		villager.position = PLAYER_TC_POS + offset
 		units.add_child(villager)
+
+	for offset in [Vector2(40, 40), Vector2(60, 60), Vector2(20, 70)]:
+		var ev: Villager = VILLAGER_SCENE.instantiate()
+		ev.team = 1
+		ev.contribute_population = false
+		ev.position = ENEMY_TC_POS + offset
+		units.add_child(ev)
+
+	map_generator = MapGenerator.new()
+	map_generator.generate(units, MAP_SEED, PLAYER_TC_POS, ENEMY_TC_POS, _dirt_tiles)
 
 
 ## Headless/manual regression: own buildings must not take friendly damage.
@@ -712,9 +773,16 @@ func _run_civ_bonus_smoke() -> void:
 	soldier.queue_free()
 
 	GameManager.player_civ = CivData.HABSBURKOVE
+	GameManager.player_civ = CivData.PREMYSLOVCI
+	var gold_m := GameManager.gather_rate_mult(0, "gold")
+	var gold_ok := is_equal_approx(gold_m, 1.15)
+	print("[TEST] civ_premyslovci gold_mult=%.2f" % gold_m)
+
+	GameManager.player_civ = CivData.HABSBURKOVE
 	var stone_m := GameManager.gather_rate_mult(0, "stone")
 	var stone_ok := is_equal_approx(stone_m, 1.10) and CivData.HABSBURKOVE == "habsburkove"
 	print("[TEST] civ_habsburkove stone_mult=%.2f id=%s" % [stone_m, CivData.HABSBURKOVE])
+	GameManager.player_civ = CivData.DEFAULT_PLAYER
 
 	var ids_ok := true
 	for civ_id in CivData.CIVS.keys():
@@ -729,10 +797,10 @@ func _run_civ_bonus_smoke() -> void:
 
 	GameManager.player_civ = CivData.MORAVANE
 	GameManager.enemy_civ = CivData.HUSITE
-	if wood_ok and cost_ok and hp_ok and stone_ok and ids_ok:
-		print("[TEST] PASS civ bonuses (wood / cost / infantry HP / stone / ids)")
+	if wood_ok and cost_ok and hp_ok and gold_ok and stone_ok and ids_ok:
+		print("[TEST] PASS civ bonuses (wood / cost / infantry HP / gold / stone / ids)")
 	else:
-		print("[TEST] FAIL civ bonuses (wood / cost / infantry HP / stone / ids)")
+		print("[TEST] FAIL civ bonuses (wood / cost / infantry HP / gold / stone / ids)")
 
 
 ## Formation spacing + shared speed + Řada perpendicular to march (|dot| < 0.2).
@@ -868,6 +936,106 @@ func _run_hud_layout_smoke() -> void:
 		print("[TEST] PASS HUD layout + villager builds + DebugPanel hidden")
 	else:
 		print("[TEST] FAIL HUD layout + villager builds + DebugPanel hidden")
+
+
+## Seeded map: same seed → same layout; TC fairness; gold harvest + mining camp deposit.
+func _run_map_mines_smoke() -> void:
+	await get_tree().physics_frame
+	if map_generator == null:
+		print("[TEST] FAIL map_mines: no generator")
+		return
+
+	# Same seed → same fingerprint.
+	var fp1 := map_generator.resource_fingerprint()
+	var gen2 := MapGenerator.new()
+	var holder := Node2D.new()
+	add_child(holder)
+	gen2.generate(holder, MAP_SEED, PLAYER_TC_POS, ENEMY_TC_POS, _dirt_tiles.duplicate())
+	var fp2 := gen2.resource_fingerprint()
+	var seed_ok := fp1 == fp2 and not fp1.is_empty()
+	holder.queue_free()
+
+	var wood_p := map_generator.count_near(PLAYER_TC_POS, "wood")
+	var wood_e := map_generator.count_near(ENEMY_TC_POS, "wood")
+	var food_p := map_generator.count_near(PLAYER_TC_POS, "food")
+	var food_e := map_generator.count_near(ENEMY_TC_POS, "food")
+	var gold_p := map_generator.count_near(PLAYER_TC_POS, "gold")
+	var gold_e := map_generator.count_near(ENEMY_TC_POS, "gold")
+	var stone_p := map_generator.count_near(PLAYER_TC_POS, "stone")
+	var stone_e := map_generator.count_near(ENEMY_TC_POS, "stone")
+	var fair_ok := (
+		wood_p == wood_e and wood_p >= 20
+		and food_p == food_e and food_p >= 6
+		and gold_p == gold_e and gold_p >= 7
+		and stone_p == stone_e and stone_p >= 5
+	)
+	print(
+		"[TEST] map_seed_ok=%s fair wood=%d/%d food=%d/%d gold=%d/%d stone=%d/%d"
+		% [seed_ok, wood_p, wood_e, food_p, food_e, gold_p, gold_e, stone_p, stone_e]
+	)
+
+	# Gold harvest + deposit at Mining Camp (spawn villager — defeat smoke may have cleared them).
+	var gold_node: ResourceNode = null
+	for n in get_tree().get_nodes_in_group("gold_mines"):
+		if n is ResourceNode and (n as ResourceNode).global_position.distance_to(PLAYER_TC_POS) < 12.0 * float(TILE):
+			gold_node = n as ResourceNode
+			break
+	var villager := get_tree().get_first_node_in_group("player_units") as Villager
+	if villager == null:
+		villager = VILLAGER_SCENE.instantiate() as Villager
+		villager.contribute_population = false
+		villager.position = PLAYER_TC_POS + Vector2(50, 50)
+		units.add_child(villager)
+		await get_tree().physics_frame
+	var harvest_ok := false
+	var deposit_ok := false
+	if gold_node and villager:
+		var camp: MiningCamp = preload("res://scenes/buildings/MiningCamp.tscn").instantiate() as MiningCamp
+		camp.team = 0
+		camp.position = gold_node.global_position + Vector2(70, 40)
+		camp.is_complete = true
+		units.add_child(camp)
+		await get_tree().physics_frame
+		var gold_before := GameManager.gold
+		var amount_before := gold_node.amount_remaining
+		villager.global_position = gold_node.global_position + Vector2(8, 0)
+		villager.assign_gather(gold_node, camp)
+		await get_tree().physics_frame
+		# Skip flaky nav in headless — begin harvest in range.
+		if villager.state == Villager.State.MOVE_TO_RESOURCE or villager.state == Villager.State.IDLE:
+			villager._begin_harvest()
+		# Gold rate ~0.36/s — seed accumulator so one physics tick yields a chunk.
+		villager._harvest_accumulator = 2.0
+		for _i in 30:
+			await get_tree().physics_frame
+			if not is_instance_valid(gold_node) or gold_node.amount_remaining < amount_before:
+				harvest_ok = true
+			if villager.carried_amount > 0:
+				harvest_ok = true
+				break
+		if harvest_ok and villager.carried_amount > 0:
+			villager.target_dropoff = camp
+			villager.global_position = camp.global_position
+			villager._deposit()
+			await get_tree().process_frame
+		deposit_ok = GameManager.gold > gold_before
+		print(
+			"[TEST] mines harvest=%s deposit=%s gold %d -> %d carried=%d state=%s"
+			% [harvest_ok, deposit_ok, gold_before, GameManager.gold, villager.carried_amount, villager.state]
+		)
+	else:
+		print("[TEST] FAIL map_mines setup missing gold/villager")
+
+	var rate_ok := is_equal_approx(
+		float(Villager.HARVEST_RATES["gold"]), Villager.WOOD_HARVEST_RATE * 0.9
+	) and is_equal_approx(
+		float(Villager.HARVEST_RATES["stone"]), Villager.WOOD_HARVEST_RATE * 0.9
+	)
+	var ok := seed_ok and fair_ok and harvest_ok and deposit_ok and rate_ok
+	if ok:
+		print("[TEST] PASS map mines seed/fairness/harvest/deposit")
+	else:
+		print("[TEST] FAIL map mines seed/fairness/harvest/deposit")
 
 
 ## Camera clamp + zoom limits + minimap LMB → camera position.

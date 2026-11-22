@@ -3,12 +3,13 @@ class_name Villager
 
 enum State { IDLE, MOVING, MOVE_TO_RESOURCE, HARVESTING, MOVE_TO_DROPOFF, MOVE_TO_BUILD, BUILDING }
 
-## DESIGN rates: wood 0.385/s, food 0.31/s. Carry 10.
+## DESIGN: wood 0.40/s; gold/stone = wood × 0.9; food 0.31/s. Carry 10.
+const WOOD_HARVEST_RATE := 0.40
 const HARVEST_RATES := {
-	"wood": 0.385,
+	"wood": WOOD_HARVEST_RATE,
 	"food": 0.31,
-	"gold": 0.35,
-	"stone": 0.35,
+	"gold": WOOD_HARVEST_RATE * 0.9,
+	"stone": WOOD_HARVEST_RATE * 0.9,
 }
 
 const BUILD_RANGE := 40.0

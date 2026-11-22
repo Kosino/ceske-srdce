@@ -19,6 +19,15 @@ const TEX_STONE := preload("res://assets/sprites/resources/stone_mine.png")
 
 func _ready() -> void:
 	add_to_group("resources")
+	match resource_type:
+		"wood":
+			add_to_group("forest_resources")
+		"gold":
+			add_to_group("gold_mines")
+		"stone":
+			add_to_group("stone_mines")
+		"food":
+			add_to_group("berry_bushes")
 	_refresh_label()
 	_apply_resource_sprite()
 

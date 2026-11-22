@@ -29,7 +29,7 @@
 - WASD/edge camera + zoom + minimap interaction ✅
 
 ## Fáze 4: Obsah
-- Gold/stone mines
+- Gold/stone mines + seeded map + Mining Camp / Pila ✅
 - Blacksmith techs (infantry attack/armor)
 - Stable + cavalry
 - Unique civ units
