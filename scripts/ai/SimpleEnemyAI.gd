@@ -18,6 +18,7 @@ const BARRACKS_SCENE := preload("res://scenes/buildings/Barracks.tscn")
 const BLACKSMITH_SCENE := preload("res://scenes/buildings/Blacksmith.tscn")
 const STABLE_SCENE := preload("res://scenes/buildings/Stable.tscn")
 const CASTLE_SCENE := preload("res://scenes/buildings/Castle.tscn")
+const TOWER_SCENE := preload("res://scenes/buildings/WatchTower.tscn")
 const VILLAGER_SCENE := preload("res://scenes/units/Villager.tscn")
 const DROPOFF_SCENE := preload("res://scenes/world/DropOff.tscn")
 const RESOURCE_SCENE := preload("res://scenes/world/ResourceNode.tscn")
@@ -139,6 +140,15 @@ func _tick_economy() -> void:
 	):
 		_try_place_building("stable", base_position + Vector2(120, -70))
 	elif (
+		GameManager.current_age >= 2
+		and _count_enemy_buildings("watch_tower") < 2
+		and stone >= 125
+		and wood >= 25
+	):
+		var tower_i := _count_enemy_buildings("watch_tower")
+		var tower_off := Vector2(70, -50) if tower_i == 0 else Vector2(-70, 60)
+		_try_place_building("watch_tower", base_position + tower_off)
+	elif (
 		GameManager.current_age >= 3
 		and _count_enemy_buildings("castle") < 1
 		and stone >= 650
@@ -177,6 +187,12 @@ func _try_place_building(building_id: String, pos: Vector2) -> bool:
 				return false
 			stone -= 650
 			building = CASTLE_SCENE.instantiate() as Building
+		"watch_tower":
+			if stone < 125 or wood < 25:
+				return false
+			stone -= 125
+			wood -= 25
+			building = TOWER_SCENE.instantiate() as Building
 		_:
 			return false
 	building.team = 1
@@ -192,6 +208,8 @@ func _try_place_building(building_id: String, pos: Vector2) -> bool:
 		(building as Stable).spawn_parent = _units_parent
 	elif building is Castle:
 		(building as Castle).spawn_parent = _units_parent
+	elif building is WatchTower:
+		(building as WatchTower).spawn_parent = _units_parent
 	print("[AI] placing %s at %s (wood left %d stone %d)" % [building_id, str(pos), wood, stone])
 	return true
 
@@ -379,12 +397,18 @@ func _assign_combat_targets() -> void:
 func _nearest_player_threat(from_pos: Vector2) -> Node2D:
 	var best: Node2D = null
 	var best_dist := INF
-	for group_name in ["player_units", "player_buildings", "player_town_hall"]:
+	# Prefer walls/gates in the way so waves tear them down.
+	for group_name in ["walls", "gates", "player_units", "player_buildings", "player_town_hall"]:
 		for node in get_tree().get_nodes_in_group(group_name):
 			if not (node is Node2D):
 				continue
+			if "team" in node and int(node.get("team")) != 0:
+				continue
 			var n := node as Node2D
 			var d := from_pos.distance_to(n.global_position)
+			# Bias walls slightly closer so waves attack fortifications.
+			if n is WallSegment or n is Gate:
+				d *= 0.75
 			if d < best_dist:
 				best_dist = d
 				best = n

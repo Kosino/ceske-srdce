@@ -136,6 +136,12 @@ Těžba za sekundu na vesničana: dřevo 0.40, jídlo z keřů 0.30, farma 0.33,
 | Kovárna *(Schváleno 2026-11-22)* | 150 D | 40 s | 1800 | věk 2 gate; techy viz výše |
 | Stáj | 175 D | 45 s | 1500 | 80×80, věk 2, vyžaduje Kasárnu; Lehký jezdec / Rytíř |
 | Hrad | 650 K | 120 s | 4800 | 160×160, věk 3; šípy 8 pierce / 8 dlaždic; +10 pop; unikátní jednotka |
+| Palisáda *(Schváleno 2026-11-22)* | 2 D / dlaždice | 5 s | 250 | 40×40, věk 1; drag (rovně/úhlopříčně); blokuje cestu |
+| Kamenná zeď *(Schváleno 2026-11-22)* | 5 K / dlaždice | 8 s | 1800 | 40×40, věk 2; drag; blokuje cestu |
+| Brána *(Schváleno 2026-11-22)* | 30 K | 10 s | 1500 | nahrazuje 3 segmenty; vlastní jednotky projdou, nepřátelé ne |
+| Strážní věž *(Schváleno 2026-11-22)* | 125 K + 25 D | 40 s | 1000 | 40×40, věk 2; útok 5 pierce / dosah 7 dlaždic |
+
+Oprava: vesničan RMB na poškozenou vlastní budovu/zeď — +1 HP/s; plná oprava stojí 25 % stavební ceny (odečítá se průběžně).
 
 ### Mapa & doly (Fáze 4)
 Deterministický generátor (seed). U každé radnice (≤12 dlaždic): 1 les (~25 stromů), 6 keřů bobulí, 1 zlatý důl (7 dlaždic × 800), 1 kamenný důl (5 × 350). Zbytek mapy: 6–8 lesů + 2–3 doly (zlato/kámen), zrcadlově férové. Žádné zdroje na cestách/budovách.

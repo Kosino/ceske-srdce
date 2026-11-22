@@ -138,6 +138,11 @@ func _issue_right_click_command() -> void:
 		SelectionManager.issue_build(site)
 		NotificationManager.show_message("Stavba: %s" % site.display_name)
 		return
+	var repair := _find_damaged_own_building_at(world_pos)
+	if repair:
+		SelectionManager.issue_repair(repair)
+		NotificationManager.show_message("Oprava: %s" % repair.display_name)
+		return
 	SelectionManager.issue_move(world_pos)
 
 
@@ -165,6 +170,25 @@ func _find_unfinished_building_at(world_pos: Vector2) -> Building:
 			continue
 		var b := node as Building
 		if b.is_complete:
+			continue
+		var radius := b.footprint.length() * 0.35
+		var d := b.global_position.distance_to(world_pos)
+		if d < best_dist + radius:
+			best_dist = d
+			best = b
+	return best
+
+
+func _find_damaged_own_building_at(world_pos: Vector2) -> Building:
+	if not SelectionManager.has_selected_villager():
+		return null
+	var best: Building = null
+	var best_dist := 40.0
+	for node in get_tree().get_nodes_in_group("player_buildings"):
+		if not (node is Building):
+			continue
+		var b := node as Building
+		if not b.needs_repair():
 			continue
 		var radius := b.footprint.length() * 0.35
 		var d := b.global_position.distance_to(world_pos)

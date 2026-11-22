@@ -20,6 +20,9 @@ var build_progress: float = 1.0
 var _builders: Dictionary = {} # instance_id -> Villager
 var _final_texture: Texture2D
 var _visual: Sprite2D
+## Cost paid to place (for repair = 25% of this over full HP).
+var placed_cost: Dictionary = {}
+var _repairers: Dictionary = {} # instance_id -> Villager
 
 
 func _ready() -> void:
@@ -179,6 +182,64 @@ func take_damage(amount: float, _dmg_type: String = "melee") -> void:
 	queue_redraw()
 	if hp <= 0.0:
 		die()
+
+
+func needs_repair() -> bool:
+	return is_complete and hp < max_hp - 0.5
+
+
+func repair_cost_dict() -> Dictionary:
+	## Full-repair cost = 25% of build cost.
+	var base: Dictionary = placed_cost
+	if base.is_empty() and building_id in BuildingPlacer.COSTS:
+		base = BuildingPlacer.COSTS[building_id]
+	var out: Dictionary = {}
+	for k in base.keys():
+		out[k] = maxi(0, int(ceil(float(base[k]) * 0.25)))
+	return out
+
+
+func register_repairer(villager: Node) -> void:
+	if villager == null or not needs_repair():
+		return
+	_repairers[villager.get_instance_id()] = villager
+
+
+func unregister_repairer(villager: Node) -> void:
+	if villager == null:
+		return
+	_repairers.erase(villager.get_instance_id())
+
+
+## Restore up to `amount` HP, spending proportional resources from team 0 stockpile.
+## Returns HP actually restored.
+func apply_repair(amount: float) -> float:
+	if not needs_repair() or amount <= 0.0:
+		return 0.0
+	var room := max_hp - hp
+	var want := minf(amount, room)
+	var full_cost := repair_cost_dict()
+	# Per-HP fractional cost; spend ceil of each tick's share for team 0.
+	var spent: Dictionary = {}
+	for k in full_cost.keys():
+		var share := float(full_cost[k]) * (want / maxf(max_hp, 1.0))
+		var pay := int(ceil(share)) if share > 0.001 else 0
+		if pay > 0:
+			spent[k] = pay
+	if team == 0 and not spent.is_empty():
+		if not GameManager.can_afford(spent):
+			# Try 1 HP with minimal spend.
+			spent.clear()
+			for k in full_cost.keys():
+				if int(full_cost[k]) > 0:
+					spent[k] = 1
+					break
+			if spent.is_empty() or not GameManager.can_afford(spent):
+				return 0.0
+		GameManager.spend(spent)
+	hp = minf(max_hp, hp + want)
+	queue_redraw()
+	return want
 
 
 func die() -> void:

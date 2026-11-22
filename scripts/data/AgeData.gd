@@ -26,9 +26,13 @@ const BUILDING_UNLOCK_AGE := {
 	"mining_camp": 1,
 	"mill": 1,
 	"barracks": 1,
+	"palisade": 1,
+	"gate": 1,
 	"archery_range": 2,
 	"blacksmith": 2,
 	"stable": 2, # requires Barracks (checked in BuildingPlacer)
+	"stone_wall": 2,
+	"watch_tower": 2,
 	"castle": 3,
 	# Age 3+ placeholders (data-only; no scenes yet):
 	"monastery": 3,

@@ -32,6 +32,9 @@ var _facing_textures: Dictionary = {}
 var _visual: Sprite2D
 ## When >= 0, group formation move uses min(speed, cap) so the group keeps pace.
 var _move_speed_cap: float = -1.0
+## Wall-aware waypoint path (tile centers); empty = use NavigationAgent alone.
+var _wall_waypoints: Array[Vector2] = []
+var _move_goal: Vector2 = Vector2.ZERO
 
 @onready var navigation_agent: NavigationAgent2D = $NavigationAgent2D
 
@@ -43,10 +46,21 @@ func _ready() -> void:
 	_visual = get_node_or_null("Visual") as Sprite2D
 	add_to_group("units")
 	_register_team_groups()
+	_setup_wall_collision()
 	if navigation_agent:
 		navigation_agent.velocity_computed.connect(_on_velocity_computed)
 		navigation_agent.avoidance_enabled = true
 		navigation_agent.max_speed = effective_move_speed()
+
+
+func _setup_wall_collision() -> void:
+	## Layer 1 = units. Layer 2 = solid walls. 4 = player gates. 8 = enemy gates.
+	collision_layer = 1
+	collision_mask = 1 | 2
+	if team == 0:
+		collision_mask |= 8
+	else:
+		collision_mask |= 4
 
 
 func configure_facing_sprites(unit_key: String) -> void:
@@ -61,7 +75,6 @@ func configure_facing_sprites(unit_key: String) -> void:
 	if _visual:
 		_visual.centered = true
 		_visual.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		_visual.offset = Vector2(0.0, 8.0)
 	_apply_facing_texture()
 
 
@@ -69,6 +82,15 @@ func _apply_facing_texture() -> void:
 	if _visual == null or not _facing_textures.has(_facing):
 		return
 	_visual.texture = _facing_textures[_facing]
+	_anchor_sprite_to_feet()
+
+
+func _anchor_sprite_to_feet() -> void:
+	## Bottom of sprite at unit origin (no fixed offset.y=8).
+	if _visual == null or _visual.texture == null:
+		return
+	_visual.centered = true
+	_visual.offset = Vector2(0.0, -float(_visual.texture.get_height()) * 0.5)
 
 
 func _update_facing_from_velocity() -> void:
@@ -87,7 +109,8 @@ func _update_facing_from_velocity() -> void:
 
 func _hp_bar_y() -> float:
 	if _visual and _visual.texture:
-		return _visual.offset.y - float(_visual.texture.get_height()) * 0.5 - 6.0
+		# Feet at origin; bar above sprite top.
+		return -float(_visual.texture.get_height()) - 6.0
 	return -28.0
 
 
@@ -120,11 +143,31 @@ func set_selected(value: bool) -> void:
 
 
 func set_movement_target(target: Vector2) -> void:
+	_move_goal = target
+	_wall_waypoints.clear()
+	var tree := get_tree()
+	if tree and not WallNav.occupancy_map(tree).is_empty():
+		if not WallNav.path_exists(global_position, target, team, tree):
+			if can_attack:
+				var wall := WallNav.nearest_blocking_segment(global_position, target, team, tree)
+				if wall:
+					command_attack(wall)
+					return
+			# No path and cannot attack — stop.
+			stop_movement()
+			return
+		var path := WallNav.find_path(global_position, target, team, tree)
+		if not path.is_empty():
+			_wall_waypoints = path
+			if navigation_agent:
+				navigation_agent.target_position = _wall_waypoints[0]
+			return
 	if navigation_agent:
 		navigation_agent.target_position = target
 
 
 func stop_movement() -> void:
+	_wall_waypoints.clear()
 	if navigation_agent:
 		navigation_agent.target_position = global_position
 		navigation_agent.velocity = Vector2.ZERO
@@ -132,6 +175,8 @@ func stop_movement() -> void:
 
 
 func is_navigation_finished() -> bool:
+	if not _wall_waypoints.is_empty():
+		return false
 	return navigation_agent == null or navigation_agent.is_navigation_finished()
 
 
@@ -169,9 +214,11 @@ func command_attack(target: Node2D) -> void:
 		return
 	attack_target = target
 	_move_speed_cap = -1.0
+	_wall_waypoints.clear()
+	_move_goal = target.global_position
 	if navigation_agent:
 		navigation_agent.max_speed = speed
-	set_movement_target(target.global_position)
+		navigation_agent.target_position = target.global_position
 
 
 func command_stop() -> void:
@@ -202,7 +249,10 @@ func _chase_and_attack() -> void:
 		stop_movement()
 		_try_strike()
 	else:
-		set_movement_target(attack_target.global_position)
+		_move_goal = attack_target.global_position
+		_wall_waypoints.clear()
+		if navigation_agent:
+			navigation_agent.target_position = attack_target.global_position
 		_steer_toward_target()
 
 
@@ -235,7 +285,19 @@ func _target_radius(target: Node2D) -> float:
 
 
 func _steer_toward_target() -> void:
-	if not navigation_agent or navigation_agent.is_navigation_finished():
+	if not _wall_waypoints.is_empty():
+		var wp: Vector2 = _wall_waypoints[0]
+		if global_position.distance_to(wp) <= 12.0:
+			_wall_waypoints.pop_front()
+			if _wall_waypoints.is_empty():
+				if navigation_agent:
+					navigation_agent.target_position = _move_goal
+			else:
+				if navigation_agent:
+					navigation_agent.target_position = _wall_waypoints[0]
+		elif navigation_agent:
+			navigation_agent.target_position = wp
+	if not navigation_agent or (navigation_agent.is_navigation_finished() and _wall_waypoints.is_empty()):
 		stop_movement()
 		return
 	var next_pos := navigation_agent.get_next_path_position()

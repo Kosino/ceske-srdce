@@ -57,6 +57,7 @@ func _ready() -> void:
 		await _run_blacksmith_tech_smoke()
 		await _run_stable_cavalry_smoke()
 		await _run_castle_unique_smoke()
+		await _run_walls_towers_smoke()
 		print("[TEST] all headless smokes finished")
 		get_tree().quit(0)
 		return
@@ -76,6 +77,10 @@ func _ready() -> void:
 		await prepare_castle_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--art-shot"):
 		await prepare_art_pass_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--walls-shot"):
+		await prepare_walls_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--art-v2-shot"):
+		await prepare_art_v2_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--formation-shot"):
 		await prepare_formation_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--ai-shot"):
@@ -83,6 +88,138 @@ func _ready() -> void:
 	else:
 		await _sample_windowed_fps()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 debug.")
+
+
+## Castle + stable + walls + cavalry (sprites v2).
+func prepare_art_v2_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	GameManager.current_age = 3
+	var origin := Vector2(820, 600)
+	var castle: Castle = preload("res://scenes/buildings/Castle.tscn").instantiate() as Castle
+	castle.team = 0
+	castle.is_complete = true
+	castle.spawn_parent = units
+	castle.position = origin + Vector2(0, -40)
+	units.add_child(castle)
+	var stable: Stable = preload("res://scenes/buildings/Stable.tscn").instantiate() as Stable
+	stable.team = 0
+	stable.is_complete = true
+	stable.spawn_parent = units
+	stable.position = origin + Vector2(220, 40)
+	units.add_child(stable)
+	for i in range(4):
+		var p: WallSegment = preload("res://scenes/buildings/WallSegment.tscn").instantiate() as WallSegment
+		p.wall_kind = "palisade"
+		p.team = 0
+		p.is_complete = true
+		p.position = origin + Vector2(360.0 + float(i) * 40.0, 80.0)
+		units.add_child(p)
+	for i in range(4):
+		var s: WallSegment = preload("res://scenes/buildings/WallSegment.tscn").instantiate() as WallSegment
+		s.wall_kind = "stone_wall"
+		s.team = 0
+		s.is_complete = true
+		s.position = origin + Vector2(360.0 + float(i) * 40.0, 140.0)
+		units.add_child(s)
+	var gate: Gate = preload("res://scenes/buildings/Gate.tscn").instantiate() as Gate
+	gate.team = 0
+	gate.is_complete = true
+	gate.position = origin + Vector2(440, 20)
+	units.add_child(gate)
+	var tower: WatchTower = preload("res://scenes/buildings/WatchTower.tscn").instantiate() as WatchTower
+	tower.team = 0
+	tower.is_complete = true
+	tower.spawn_parent = units
+	tower.position = origin + Vector2(560, 100)
+	units.add_child(tower)
+	var cav_defs: Array = [
+		[preload("res://scenes/units/LightCavalry.tscn"), Vector2(100, 160)],
+		[preload("res://scenes/units/Knight.tscn"), Vector2(180, 160)],
+		[preload("res://scenes/units/Druzinik.tscn"), Vector2(260, 160)],
+	]
+	for row in cav_defs:
+		var u: Unit = (row[0] as PackedScene).instantiate() as Unit
+		u.team = 0
+		u.contribute_population = false
+		u.position = origin + (row[1] as Vector2)
+		units.add_child(u)
+	await get_tree().physics_frame
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	if cam:
+		cam.set_zoom_clamped(0.85)
+		cam.center_at(origin + Vector2(280, 60))
+	await get_tree().create_timer(0.5).timeout
+	await get_tree().process_frame
+	_save_shot("art_v2.png", 3)
+
+
+## Palisade + stone wall + gate + watch tower showcase.
+func prepare_walls_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	GameManager.current_age = 2
+	GameManager.add_resource("wood", 50)
+	GameManager.add_resource("stone", 200)
+	var origin := Vector2(860, 640)
+	# Palisade row
+	for i in range(5):
+		var p: WallSegment = preload("res://scenes/buildings/WallSegment.tscn").instantiate() as WallSegment
+		p.wall_kind = "palisade"
+		p.team = 0
+		p.is_complete = true
+		p.position = origin + Vector2(float(i) * 40.0, 0.0)
+		units.add_child(p)
+	# Stone wall row
+	for i in range(5):
+		var s: WallSegment = preload("res://scenes/buildings/WallSegment.tscn").instantiate() as WallSegment
+		s.wall_kind = "stone_wall"
+		s.team = 0
+		s.is_complete = true
+		s.position = origin + Vector2(float(i) * 40.0, 100.0)
+		units.add_child(s)
+	# Gate
+	var gate: Gate = preload("res://scenes/buildings/Gate.tscn").instantiate() as Gate
+	gate.team = 0
+	gate.orientation = "h"
+	gate.anchor_tile = WallNav.world_to_tile(origin + Vector2(240, 0))
+	gate.is_complete = true
+	gate.position = origin + Vector2(280, 0)
+	units.add_child(gate)
+	# Watch tower
+	var tower: WatchTower = preload("res://scenes/buildings/WatchTower.tscn").instantiate() as WatchTower
+	tower.team = 0
+	tower.is_complete = true
+	tower.spawn_parent = units
+	tower.position = origin + Vector2(280, 100)
+	units.add_child(tower)
+	# Labels
+	for row in [
+		[origin + Vector2(80, 40), "Palisáda"],
+		[origin + Vector2(80, 140), "Kamenná zeď"],
+		[origin + Vector2(280, 40), "Brána"],
+		[origin + Vector2(280, 140), "Strážní věž"],
+	]:
+		var lab := Label.new()
+		lab.text = str(row[1])
+		lab.position = (row[0] as Vector2) + Vector2(-40, 0)
+		lab.add_theme_font_size_override("font_size", 12)
+		lab.add_theme_color_override("font_color", Color.WHITE)
+		lab.add_theme_color_override("font_outline_color", Color.BLACK)
+		lab.add_theme_constant_override("outline_size", 3)
+		units.add_child(lab)
+	await get_tree().physics_frame
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	if cam:
+		cam.set_zoom_clamped(1.1)
+		cam.center_at(origin + Vector2(160, 60))
+	await get_tree().create_timer(0.5).timeout
+	await get_tree().process_frame
+	_save_shot("walls.png", 0)
 
 
 ## All buildings side-by-side + labeled units (art pass). No TC overlap.
@@ -1777,6 +1914,168 @@ func _run_ai_economy_smoke() -> void:
 		print("[TEST] PASS AI places building and launches wave")
 	else:
 		print("[TEST] FAIL AI places building and launches wave")
+
+
+## Walls: segment cost, path block, gate pass own/block enemy, tower shot, repair.
+func _run_walls_towers_smoke() -> void:
+	await get_tree().physics_frame
+	GameManager.current_age = 2
+	GameManager.food = 200
+	GameManager.wood = 200
+	GameManager.gold = 100
+	GameManager.stone = 200
+
+	# 1) Segment cost — place 3 palisade tiles via placer API.
+	var wood_before := GameManager.wood
+	var tiles: Array[Vector2i] = [
+		WallNav.world_to_tile(PLAYER_TC_POS + Vector2(200, -80)),
+		WallNav.world_to_tile(PLAYER_TC_POS + Vector2(240, -80)),
+		WallNav.world_to_tile(PLAYER_TC_POS + Vector2(280, -80)),
+	]
+	var placed: Array = building_placer.place_wall_line("palisade", tiles)
+	var cost_ok: bool = placed.size() == 3 and GameManager.wood == wood_before - 6
+	# Finish walls instantly for path tests.
+	for s in placed:
+		if s is WallSegment:
+			(s as WallSegment).is_complete = true
+			(s as WallSegment).build_progress = 1.0
+			(s as WallSegment).hp = (s as WallSegment).max_hp
+			(s as WallSegment)._show_final_visual()
+			(s as WallSegment)._ensure_blocker()
+	await get_tree().physics_frame
+	print("[TEST] wall_cost placed=%d wood %d->%d ok=%s" % [
+		placed.size(), wood_before, GameManager.wood, cost_ok
+	])
+
+	# 2) Wall tile blocks; short wall can be pathed around; sealed box has no path.
+	var occ := WallNav.occupancy_map(get_tree())
+	var tile_blocked: bool = WallNav.is_tile_blocked(tiles[1], 1, occ)
+	var around_ok: bool = WallNav.path_exists(
+		PLAYER_TC_POS + Vector2(240, 40),
+		PLAYER_TC_POS + Vector2(240, -160),
+		1,
+		get_tree()
+	)
+	# 3×3 ring enclosure — inside cannot reach outside.
+	var box_c := WallNav.world_to_tile(PLAYER_TC_POS + Vector2(600, 200))
+	var box_tiles: Array[Vector2i] = []
+	for dx in range(-1, 2):
+		for dy in range(-1, 2):
+			if dx == 0 and dy == 0:
+				continue
+			box_tiles.append(box_c + Vector2i(dx, dy))
+	GameManager.wood += 40
+	var box_walls: Array = []
+	# place_wall_line is Bresenham — place each ring tile individually.
+	for bt in box_tiles:
+		var one: Array[Vector2i] = [bt]
+		box_walls.append_array(building_placer.place_wall_line("palisade", one))
+	for s in box_walls:
+		if s is WallSegment:
+			(s as WallSegment).is_complete = true
+			(s as WallSegment).hp = (s as WallSegment).max_hp
+			(s as WallSegment)._ensure_blocker()
+	await get_tree().physics_frame
+	var sealed: bool = not WallNav.path_exists(
+		WallNav.tile_center(box_c),
+		WallNav.tile_center(box_c + Vector2i(5, 0)),
+		1,
+		get_tree()
+	)
+	var nearest := WallNav.nearest_blocking_segment(
+		WallNav.tile_center(box_c),
+		WallNav.tile_center(box_c + Vector2i(5, 0)),
+		1,
+		get_tree()
+	)
+	var blocked: bool = tile_blocked and around_ok and sealed and nearest is WallSegment
+	print("[TEST] wall_blocks tile=%s around=%s sealed=%s nearest=%s ok=%s" % [
+		tile_blocked, around_ok, sealed, nearest != null, blocked
+	])
+
+	# 3) Gate: own units pass through gate tiles; enemies blocked on those tiles.
+	var stone_tiles: Array[Vector2i] = []
+	for i in range(5):
+		stone_tiles.append(WallNav.world_to_tile(PLAYER_TC_POS + Vector2(400.0 + float(i) * 40.0, -80.0)))
+	GameManager.stone += 50
+	var stone_wall: Array = building_placer.place_wall_line("stone_wall", stone_tiles)
+	for s in stone_wall:
+		if s is WallSegment:
+			(s as WallSegment).is_complete = true
+			(s as WallSegment).hp = (s as WallSegment).max_hp
+			(s as WallSegment)._ensure_blocker()
+	await get_tree().physics_frame
+	var gate_anchor := stone_tiles[1]
+	var gate: Gate = building_placer.place_gate_at(WallNav.tile_center(gate_anchor), "h") as Gate
+	var gate_placed: bool = gate != null
+	if gate:
+		gate.is_complete = true
+		gate.hp = gate.max_hp
+		gate._ensure_blocker()
+	await get_tree().physics_frame
+	var occ2 := WallNav.occupancy_map(get_tree())
+	var gate_mid := gate_anchor + Vector2i(1, 0)
+	var own_pass: bool = not WallNav.is_tile_blocked(gate_mid, 0, occ2)
+	var enemy_block: bool = WallNav.is_tile_blocked(gate_mid, 1, occ2)
+	print("[TEST] gate placed=%s own_pass=%s enemy_block=%s" % [gate_placed, own_pass, enemy_block])
+
+	# 4) Tower shoots.
+	var tower: WatchTower = preload("res://scenes/buildings/WatchTower.tscn").instantiate() as WatchTower
+	tower.team = 0
+	tower.is_complete = true
+	tower.spawn_parent = units
+	tower.position = PLAYER_TC_POS + Vector2(120, 120)
+	units.add_child(tower)
+	var foe: Soldier = SOLDIER_SCENE.instantiate() as Soldier
+	foe.team = 1
+	foe.contribute_population = false
+	foe.position = tower.global_position + Vector2(80, 0)
+	units.add_child(foe)
+	var hp0: float = foe.hp
+	tower._attack_timer = 0.0
+	tower._try_auto_attack()
+	await get_tree().create_timer(0.35).timeout
+	var tower_ok: bool = foe.hp < hp0
+	print("[TEST] tower_shot hp %.1f -> %.1f ok=%s" % [hp0, foe.hp, tower_ok])
+
+	# 5) Repair restores HP and deducts resources.
+	var hut: Building = preload("res://scenes/buildings/House.tscn").instantiate() as Building
+	hut.team = 0
+	hut.is_complete = true
+	hut.placed_cost = {"wood": 25}
+	hut.position = PLAYER_TC_POS + Vector2(-120, 80)
+	units.add_child(hut)
+	await get_tree().physics_frame
+	hut.hp = hut.max_hp * 0.5
+	var wood_r0 := GameManager.wood
+	var repaired := hut.apply_repair(10.0)
+	var wood_r1 := GameManager.wood
+	var repair_ok: bool = repaired > 0.0 and hut.hp > hut.max_hp * 0.5 and wood_r1 < wood_r0
+	print("[TEST] repair +%.1f HP wood %d->%d ok=%s" % [repaired, wood_r0, wood_r1, repair_ok])
+
+	var all_ok: bool = cost_ok and blocked and gate_placed and own_pass and enemy_block and tower_ok and repair_ok
+	# DESIGN values spot-check
+	var design_ok: bool = (
+		int(BuildingPlacer.COSTS["palisade"].get("wood", 0)) == 2
+		and int(BuildingPlacer.COSTS["stone_wall"].get("stone", 0)) == 5
+		and int(BuildingPlacer.COSTS["gate"].get("stone", 0)) == 30
+		and int(BuildingPlacer.COSTS["watch_tower"].get("stone", 0)) == 125
+		and float(BuildingPlacer.BUILD_TIMES["palisade"]) == 5.0
+		and AgeData.building_unlock_age("palisade") == 1
+		and AgeData.building_unlock_age("stone_wall") == 2
+		and AgeData.building_unlock_age("watch_tower") == 2
+	)
+	all_ok = all_ok and design_ok
+	print("[TEST] walls design_ok=%s" % design_ok)
+	if all_ok:
+		print("[TEST] PASS walls + towers + repair")
+	else:
+		print("[TEST] FAIL walls + towers + repair")
+
+	for n in placed + stone_wall + box_walls + [gate, tower, foe, hut]:
+		if n != null and is_instance_valid(n):
+			n.queue_free()
+	await get_tree().physics_frame
 
 
 func _ensure_complete_age1_buildings(need: int) -> void:
