@@ -74,6 +74,8 @@ func _ready() -> void:
 		await prepare_stable_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--castle-shot"):
 		await prepare_castle_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--art-shot"):
+		await prepare_art_pass_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--formation-shot"):
 		await prepare_formation_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--ai-shot"):
@@ -81,6 +83,65 @@ func _ready() -> void:
 	else:
 		await _sample_windowed_fps()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 debug.")
+
+
+## All buildings side-by-side + group of all unit types (art pass).
+func prepare_art_pass_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	GameManager.current_age = 3
+	GameManager.player_civ = CivData.MORAVANE
+	GameManager.add_population_cap(40)
+	var origin := PLAYER_TC_POS + Vector2(-80, -40)
+	var building_defs: Array = [
+		["house", preload("res://scenes/buildings/House.tscn"), Vector2(0, 40)],
+		["barracks", BARRACKS_SCENE, Vector2(100, 20)],
+		["stable", preload("res://scenes/buildings/Stable.tscn"), Vector2(220, 20)],
+		["lumber_camp", preload("res://scenes/buildings/LumberCamp.tscn"), Vector2(340, 30)],
+		["mining_camp", preload("res://scenes/buildings/MiningCamp.tscn"), Vector2(460, 30)],
+		["blacksmith", preload("res://scenes/buildings/Blacksmith.tscn"), Vector2(580, 10)],
+		["castle", preload("res://scenes/buildings/Castle.tscn"), Vector2(740, -20)],
+	]
+	for row in building_defs:
+		var b: Building = (row[1] as PackedScene).instantiate() as Building
+		b.team = 0
+		b.position = origin + (row[2] as Vector2)
+		b.is_complete = true
+		if b is Castle:
+			(b as Castle).spawn_parent = units
+		units.add_child(b)
+	await get_tree().physics_frame
+	var unit_scenes: Array = [
+		preload("res://scenes/units/Villager.tscn"),
+		SOLDIER_SCENE,
+		preload("res://scenes/units/Spearman.tscn"),
+		ARCHER_SCENE,
+		preload("res://scenes/units/LightCavalry.tscn"),
+		preload("res://scenes/units/Knight.tscn"),
+		preload("res://scenes/units/BojovnikBradatice.tscn"),
+		preload("res://scenes/units/Druzinik.tscn"),
+		preload("res://scenes/units/ValecnyVuz.tscn"),
+		preload("res://scenes/units/Lancknecht.tscn"),
+	]
+	var u_origin := origin + Vector2(40, 200)
+	var i := 0
+	for scn in unit_scenes:
+		var u: Unit = (scn as PackedScene).instantiate() as Unit
+		u.team = 0
+		u.contribute_population = false
+		u.position = u_origin + Vector2(float(i) * 52.0, 0.0)
+		units.add_child(u)
+		i += 1
+	await get_tree().physics_frame
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	if cam:
+		cam.set_zoom_clamped(0.85)
+		cam.center_at(origin + Vector2(420, 120))
+	await get_tree().create_timer(0.6).timeout
+	await get_tree().process_frame
+	_save_shot("art_pass.png", unit_scenes.size())
 
 
 ## Castle + unique unit (feature in action).
