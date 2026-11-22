@@ -71,41 +71,64 @@ func _ready() -> void:
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 debug.")
 
 
-## Villagers mining gold near a gold mine (feature in action).
+## Gold + stone mines with villagers mining (no overlapping world labels).
 func prepare_mines_screenshot() -> void:
 	DisplayServer.window_set_size(Vector2i(1280, 720))
 	var debug := get_node_or_null("DebugPanel")
 	if debug:
 		debug.visible = false
+	# Ensure world resource labels stay hidden.
+	for n in get_tree().get_nodes_in_group("resources"):
+		if n is ResourceNode:
+			var lab := (n as ResourceNode).get_node_or_null("Label") as Label
+			if lab:
+				lab.visible = false
 	var gold: ResourceNode = null
+	var stone: ResourceNode = null
 	for n in get_tree().get_nodes_in_group("gold_mines"):
 		if n is ResourceNode and (n as ResourceNode).global_position.distance_to(PLAYER_TC_POS) < 12.0 * float(TILE):
 			gold = n as ResourceNode
 			break
-	if gold == null:
-		for n in get_tree().get_nodes_in_group("gold_mines"):
-			if n is ResourceNode:
-				gold = n as ResourceNode
-				break
+	for n in get_tree().get_nodes_in_group("stone_mines"):
+		if n is ResourceNode and (n as ResourceNode).global_position.distance_to(PLAYER_TC_POS) < 12.0 * float(TILE):
+			stone = n as ResourceNode
+			break
 	var villagers: Array[Villager] = []
 	for n in get_tree().get_nodes_in_group("player_units"):
-		if n is Villager:
+		if n is Villager and (n as Villager).team == 0:
 			villagers.append(n as Villager)
-	if gold and not villagers.is_empty():
-		var cam := get_node_or_null("Camera2D") as RTSCamera
-		if cam:
-			cam.set_zoom_clamped(1.1)
-			cam.center_at(gold.global_position)
-		for i in mini(3, villagers.size()):
-			villagers[i].global_position = gold.global_position + Vector2(20.0 + float(i) * 14.0, 10.0)
-		var pick: Array = []
-		for i in mini(3, villagers.size()):
-			pick.append(villagers[i])
-		SelectionManager.select_multiple(pick)
-		SelectionManager.issue_gather(gold)
-	await get_tree().create_timer(1.2).timeout
+	while villagers.size() < 4:
+		var v: Villager = VILLAGER_SCENE.instantiate() as Villager
+		v.contribute_population = false
+		v.position = PLAYER_TC_POS + Vector2(40, 40)
+		units.add_child(v)
+		villagers.append(v)
+		await get_tree().physics_frame
+	var focus := gold.global_position if gold else PLAYER_TC_POS
+	if gold and stone:
+		focus = (gold.global_position + stone.global_position) * 0.5
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	if cam:
+		cam.set_zoom_clamped(0.95)
+		cam.center_at(focus)
+	if gold:
+		for i in mini(2, villagers.size()):
+			villagers[i].global_position = gold.global_position + Vector2(18.0 + float(i) * 12.0, 8.0)
+			villagers[i].assign_gather(gold)
+	if stone and villagers.size() >= 3:
+		for i in range(2, mini(4, villagers.size())):
+			villagers[i].global_position = stone.global_position + Vector2(16.0 + float(i - 2) * 12.0, 8.0)
+			villagers[i].assign_gather(stone)
+	var pick: Array = []
+	for i in mini(4, villagers.size()):
+		pick.append(villagers[i])
+	SelectionManager.select_multiple(pick)
+	# Hover focus shows amount in SelectionInfo without world labels.
+	if gold:
+		SelectionManager.set_hovered_resource(gold)
+	await get_tree().create_timer(1.0).timeout
 	await get_tree().process_frame
-	_save_shot("map_mines.png", SelectionManager.selected_units.size())
+	_save_shot("map_mines.png", pick.size())
 
 
 ## Camera moved + minimap frame visible (feature in action).
@@ -917,20 +940,28 @@ func _run_hud_layout_smoke() -> void:
 		])
 	SelectionManager.clear_selection()
 
-	# Czech resource labels on map nodes.
+	# AoE-style: no permanent world labels; Czech names via info_line / SelectionInfo.
 	var czech_ok := true
+	var any_hidden := false
 	for n in get_tree().get_nodes_in_group("resources"):
 		if not (n is ResourceNode):
 			continue
 		var rn := n as ResourceNode
 		var t := rn.get_node_or_null("Label") as Label
-		if t == null:
-			continue
-		if rn.resource_type == "wood" and not t.text.begins_with("Dřevo"):
+		if t != null and t.visible and not t.text.is_empty():
 			czech_ok = false
-		if rn.resource_type == "food" and not t.text.begins_with("Jídlo"):
+		else:
+			any_hidden = true
+		if rn.resource_type == "wood" and not rn.czech_type_name().begins_with("Dřevo"):
 			czech_ok = false
-	print("[TEST] hud czech_labels=%s" % czech_ok)
+		if rn.resource_type == "food" and not rn.czech_type_name().begins_with("Jídlo"):
+			czech_ok = false
+		if rn.resource_type == "gold" and not rn.czech_type_name().begins_with("Zlato"):
+			czech_ok = false
+		if rn.resource_type == "stone" and not rn.czech_type_name().begins_with("Kámen"):
+			czech_ok = false
+	czech_ok = czech_ok and any_hidden
+	print("[TEST] hud resource_info_no_world_labels=%s" % czech_ok)
 
 	if nodes_ok and debug_ok and build_ok and kovarna_locked and czech_ok:
 		print("[TEST] PASS HUD layout + villager builds + DebugPanel hidden")
@@ -1031,7 +1062,24 @@ func _run_map_mines_smoke() -> void:
 	) and is_equal_approx(
 		float(Villager.HARVEST_RATES["stone"]), Villager.WOOD_HARVEST_RATE * 0.9
 	)
-	var ok := seed_ok and fair_ok and harvest_ok and deposit_ok and rate_ok
+	var labels_hidden := true
+	for n in get_tree().get_nodes_in_group("resources"):
+		if not (n is ResourceNode):
+			continue
+		var lab := (n as ResourceNode).get_node_or_null("Label") as Label
+		if lab != null and lab.visible and not str(lab.text).is_empty():
+			labels_hidden = false
+			break
+	# SelectionInfo surfaces amount on resource focus.
+	var info_ok := false
+	if gold_node:
+		SelectionManager.select_resource(gold_node)
+		await get_tree().process_frame
+		var sel := get_node_or_null("UI/SelectionInfo") as SelectionInfo
+		info_ok = sel != null and sel.label != null and sel.label.text.contains("Zlato")
+		SelectionManager.clear_resource_selection()
+	print("[TEST] mines labels_hidden=%s selection_info=%s" % [labels_hidden, info_ok])
+	var ok := seed_ok and fair_ok and harvest_ok and deposit_ok and rate_ok and labels_hidden and info_ok
 	if ok:
 		print("[TEST] PASS map mines seed/fairness/harvest/deposit")
 	else:
