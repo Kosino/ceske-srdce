@@ -75,8 +75,13 @@ func _single_select_at(world_pos: Vector2) -> void:
 	var building := _find_player_building_at(world_pos)
 	if building:
 		SelectionManager.select_building(building)
-	else:
-		SelectionManager.clear_selection()
+		return
+	var resource := _find_resource_at(world_pos)
+	if resource:
+		SelectionManager.select_resource(resource)
+		return
+	SelectionManager.clear_selection()
+	SelectionManager.clear_resource_selection()
 
 
 func _find_player_building_at(world_pos: Vector2) -> Node:
@@ -109,6 +114,7 @@ func _box_select(world_rect: Rect2) -> void:
 			picked.append(node)
 	if picked.is_empty():
 		SelectionManager.clear_selection()
+		SelectionManager.clear_resource_selection()
 	else:
 		SelectionManager.select_multiple(picked)
 

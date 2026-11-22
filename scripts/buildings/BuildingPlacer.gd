@@ -7,6 +7,7 @@ const HOUSE_SCENE := preload("res://scenes/buildings/House.tscn")
 const BARRACKS_SCENE := preload("res://scenes/buildings/Barracks.tscn")
 const ARCHERY_SCENE := preload("res://scenes/buildings/ArcheryRange.tscn")
 const LUMBER_SCENE := preload("res://scenes/buildings/LumberCamp.tscn")
+const MINING_SCENE := preload("res://scenes/buildings/MiningCamp.tscn")
 const MILL_SCENE := preload("res://scenes/buildings/Mill.tscn")
 const BLACKSMITH_SCENE := preload("res://scenes/buildings/Blacksmith.tscn")
 
@@ -15,6 +16,7 @@ const GHOST_TEXTURES := {
 	"barracks": preload("res://assets/sprites/buildings/barracks.png"),
 	"archery_range": preload("res://assets/sprites/buildings/archery_range.png"),
 	"lumber_camp": preload("res://assets/sprites/buildings/lumber_camp.png"),
+	"mining_camp": preload("res://assets/sprites/buildings/mining_camp.png"),
 	"mill": preload("res://assets/sprites/buildings/mill.png"),
 	"blacksmith": preload("res://assets/sprites/buildings/blacksmith.png"),
 }
@@ -25,6 +27,7 @@ const COSTS := {
 	"barracks": {"wood": 175},
 	"archery_range": {"wood": 175},
 	"lumber_camp": {"wood": 100},
+	"mining_camp": {"wood": 100},
 	"mill": {"wood": 100},
 	"blacksmith": {"wood": 150}, # NÁVRH
 }
@@ -33,7 +36,8 @@ const BUILD_TIMES := {
 	"house": 25.0,
 	"barracks": 50.0,
 	"archery_range": 50.0,
-	"lumber_camp": 35.0,
+	"lumber_camp": 25.0,
+	"mining_camp": 25.0,
 	"mill": 35.0,
 	"blacksmith": 40.0, # NÁVRH
 }
@@ -42,7 +46,8 @@ const FOOTPRINTS := {
 	"house": Vector2(56, 56),
 	"barracks": Vector2(80, 80),
 	"archery_range": Vector2(80, 80),
-	"lumber_camp": Vector2(72, 72),
+	"lumber_camp": Vector2(80, 80),
+	"mining_camp": Vector2(80, 80),
 	"mill": Vector2(72, 72),
 	"blacksmith": Vector2(80, 80),
 }
@@ -181,6 +186,8 @@ func _instantiate_building(building_type: String) -> Building:
 			return ARCHERY_SCENE.instantiate() as Building
 		"lumber_camp":
 			return LUMBER_SCENE.instantiate() as Building
+		"mining_camp":
+			return MINING_SCENE.instantiate() as Building
 		"mill":
 			return MILL_SCENE.instantiate() as Building
 		"blacksmith":

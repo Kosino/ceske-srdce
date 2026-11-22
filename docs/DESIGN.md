@@ -87,7 +87,7 @@ Resources → Stavění → Produkce jednotek → Combat → Postup věků
 ## Balance – prototyp (schváleno 2026-11-17)
 
 Měřítko: 1 dlaždice = 40 px. Vesničan nese 10 jednotek suroviny. Start: 200 J, 200 D, 100 Z, 0 K.
-Těžba za sekundu na vesničana: dřevo 0.40, jídlo z keřů 0.30, farma 0.33, zlato 0.35, kámen 0.35.
+Těžba za sekundu na vesničana: dřevo 0.40, jídlo z keřů 0.30, farma 0.33, zlato/kámen = dřevo × 0.9 (0.36).
 
 | Jednotka | Cena | Čas | HP | Útok | Dosah | Rychlost |
 |----------|------|-----|----|------|-------|----------|
@@ -100,11 +100,15 @@ Těžba za sekundu na vesničana: dřevo 0.40, jídlo z keřů 0.30, farma 0.33,
 |--------|------|--------|----|--------|
 | Radnice | start | – | 2400 | +5 populace, drop-off vše, trénuje vesničany |
 | Dům | 25 D | 25 s | 550 | +5 populace (strop 200) |
-| Pila | 100 D | 35 s | 1000 | drop-off dřevo |
+| Pila | 100 D | 25 s | 600 | 80×80, drop-off dřevo |
+| Důlní tábor | 100 D | 25 s | 600 | 80×80, drop-off zlato + kámen |
 | Mlýn | 100 D | 35 s | 1000 | drop-off jídlo, farmy |
 | Kasárna | 175 D | 50 s | 1200 | Zbrojnoš, Kopiník |
 | Střelnice | 175 D | 50 s | 1200 | Lučištník |
 | Kovárna *(Schváleno 2026-11-22)* | 150 D | 40 s | 1800 | věk 2 gate; techy později |
+
+### Mapa & doly (Fáze 4)
+Deterministický generátor (seed). U každé radnice (≤12 dlaždic): 1 les (~25 stromů), 6 keřů bobulí, 1 zlatý důl (7 dlaždic × 800), 1 kamenný důl (5 × 350). Zbytek mapy: 6–8 lesů + 2–3 doly (zlato/kámen), zrcadlově férové. Žádné zdroje na cestách/budovách.
 
 Poznámka: `population_max` = Radnice +5 a každý Dům +5, strop 200 (`GameManager.add_population_cap` / `can_add_population`).
 Lučištník střílí šípem na zamčenou pozici cíle v okamžiku výstřelu; zásah jen pokud cíl u dopadu zůstal (jinak miss). Žádný friendly fire.

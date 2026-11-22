@@ -3,10 +3,14 @@ extends Node
 signal selection_changed(units: Array)
 signal building_selection_changed(building: Node)
 signal formation_changed(kind: String)
+signal resource_focus_changed(resource: ResourceNode)
 
 var selected_units: Array[Node] = []
 ## Selected production building (Radnice / Kasárna / Střelnice) — AoE-like train UI.
 var selected_building: Node = null
+## Selected / hovered map resource — amount shown in SelectionInfo (no world labels).
+var selected_resource: ResourceNode = null
+var hovered_resource: ResourceNode = null
 ## Current formation for group moves (AoE II style).
 var formation: String = FormationData.LINE
 
@@ -22,6 +26,7 @@ func set_formation(kind: String) -> void:
 
 func select_single(unit: Node) -> void:
 	_clear_building()
+	clear_resource_selection()
 	clear_selection(false)
 	if unit and is_instance_valid(unit):
 		_add(unit)
@@ -30,6 +35,7 @@ func select_single(unit: Node) -> void:
 
 func select_multiple(units: Array) -> void:
 	_clear_building()
+	clear_resource_selection()
 	clear_selection(false)
 	for u in units:
 		if u and is_instance_valid(u):
@@ -39,11 +45,48 @@ func select_multiple(units: Array) -> void:
 
 func select_building(building: Node) -> void:
 	clear_selection(false)
+	clear_resource_selection()
 	_clear_building()
 	if building and is_instance_valid(building):
 		selected_building = building
 	building_selection_changed.emit(selected_building)
 	selection_changed.emit(selected_units)
+
+
+func select_resource(resource: ResourceNode) -> void:
+	clear_selection(false)
+	_clear_building()
+	clear_resource_selection()
+	if resource and is_instance_valid(resource) and not resource.is_depleted():
+		selected_resource = resource
+		resource.set_resource_selected(true)
+	resource_focus_changed.emit(selected_resource)
+	selection_changed.emit(selected_units)
+
+
+func set_hovered_resource(resource: ResourceNode) -> void:
+	hovered_resource = resource if resource and is_instance_valid(resource) else null
+	resource_focus_changed.emit(focused_resource())
+
+
+func notify_resource_amount_changed(resource: ResourceNode) -> void:
+	if resource == selected_resource or resource == hovered_resource:
+		resource_focus_changed.emit(focused_resource())
+
+
+func focused_resource() -> ResourceNode:
+	if selected_resource and is_instance_valid(selected_resource):
+		return selected_resource
+	if hovered_resource and is_instance_valid(hovered_resource):
+		return hovered_resource
+	return null
+
+
+func clear_resource_selection() -> void:
+	if selected_resource and is_instance_valid(selected_resource):
+		selected_resource.set_resource_selected(false)
+	selected_resource = null
+	resource_focus_changed.emit(focused_resource())
 
 
 func clear_selection(emit_building: bool = true) -> void:

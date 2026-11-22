@@ -5,6 +5,7 @@ class_name CommandPanel
 const BUILD_BUTTONS := [
 	{"id": "house", "name": "Dům"},
 	{"id": "lumber_camp", "name": "Pila"},
+	{"id": "mining_camp", "name": "Důlní tábor"},
 	{"id": "mill", "name": "Mlýn"},
 	{"id": "barracks", "name": "Kasárna"},
 	{"id": "archery_range", "name": "Střelnice"},

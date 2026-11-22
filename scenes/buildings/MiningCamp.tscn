@@ -1,0 +1,21 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/buildings/MiningCamp.gd" id="1_mine"]
+[ext_resource type="Texture2D" path="res://assets/sprites/buildings/mining_camp.png" id="2_tex"]
+
+[node name="MiningCamp" type="Node2D"]
+script = ExtResource("1_mine")
+
+[node name="Visual" type="Sprite2D" parent="."]
+texture_filter = 1
+texture = ExtResource("2_tex")
+centered = true
+modulate = Color(0.95, 0.85, 0.45, 1)
+
+[node name="Label" type="Label" parent="."]
+offset_left = -48.0
+offset_top = 30.0
+offset_right = 48.0
+offset_bottom = 54.0
+horizontal_alignment = 1
+text = "Důlní tábor"

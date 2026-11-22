@@ -11,6 +11,7 @@ func _ready() -> void:
 	SelectionManager.selection_changed.connect(_refresh)
 	SelectionManager.building_selection_changed.connect(_on_building)
 	SelectionManager.formation_changed.connect(_on_formation)
+	SelectionManager.resource_focus_changed.connect(_on_resource)
 	_refresh(SelectionManager.selected_units)
 
 
@@ -22,8 +23,16 @@ func _on_building(_b: Node) -> void:
 	_refresh(SelectionManager.selected_units)
 
 
+func _on_resource(_r: ResourceNode) -> void:
+	_refresh(SelectionManager.selected_units)
+
+
 func _refresh(_units: Array = []) -> void:
 	if label == null:
+		return
+	var focus := SelectionManager.focused_resource()
+	if focus != null and is_instance_valid(focus):
+		label.text = "Zdroj: %s\n(hover / výběr)" % focus.info_line()
 		return
 	var b := SelectionManager.selected_building
 	if b != null and is_instance_valid(b):

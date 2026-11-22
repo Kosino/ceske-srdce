@@ -62,31 +62,32 @@ func _bootstrap_base() -> void:
 		return
 	_bootstrapped = true
 
-	_hall = DROPOFF_SCENE.instantiate() as DropOff
-	_hall.team = 1
-	_hall.position = base_position
-	_hall.spawn_parent = _units_parent
-	_units_parent.add_child(_hall)
-	var victory := map.get_node_or_null("VictoryController") as VictoryController
-	if victory:
-		victory.watch_new_hall(_hall)
+	# MapGenerator owns resources + enemy TC; reuse hall if already present.
+	_hall = get_tree().get_first_node_in_group("enemy_town_hall") as DropOff
+	if _hall == null:
+		_hall = DROPOFF_SCENE.instantiate() as DropOff
+		_hall.team = 1
+		_hall.position = base_position
+		_hall.spawn_parent = _units_parent
+		_units_parent.add_child(_hall)
+		var victory := map.get_node_or_null("VictoryController") as VictoryController
+		if victory:
+			victory.watch_new_hall(_hall)
+	else:
+		base_position = _hall.global_position
 
-	for res_def in [
-		{"type": "wood", "pos": base_position + Vector2(140, -60), "amt": 200},
-		{"type": "food", "pos": base_position + Vector2(-120, 100), "amt": 160},
-	]:
-		var node: ResourceNode = RESOURCE_SCENE.instantiate() as ResourceNode
-		node.resource_type = str(res_def["type"])
-		node.amount_remaining = int(res_def["amt"])
-		node.position = res_def["pos"]
-		_units_parent.add_child(node)
-
-	for offset in [Vector2(40, 40), Vector2(60, 60), Vector2(20, 70)]:
-		var v: Villager = VILLAGER_SCENE.instantiate() as Villager
-		v.team = 1
-		v.contribute_population = false
-		v.position = base_position + offset
-		_units_parent.add_child(v)
+	var has_enemy_villager := false
+	for n in get_tree().get_nodes_in_group("enemy_units"):
+		if n is Villager:
+			has_enemy_villager = true
+			break
+	if not has_enemy_villager:
+		for offset in [Vector2(40, 40), Vector2(60, 60), Vector2(20, 70)]:
+			var v: Villager = VILLAGER_SCENE.instantiate() as Villager
+			v.team = 1
+			v.contribute_population = false
+			v.position = base_position + offset
+			_units_parent.add_child(v)
 
 	print("[AI] bootstrapped Husité base at %s" % str(base_position))
 

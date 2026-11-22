@@ -23,6 +23,7 @@ const AGE_RESEARCH := {
 const BUILDING_UNLOCK_AGE := {
 	"house": 1,
 	"lumber_camp": 1,
+	"mining_camp": 1,
 	"mill": 1,
 	"barracks": 1,
 	"archery_range": 2,
