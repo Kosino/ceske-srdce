@@ -96,6 +96,14 @@ func prepare_art_v2_screenshot() -> void:
 	var debug := get_node_or_null("DebugPanel")
 	if debug:
 		debug.visible = false
+	for n in get_tree().get_nodes_in_group("player_town_hall"):
+		if n is Node2D:
+			(n as Node2D).visible = false
+			(n as Node2D).position = Vector2(-4000, -4000)
+	for n in get_tree().get_nodes_in_group("villagers"):
+		if n is Villager and (n as Villager).team == 0:
+			(n as Villager).visible = false
+			(n as Villager).position = Vector2(-4000, -4000)
 	GameManager.current_age = 3
 	var origin := Vector2(820, 600)
 	var castle: Castle = preload("res://scenes/buildings/Castle.tscn").instantiate() as Castle
@@ -110,35 +118,48 @@ func prepare_art_v2_screenshot() -> void:
 	stable.spawn_parent = units
 	stable.position = origin + Vector2(220, 40)
 	units.add_child(stable)
-	for i in range(4):
+	# Stone wall — gate — stone wall (continuous line).
+	var wall_y := 120.0
+	var line_x := 340.0
+	for i in range(2):
+		var left: WallSegment = preload("res://scenes/buildings/WallSegment.tscn").instantiate() as WallSegment
+		left.wall_kind = "stone_wall"
+		left.team = 0
+		left.is_complete = true
+		left.position = origin + Vector2(line_x + float(i) * 40.0, wall_y)
+		units.add_child(left)
+	var gate: Gate = preload("res://scenes/buildings/Gate.tscn").instantiate() as Gate
+	gate.team = 0
+	gate.orientation = "h"
+	gate.is_complete = true
+	gate.position = origin + Vector2(line_x + 120.0, wall_y)
+	units.add_child(gate)
+	for i in range(2):
+		var right: WallSegment = preload("res://scenes/buildings/WallSegment.tscn").instantiate() as WallSegment
+		right.wall_kind = "stone_wall"
+		right.team = 0
+		right.is_complete = true
+		right.position = origin + Vector2(line_x + 200.0 + float(i) * 40.0, wall_y)
+		units.add_child(right)
+	# Short palisade north of the line.
+	for i in range(3):
 		var p: WallSegment = preload("res://scenes/buildings/WallSegment.tscn").instantiate() as WallSegment
 		p.wall_kind = "palisade"
 		p.team = 0
 		p.is_complete = true
-		p.position = origin + Vector2(360.0 + float(i) * 40.0, 80.0)
+		p.position = origin + Vector2(line_x + 40.0 + float(i) * 40.0, wall_y - 78.0)
 		units.add_child(p)
-	for i in range(4):
-		var s: WallSegment = preload("res://scenes/buildings/WallSegment.tscn").instantiate() as WallSegment
-		s.wall_kind = "stone_wall"
-		s.team = 0
-		s.is_complete = true
-		s.position = origin + Vector2(360.0 + float(i) * 40.0, 140.0)
-		units.add_child(s)
-	var gate: Gate = preload("res://scenes/buildings/Gate.tscn").instantiate() as Gate
-	gate.team = 0
-	gate.is_complete = true
-	gate.position = origin + Vector2(440, 20)
-	units.add_child(gate)
+	# Tower snug behind the wall (just north of gate).
 	var tower: WatchTower = preload("res://scenes/buildings/WatchTower.tscn").instantiate() as WatchTower
 	tower.team = 0
 	tower.is_complete = true
 	tower.spawn_parent = units
-	tower.position = origin + Vector2(560, 100)
+	tower.position = origin + Vector2(line_x + 120.0, wall_y - 52.0)
 	units.add_child(tower)
 	var cav_defs: Array = [
-		[preload("res://scenes/units/LightCavalry.tscn"), Vector2(100, 160)],
-		[preload("res://scenes/units/Knight.tscn"), Vector2(180, 160)],
-		[preload("res://scenes/units/Druzinik.tscn"), Vector2(260, 160)],
+		[preload("res://scenes/units/LightCavalry.tscn"), Vector2(100, 180)],
+		[preload("res://scenes/units/Knight.tscn"), Vector2(180, 180)],
+		[preload("res://scenes/units/Druzinik.tscn"), Vector2(260, 180)],
 	]
 	for row in cav_defs:
 		var u: Unit = (row[0] as PackedScene).instantiate() as Unit
@@ -147,6 +168,10 @@ func prepare_art_v2_screenshot() -> void:
 		u.position = origin + (row[1] as Vector2)
 		units.add_child(u)
 	await get_tree().physics_frame
+	for n in get_tree().get_nodes_in_group("walls") + get_tree().get_nodes_in_group("gates"):
+		if n is Building:
+			(n as Building)._refresh_label()
+			(n as Building).queue_redraw()
 	var cam := get_node_or_null("Camera2D") as RTSCamera
 	if cam:
 		cam.set_zoom_clamped(0.85)
@@ -156,67 +181,75 @@ func prepare_art_v2_screenshot() -> void:
 	_save_shot("art_v2.png", 3)
 
 
-## Palisade + stone wall + gate + watch tower showcase.
+## Palisade + stone wall–gate–wall + tower snug behind.
 func prepare_walls_screenshot() -> void:
 	DisplayServer.window_set_size(Vector2i(1280, 720))
 	var debug := get_node_or_null("DebugPanel")
 	if debug:
 		debug.visible = false
+	# Clear demo TC / villagers so labels don't clutter the fortification shot.
+	for n in get_tree().get_nodes_in_group("player_town_hall"):
+		if n is Node2D:
+			(n as Node2D).visible = false
+			(n as Node2D).position = Vector2(-4000, -4000)
+	for n in get_tree().get_nodes_in_group("villagers"):
+		if n is Villager and (n as Villager).team == 0:
+			(n as Villager).visible = false
+			(n as Villager).position = Vector2(-4000, -4000)
 	GameManager.current_age = 2
 	GameManager.add_resource("wood", 50)
 	GameManager.add_resource("stone", 200)
-	var origin := Vector2(860, 640)
-	# Palisade row
-	for i in range(5):
+	var origin := Vector2(1000, 700)
+	# Palisade strip (behind / north).
+	for i in range(6):
 		var p: WallSegment = preload("res://scenes/buildings/WallSegment.tscn").instantiate() as WallSegment
 		p.wall_kind = "palisade"
 		p.team = 0
 		p.is_complete = true
-		p.position = origin + Vector2(float(i) * 40.0, 0.0)
+		p.position = origin + Vector2(float(i) * 40.0, -70.0)
 		units.add_child(p)
-	# Stone wall row
-	for i in range(5):
-		var s: WallSegment = preload("res://scenes/buildings/WallSegment.tscn").instantiate() as WallSegment
-		s.wall_kind = "stone_wall"
-		s.team = 0
-		s.is_complete = true
-		s.position = origin + Vector2(float(i) * 40.0, 100.0)
-		units.add_child(s)
-	# Gate
+	# Stone wall — gate — stone wall (continuous line).
+	for i in range(2):
+		var left: WallSegment = preload("res://scenes/buildings/WallSegment.tscn").instantiate() as WallSegment
+		left.wall_kind = "stone_wall"
+		left.team = 0
+		left.is_complete = true
+		left.position = origin + Vector2(float(i) * 40.0, 40.0)
+		units.add_child(left)
 	var gate: Gate = preload("res://scenes/buildings/Gate.tscn").instantiate() as Gate
 	gate.team = 0
 	gate.orientation = "h"
-	gate.anchor_tile = WallNav.world_to_tile(origin + Vector2(240, 0))
 	gate.is_complete = true
-	gate.position = origin + Vector2(280, 0)
+	gate.position = origin + Vector2(120.0, 40.0)
 	units.add_child(gate)
-	# Watch tower
+	for i in range(2):
+		var right: WallSegment = preload("res://scenes/buildings/WallSegment.tscn").instantiate() as WallSegment
+		right.wall_kind = "stone_wall"
+		right.team = 0
+		right.is_complete = true
+		right.position = origin + Vector2(200.0 + float(i) * 40.0, 40.0)
+		units.add_child(right)
+	# Watch tower snug behind the wall (just north of gate).
 	var tower: WatchTower = preload("res://scenes/buildings/WatchTower.tscn").instantiate() as WatchTower
 	tower.team = 0
 	tower.is_complete = true
 	tower.spawn_parent = units
-	tower.position = origin + Vector2(280, 100)
+	tower.position = origin + Vector2(120.0, -10.0)
 	units.add_child(tower)
-	# Labels
-	for row in [
-		[origin + Vector2(80, 40), "Palisáda"],
-		[origin + Vector2(80, 140), "Kamenná zeď"],
-		[origin + Vector2(280, 40), "Brána"],
-		[origin + Vector2(280, 140), "Strážní věž"],
-	]:
-		var lab := Label.new()
-		lab.text = str(row[1])
-		lab.position = (row[0] as Vector2) + Vector2(-40, 0)
-		lab.add_theme_font_size_override("font_size", 12)
-		lab.add_theme_color_override("font_color", Color.WHITE)
-		lab.add_theme_color_override("font_outline_color", Color.BLACK)
-		lab.add_theme_constant_override("outline_size", 3)
-		units.add_child(lab)
+	# Hide tower world label for this shot (caption below via SelectionInfo style — none).
+	if tower.has_node("Label"):
+		(tower.get_node("Label") as Label).visible = false
+	await get_tree().physics_frame
+	# Ensure fortifications don't show name/HP spam.
+	for n in get_tree().get_nodes_in_group("walls") + get_tree().get_nodes_in_group("gates"):
+		if n is Building:
+			(n as Building)._refresh_label()
+			(n as Building).queue_redraw()
 	await get_tree().physics_frame
 	var cam := get_node_or_null("Camera2D") as RTSCamera
 	if cam:
-		cam.set_zoom_clamped(1.1)
-		cam.center_at(origin + Vector2(160, 60))
+		cam.set_zoom_clamped(1.2)
+		cam.center_at(origin + Vector2(120, 10))
 	await get_tree().create_timer(0.5).timeout
 	await get_tree().process_frame
 	_save_shot("walls.png", 0)

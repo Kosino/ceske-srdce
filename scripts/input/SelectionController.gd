@@ -34,9 +34,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif mb.button_index == MOUSE_BUTTON_RIGHT and mb.pressed:
 			_issue_right_click_command()
 			get_viewport().set_input_as_handled()
-	elif event is InputEventMouseMotion and _dragging:
-		_drag_current_screen = (event as InputEventMouseMotion).position
-		queue_redraw()
+	elif event is InputEventMouseMotion:
+		if _dragging:
+			_drag_current_screen = (event as InputEventMouseMotion).position
+			queue_redraw()
+		else:
+			_update_building_hover(get_global_mouse_position())
 
 
 func _draw() -> void:
@@ -87,7 +90,7 @@ func _single_select_at(world_pos: Vector2) -> void:
 func _find_player_building_at(world_pos: Vector2) -> Node:
 	var best: Node = null
 	var best_dist := 48.0
-	for group_name in ["player_town_hall", "barracks", "archery_ranges", "player_buildings"]:
+	for group_name in ["player_town_hall", "barracks", "archery_ranges", "player_buildings", "walls", "gates"]:
 		for node in get_tree().get_nodes_in_group(group_name):
 			if not (node is Node2D):
 				continue
@@ -105,6 +108,24 @@ func _find_player_building_at(world_pos: Vector2) -> Node:
 				best_dist = d
 				best = node
 	return best
+
+
+func _update_building_hover(world_pos: Vector2) -> void:
+	var best: Building = null
+	var best_dist := 36.0
+	for group_name in ["walls", "gates"]:
+		for node in get_tree().get_nodes_in_group(group_name):
+			if not (node is Building):
+				continue
+			var b := node as Building
+			if b.team != 0 or not b.is_complete:
+				continue
+			var radius := b.footprint.length() * 0.35
+			var d := b.global_position.distance_to(world_pos)
+			if d < best_dist + radius * 0.3:
+				best_dist = d
+				best = b
+	SelectionManager.set_hovered_building(best)
 
 
 func _box_select(world_rect: Rect2) -> void:

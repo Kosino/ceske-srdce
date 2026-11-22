@@ -12,6 +12,7 @@ texture = ExtResource("2_tex")
 centered = true
 
 [node name="Label" type="Label" parent="."]
+visible = false
 offset_left = -28.0
 offset_top = 18.0
 offset_right = 28.0

@@ -23,6 +23,9 @@ var _visual: Sprite2D
 ## Cost paid to place (for repair = 25% of this over full HP).
 var placed_cost: Dictionary = {}
 var _repairers: Dictionary = {} # instance_id -> Villager
+## UI focus — fortifications hide name/HP unless selected/hovered/damaged.
+var ui_selected: bool = false
+var ui_hovered: bool = false
 
 
 func _ready() -> void:
@@ -154,12 +157,44 @@ func _prune_builders() -> void:
 		_builders.erase(id)
 
 
+## Override on fortifications (walls/gates): only when selected/hovered.
+func should_show_name_label() -> bool:
+	return true
+
+
+## Override on fortifications: only when damaged, selected, hovered, or building.
+func should_show_hp_bar() -> bool:
+	return true
+
+
+func set_ui_selected(value: bool) -> void:
+	if ui_selected == value:
+		return
+	ui_selected = value
+	_refresh_label()
+	queue_redraw()
+
+
+func set_ui_hovered(value: bool) -> void:
+	if ui_hovered == value:
+		return
+	ui_hovered = value
+	_refresh_label()
+	queue_redraw()
+
+
 func _refresh_label() -> void:
-	if has_node("Label"):
-		if is_complete:
-			$Label.text = display_name
-		else:
-			$Label.text = "%s %d%%" % [display_name, int(build_progress * 100.0)]
+	if not has_node("Label"):
+		return
+	var lab := $Label as Label
+	if not should_show_name_label():
+		lab.visible = false
+		return
+	lab.visible = true
+	if is_complete:
+		lab.text = display_name
+	else:
+		lab.text = "%s %d%%" % [display_name, int(build_progress * 100.0)]
 
 
 func _hp_fill_color() -> Color:
@@ -167,6 +202,8 @@ func _hp_fill_color() -> Color:
 
 
 func _draw() -> void:
+	if not should_show_hp_bar():
+		return
 	var bar_w := footprint.x * 0.8
 	var origin := Vector2(-bar_w * 0.5, -footprint.y * 0.5 - 10.0)
 	draw_rect(Rect2(origin, Vector2(bar_w, 4.0)), Color(0.1, 0.1, 0.1, 0.8))

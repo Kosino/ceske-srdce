@@ -47,6 +47,19 @@ func _ready() -> void:
 
 func _on_construction_finished() -> void:
 	_ensure_blocker()
+	_refresh_label()
+	queue_redraw()
+
+
+func should_show_name_label() -> bool:
+	# AoE-like: no permanent name spam on wall tiles.
+	return (not is_complete) or ui_selected or ui_hovered
+
+
+func should_show_hp_bar() -> bool:
+	if not is_complete:
+		return true
+	return ui_selected or ui_hovered or needs_repair()
 
 
 func _ensure_blocker() -> void:
