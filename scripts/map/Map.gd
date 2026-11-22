@@ -1656,7 +1656,7 @@ func _run_castle_unique_smoke() -> void:
 	var build_bonus_ok := is_equal_approx(axe.bonus_vs_buildings, 8.0) and hut.hp <= hut_hp - expect_build + 0.1
 	print("[TEST] bradaticar vs building dealt~%.1f ok=%s" % [expect_build, build_bonus_ok])
 
-	# Cavalry bonus: Lancknecht +10 vs cavalry.
+	# Cavalry bonus: Lancknecht +6 vs cavalry.
 	GameManager.player_civ = CivData.HABSBURKOVE
 	var lanc: Lancknecht = preload("res://scenes/units/Lancknecht.tscn").instantiate() as Lancknecht
 	lanc.team = 0
@@ -1675,7 +1675,7 @@ func _run_castle_unique_smoke() -> void:
 	lanc._attack_timer = 0.0
 	lanc._try_strike()
 	var expect_cav := lanc.attack_damage + lanc.bonus_vs_cavalry - cav.melee_armor
-	var cav_bonus_ok := is_equal_approx(lanc.bonus_vs_cavalry, 10.0) and cav.hp <= cav_hp - maxf(1.0, expect_cav) + 0.1
+	var cav_bonus_ok := is_equal_approx(lanc.bonus_vs_cavalry, 6.0) and cav.hp <= cav_hp - maxf(1.0, expect_cav) + 0.1
 	print("[TEST] lancknecht vs cav ok=%s" % cav_bonus_ok)
 
 	# Přemyslovci +10% on Družiník.

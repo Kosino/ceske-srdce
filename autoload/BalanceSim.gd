@@ -362,6 +362,12 @@ func _build_report_markdown() -> String:
 		var wp := 0.0 if non_draw == 0 else 100.0 * float(sw) / float(non_draw)
 		lines.append("| %s | %d | %.1f%% | %d | %.1f%% |" % [s, sp, share, sw, wp])
 	lines.append("")
+	lines.append(
+		"Note: **rush** win rate is skewed by sim-only soft-TC damage "
+		+ "(×0.25 until 12 in-game minutes), then a burst resolve. "
+		+ "Do not treat rush WR as a normal-play balance signal."
+	)
+	lines.append("")
 
 	## Age reach with %
 	lines.append("## Age-reach (avg sim seconds + % of civ appearances)")
@@ -498,7 +504,7 @@ func _propose_nerf(civ: String, pct: float) -> String:
 		CivData.HUSITE:
 			return "- **Husité (%.1f%%):** NÁVRH — reduce Válečný vůz HP/pierce ~10%%." % pct
 		CivData.HABSBURKOVE:
-			return "- **Habsburkové (%.1f%%):** NÁVRH — trim Lancknecht cavalry bonus." % pct
+			return "- **Habsburkové (%.1f%%):** NÁVRH — Lancknecht HP 75→65 or atk 8→7 (anti-cav already +6)." % pct
 		_:
 			return "- **%s (%.1f%%):** NÁVRH — reduce unique combat ~10%%." % [CivData.civ_name(civ), pct]
 

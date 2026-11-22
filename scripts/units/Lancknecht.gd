@@ -1,6 +1,6 @@
 extends Unit
 class_name Lancknecht
-## Habsburkové unique — Lancknecht. 55J+45Z, HP 75, atk 8 (+10 vs jízda), zbroj 1/1.
+## Habsburkové unique — Lancknecht. 55J+45Z, HP 75, atk 8 (+6 vs jízda), zbroj 1/1.
 
 
 const VILLAGER_SPEED := 80.0
@@ -13,7 +13,7 @@ func _ready() -> void:
 	attack_damage = 8.0
 	melee_armor = 1.0
 	pierce_armor = 1.0
-	bonus_vs_cavalry = 10.0
+	bonus_vs_cavalry = 6.0
 	attack_range = 36.0
 	attack_cooldown = 0.85
 	can_attack = true
