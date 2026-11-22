@@ -19,18 +19,64 @@ var hp: float
 var selected: bool = false
 var attack_target: Node2D = null
 var _attack_timer: float = 0.0
+var _facing: String = "down"
+var _facing_textures: Dictionary = {}
+var _visual: Sprite2D
 
 @onready var navigation_agent: NavigationAgent2D = $NavigationAgent2D
 
 
 func _ready() -> void:
 	hp = max_hp
+	_visual = get_node_or_null("Visual") as Sprite2D
 	add_to_group("units")
 	_register_team_groups()
 	if navigation_agent:
 		navigation_agent.velocity_computed.connect(_on_velocity_computed)
 		navigation_agent.avoidance_enabled = true
 		navigation_agent.max_speed = speed
+
+
+func configure_facing_sprites(unit_key: String) -> void:
+	_facing_textures = {
+		"down": load("res://assets/sprites/units/%s_down.png" % unit_key),
+		"left": load("res://assets/sprites/units/%s_left.png" % unit_key),
+		"right": load("res://assets/sprites/units/%s_right.png" % unit_key),
+		"up": load("res://assets/sprites/units/%s_up.png" % unit_key),
+	}
+	if _visual == null:
+		_visual = get_node_or_null("Visual") as Sprite2D
+	if _visual:
+		_visual.centered = true
+		_visual.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		_visual.offset = Vector2(0.0, 8.0)
+	_apply_facing_texture()
+
+
+func _apply_facing_texture() -> void:
+	if _visual == null or not _facing_textures.has(_facing):
+		return
+	_visual.texture = _facing_textures[_facing]
+
+
+func _update_facing_from_velocity() -> void:
+	if velocity.length_squared() < 4.0:
+		return
+	var next_facing: String
+	if absf(velocity.x) > absf(velocity.y):
+		next_facing = "right" if velocity.x > 0.0 else "left"
+	else:
+		next_facing = "down" if velocity.y > 0.0 else "up"
+	if next_facing == _facing:
+		return
+	_facing = next_facing
+	_apply_facing_texture()
+
+
+func _hp_bar_y() -> float:
+	if _visual and _visual.texture:
+		return _visual.offset.y - float(_visual.texture.get_height()) * 0.5 - 6.0
+	return -28.0
 
 
 func _register_team_groups() -> void:
@@ -47,8 +93,9 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, 14.0, 0.0, TAU, 28, Color(1.0, 0.9, 0.2, 0.95), 2.0)
 	var ratio := clampf(hp / maxf(max_hp, 1.0), 0.0, 1.0)
 	var bar_w := 20.0
-	draw_rect(Rect2(Vector2(-bar_w * 0.5, -18.0), Vector2(bar_w, 3.0)), Color(0.1, 0.1, 0.1, 0.8))
-	draw_rect(Rect2(Vector2(-bar_w * 0.5, -18.0), Vector2(bar_w * ratio, 3.0)), Color(0.2, 0.85, 0.25, 0.95))
+	var bar_y := _hp_bar_y()
+	draw_rect(Rect2(Vector2(-bar_w * 0.5, bar_y), Vector2(bar_w, 3.0)), Color(0.1, 0.1, 0.1, 0.8))
+	draw_rect(Rect2(Vector2(-bar_w * 0.5, bar_y), Vector2(bar_w * ratio, 3.0)), Color(0.2, 0.85, 0.25, 0.95))
 
 
 func set_selected(value: bool) -> void:
@@ -165,6 +212,7 @@ func _steer_toward_target() -> void:
 
 func _on_velocity_computed(safe_velocity: Vector2) -> void:
 	velocity = safe_velocity
+	_update_facing_from_velocity()
 	move_and_slide()
 
 

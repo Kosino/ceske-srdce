@@ -1,17 +1,15 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/world/DropOff.gd" id="1_dropoff"]
+[ext_resource type="Texture2D" path="res://assets/sprites/buildings/town_center.png" id="2_tex"]
 
 [node name="DropOff" type="Node2D"]
 script = ExtResource("1_dropoff")
 
-[node name="Visual" type="Polygon2D" parent="."]
-color = Color(0.55, 0.45, 0.35, 1)
-polygon = PackedVector2Array(-40, -30, 40, -30, 40, 30, -40, 30)
-
-[node name="Roof" type="Polygon2D" parent="."]
-color = Color(0.7, 0.25, 0.2, 1)
-polygon = PackedVector2Array(-48, -30, 0, -58, 48, -30)
+[node name="Visual" type="Sprite2D" parent="."]
+texture_filter = 1
+texture = ExtResource("2_tex")
+centered = true
 
 [node name="Label" type="Label" parent="."]
 offset_left = -48.0

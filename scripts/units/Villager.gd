@@ -32,6 +32,7 @@ func _ready() -> void:
 	speed = 80.0
 	attack_damage = 3.0
 	super._ready()
+	configure_facing_sprites("villager")
 	add_to_group("villagers")
 	_refresh_carry_label()
 

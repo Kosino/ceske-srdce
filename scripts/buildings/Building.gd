@@ -4,6 +4,8 @@ class_name Building
 signal destroyed(building: Building)
 signal construction_finished(building: Building)
 
+const CONSTRUCTION_TEX := preload("res://assets/sprites/buildings/construction_site.png")
+
 @export var team: int = 0
 @export var building_id: String = ""
 @export var display_name: String = "Budova"
@@ -16,16 +18,22 @@ var hp: float
 var is_complete: bool = true
 var build_progress: float = 1.0
 var _builders: Dictionary = {} # instance_id -> Villager
+var _final_texture: Texture2D
+var _visual: Sprite2D
 
 
 func _ready() -> void:
+	_visual = get_node_or_null("Visual") as Sprite2D
+	if _visual and _visual.texture:
+		_final_texture = _visual.texture
 	if is_complete:
 		hp = max_hp
 		build_progress = 1.0
+		_show_final_visual()
 	else:
 		hp = maxf(max_hp * 0.1, 1.0)
 		build_progress = 0.0
-		modulate = Color(1.0, 1.0, 1.0, 0.65)
+		_show_construction_visual()
 	add_to_group("buildings")
 	if team == 0:
 		add_to_group("player_buildings")
@@ -40,7 +48,7 @@ func start_construction(time_sec: float = -1.0) -> void:
 	is_complete = false
 	build_progress = 0.0
 	hp = maxf(max_hp * 0.1, 1.0)
-	modulate = Color(1.0, 1.0, 1.0, 0.65)
+	_show_construction_visual()
 	_builders.clear()
 	if is_in_group("dropoffs"):
 		remove_from_group("dropoffs")
@@ -89,7 +97,7 @@ func _finish_construction() -> void:
 	is_complete = true
 	build_progress = 1.0
 	hp = max_hp
-	modulate = Color(1, 1, 1, 1)
+	_show_final_visual()
 	for id in _builders.keys():
 		var v = _builders[id]
 		if is_instance_valid(v) and v.has_method("notify_build_finished"):
@@ -106,6 +114,31 @@ func _finish_construction() -> void:
 ## Override in subclasses for pop/drop-off/unlock.
 func _on_construction_finished() -> void:
 	pass
+
+
+func _show_construction_visual() -> void:
+	modulate = Color(1, 1, 1, 1)
+	if _visual == null:
+		return
+	_visual.texture = CONSTRUCTION_TEX
+	_anchor_sprite(_visual, CONSTRUCTION_TEX)
+
+
+func _show_final_visual() -> void:
+	modulate = Color(1, 1, 1, 1)
+	if _visual == null:
+		return
+	if _final_texture:
+		_visual.texture = _final_texture
+	_anchor_sprite(_visual, _visual.texture)
+
+
+func _anchor_sprite(sprite: Sprite2D, tex: Texture2D) -> void:
+	if sprite == null or tex == null:
+		return
+	sprite.centered = true
+	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	sprite.offset = Vector2(0.0, footprint.y * 0.5 - float(tex.get_height()) * 0.5)
 
 
 func _prune_builders() -> void:

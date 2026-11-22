@@ -12,14 +12,12 @@ func _ready() -> void:
 	attack_cooldown = 0.8
 	can_attack = true
 	super._ready()
+	configure_facing_sprites("soldier")
 	add_to_group("soldiers")
 	_apply_team_visual()
 
 
 func _apply_team_visual() -> void:
-	if not has_node("Visual"):
+	if _visual == null:
 		return
-	if team == 0:
-		$Visual.color = Color(0.2, 0.45, 0.85, 1.0)
-	else:
-		$Visual.color = Color(0.75, 0.15, 0.15, 1.0)
+	_visual.modulate = Color(1, 1, 1, 1) if team == 0 else Color(1.0, 0.55, 0.55, 1.0)

@@ -12,6 +12,10 @@ GameManager="*res://autoload/GameManager.gd"
 SelectionManager="*res://autoload/SelectionManager.gd"
 NotificationManager="*res://autoload/NotificationManager.gd"
 
+[rendering]
+
+textures/canvas_textures/default_texture_filter=0
+
 [input]
 
 camera_left={
