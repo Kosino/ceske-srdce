@@ -1,9 +1,12 @@
 extends Node
 
 signal selection_changed(units: Array)
+signal building_selection_changed(building: Node)
 signal formation_changed(kind: String)
 
 var selected_units: Array[Node] = []
+## Selected production building (Radnice / Kasárna / Střelnice) — AoE-like train UI.
+var selected_building: Node = null
 ## Current formation for group moves (AoE II style).
 var formation: String = FormationData.LINE
 
@@ -18,26 +21,46 @@ func set_formation(kind: String) -> void:
 
 
 func select_single(unit: Node) -> void:
-	clear_selection()
+	_clear_building()
+	clear_selection(false)
 	if unit and is_instance_valid(unit):
 		_add(unit)
 	selection_changed.emit(selected_units)
 
 
 func select_multiple(units: Array) -> void:
-	clear_selection()
+	_clear_building()
+	clear_selection(false)
 	for u in units:
 		if u and is_instance_valid(u):
 			_add(u)
 	selection_changed.emit(selected_units)
 
 
-func clear_selection() -> void:
+func select_building(building: Node) -> void:
+	clear_selection(false)
+	_clear_building()
+	if building and is_instance_valid(building):
+		selected_building = building
+	building_selection_changed.emit(selected_building)
+	selection_changed.emit(selected_units)
+
+
+func clear_selection(emit_building: bool = true) -> void:
 	for u in selected_units:
 		if is_instance_valid(u) and u.has_method("set_selected"):
 			u.set_selected(false)
 	selected_units.clear()
+	if emit_building:
+		_clear_building()
 	selection_changed.emit(selected_units)
+
+
+func _clear_building() -> void:
+	if selected_building == null:
+		return
+	selected_building = null
+	building_selection_changed.emit(null)
 
 
 func issue_move(world_pos: Vector2) -> void:
@@ -61,7 +84,6 @@ func issue_move(world_pos: Vector2) -> void:
 		facing = Vector2.RIGHT
 	else:
 		facing = facing.normalized()
-	# AoE II: line axis is perpendicular to march; sort units along that axis to avoid crossing.
 	var right := Vector2(-facing.y, facing.x)
 	movers.sort_custom(func(a: Unit, b: Unit) -> bool:
 		return a.global_position.dot(right) < b.global_position.dot(right)
@@ -103,6 +125,13 @@ func notify_unit_removed(unit: Node) -> void:
 	if selected_units.has(unit):
 		selected_units.erase(unit)
 		selection_changed.emit(selected_units)
+
+
+func has_selected_villager() -> bool:
+	for u in selected_units:
+		if is_instance_valid(u) and u is Villager:
+			return true
+	return false
 
 
 func _add(unit: Node) -> void:

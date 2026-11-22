@@ -43,13 +43,35 @@ func _ready() -> void:
 		await _run_civ_bonus_smoke()
 		await _run_formation_smoke()
 		await _run_ai_economy_smoke()
+		await _run_hud_layout_smoke()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--hud-shot"):
+		await prepare_hud_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--formation-shot"):
 		await prepare_formation_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--ai-shot"):
 		await prepare_ai_screenshot()
 	else:
 		await _sample_windowed_fps()
-	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 stavění/trénink.")
+	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 debug.")
+
+
+## Windowed screenshot of AoE-like HUD with a villager selected (build buttons).
+func prepare_hud_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	var cam := get_node_or_null("Camera2D") as Camera2D
+	if cam:
+		cam.position = Vector2(900, 700)
+		cam.zoom = Vector2(1.0, 1.0)
+	await get_tree().create_timer(0.6).timeout
+	var villager := get_tree().get_first_node_in_group("villagers") as Villager
+	if villager and villager.team == 0:
+		SelectionManager.select_single(villager)
+	await get_tree().create_timer(0.8).timeout
+	await get_tree().process_frame
+	_save_shot("hud.png", 1)
 
 
 ## Windowed screenshot: 5 soldiers in Řada PERPENDICULAR to east march; hide DebugPanel.
@@ -734,6 +756,62 @@ func _run_formation_smoke() -> void:
 		print("[TEST] PASS formation spacing + shared speed + perpendicular")
 	else:
 		print("[TEST] FAIL formation spacing + shared speed + perpendicular")
+
+
+## HUD: layout nodes + DebugPanel hidden; villager → build buttons; Kovárna locked in age 1.
+func _run_hud_layout_smoke() -> void:
+	await get_tree().physics_frame
+	var ui := get_node_or_null("UI")
+	var res := ui.get_node_or_null("ResourceBar") if ui else null
+	var cmd := ui.get_node_or_null("CommandPanel") as CommandPanel if ui else null
+	var sel := ui.get_node_or_null("SelectionInfo") if ui else null
+	var mini := ui.get_node_or_null("Minimap") if ui else null
+	var debug := get_node_or_null("DebugPanel")
+	var nodes_ok: bool = res != null and cmd != null and sel != null and mini != null
+	var debug_ok: bool = debug != null and not debug.visible
+	print("[TEST] hud nodes res=%s cmd=%s sel=%s mini=%s debug_hidden=%s" % [
+		res != null, cmd != null, sel != null, mini != null, debug_ok
+	])
+
+	GameManager.current_age = 1
+	var villager: Villager = null
+	for n in get_tree().get_nodes_in_group("villagers"):
+		if n is Villager and (n as Villager).team == 0:
+			villager = n as Villager
+			break
+	var build_ok := false
+	var kovarna_locked := false
+	if villager and cmd:
+		SelectionManager.select_single(villager)
+		await get_tree().process_frame
+		cmd._refresh_context_ui()
+		build_ok = cmd.is_build_row_visible()
+		var kov := cmd.get_build_button("blacksmith")
+		kovarna_locked = kov != null and kov.disabled
+		print("[TEST] hud villager build_row=%s kovarna_disabled=%s tip=%s" % [
+			build_ok, kovarna_locked, kov.tooltip_text if kov else ""
+		])
+	SelectionManager.clear_selection()
+
+	# Czech resource labels on map nodes.
+	var czech_ok := true
+	for n in get_tree().get_nodes_in_group("resources"):
+		if not (n is ResourceNode):
+			continue
+		var rn := n as ResourceNode
+		var t := rn.get_node_or_null("Label") as Label
+		if t == null:
+			continue
+		if rn.resource_type == "wood" and not t.text.begins_with("Dřevo"):
+			czech_ok = false
+		if rn.resource_type == "food" and not t.text.begins_with("Jídlo"):
+			czech_ok = false
+	print("[TEST] hud czech_labels=%s" % czech_ok)
+
+	if nodes_ok and debug_ok and build_ok and kovarna_locked and czech_ok:
+		print("[TEST] PASS HUD layout + villager builds + DebugPanel hidden")
+	else:
+		print("[TEST] FAIL HUD layout + villager builds + DebugPanel hidden")
 
 
 ## AI economy: places ≥1 building and launches a wave within timeout (Husité).

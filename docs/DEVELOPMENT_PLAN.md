@@ -20,3 +20,24 @@
 - Civilizace a bonusy ✅ (Schváleno 2026-11-22; unikátní jednotky data-only)
 - Formace ✅ (Schváleno spacing; řada / rozptyl / box; řada ⊥ pochod)
 - Lepší AI ✅ (Husité economy + vlny; Schváleno CS Designer wave size/interval)
+
+## Fáze 3: Hratelnost & UI
+- AoE-like bottom HUD (resources top; command panel bottom-left; selection info center; minimap bottom-right) ✅
+- DebugPanel F3 only ✅
+- Victory/Defeat (enemy Radnice + all units destroyed)
+- Main menu civ pick (player + AI)
+- WASD/edge camera + zoom
+
+## Fáze 4: Obsah
+- Gold/stone mines
+- Blacksmith techs (infantry attack/armor)
+- Stable + cavalry
+- Unique civ units
+- Walls/towers
+- Age 3–4 buildings
+- Monk
+
+## Fáze 5: Polish
+- Sounds
+- Balance via AI vs AI headless sim
+- Windows export

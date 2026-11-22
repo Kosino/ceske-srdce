@@ -8,6 +8,8 @@ var _fps_accum: float = 0.0
 
 
 func _ready() -> void:
+	# Fáze 3: debug is F3-only — never cover the map on start.
+	visible = false
 	GameManager.resources_changed.connect(_refresh_stats)
 	GameManager.population_changed.connect(_refresh_stats)
 	GameManager.age_changed.connect(_refresh_stats)

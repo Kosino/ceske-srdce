@@ -1,23 +1,42 @@
 extends PanelContainer
 class_name CommandPanel
+## Bottom-left command strip (AoE-like HUD). Context: villager builds / building trains.
 
-@onready var summary_label: Label = %CommandSummary
+const BUILD_BUTTONS := [
+	{"id": "house", "name": "Dům"},
+	{"id": "lumber_camp", "name": "Pila"},
+	{"id": "mill", "name": "Mlýn"},
+	{"id": "barracks", "name": "Kasárna"},
+	{"id": "archery_range", "name": "Střelnice"},
+	{"id": "blacksmith", "name": "Kovárna"},
+]
+
 @onready var age_label: Label = %AgeLabel
 @onready var research_button: Button = %ResearchAgeButton
 @onready var command_vbox: VBoxContainer = $CommandMargin/CommandVBox
+@onready var train_row: HBoxContainer = $CommandMargin/CommandVBox/TrainRow
+@onready var train_soldier: Button = $CommandMargin/CommandVBox/TrainRow/TrainSoldier
+@onready var train_spearman: Button = $CommandMargin/CommandVBox/TrainRow/TrainSpearman
+@onready var train_archer: Button = $CommandMargin/CommandVBox/TrainRow/TrainArcher
+@onready var train_villager: Button = $CommandMargin/CommandVBox/TrainRow/TrainVillager
 
 var _formation_buttons: Dictionary = {} # kind -> Button
+var _build_buttons: Dictionary = {} # building_id -> Button
+var _build_row: HBoxContainer
 var _research_refresh_accum: float = 0.0
 
 
 func _ready() -> void:
-	SelectionManager.selection_changed.connect(_on_selection_changed)
+	add_to_group("hud_command_panel")
+	SelectionManager.selection_changed.connect(_on_context_changed)
+	SelectionManager.building_selection_changed.connect(_on_building_changed)
 	SelectionManager.formation_changed.connect(_refresh_formation_buttons)
 	GameManager.age_changed.connect(_refresh_age_ui)
 	_ensure_formation_row()
-	_on_selection_changed(SelectionManager.selected_units)
+	_ensure_build_row()
 	_refresh_age_ui()
 	_refresh_formation_buttons(SelectionManager.formation)
+	_refresh_context_ui()
 
 
 func _process(delta: float) -> void:
@@ -26,17 +45,23 @@ func _process(delta: float) -> void:
 		return
 	_research_refresh_accum = 0.0
 	_refresh_research_button()
+	_refresh_build_costs()
+
+
+func _on_context_changed(_units: Array) -> void:
+	_refresh_context_ui()
+
+
+func _on_building_changed(_building: Node) -> void:
+	_refresh_context_ui()
 
 
 func _ensure_formation_row() -> void:
-	if command_vbox == null:
-		return
-	if command_vbox.has_node("FormationRow"):
+	if command_vbox == null or command_vbox.has_node("FormationRow"):
 		return
 	var row := HBoxContainer.new()
 	row.name = "FormationRow"
 	row.add_theme_constant_override("separation", 6)
-	# Insert after StopButton if present.
 	var stop_i := command_vbox.get_node_or_null("StopButton")
 	var insert_at := stop_i.get_index() + 1 if stop_i else command_vbox.get_child_count()
 	command_vbox.add_child(row)
@@ -49,6 +74,83 @@ func _ensure_formation_row() -> void:
 		btn.pressed.connect(_on_formation_pressed.bind(kind))
 		row.add_child(btn)
 		_formation_buttons[kind] = btn
+
+
+func _ensure_build_row() -> void:
+	if command_vbox == null or command_vbox.has_node("BuildRow"):
+		_build_row = command_vbox.get_node_or_null("BuildRow") as HBoxContainer
+		return
+	_build_row = HBoxContainer.new()
+	_build_row.name = "BuildRow"
+	_build_row.add_theme_constant_override("separation", 4)
+	_build_row.visible = false
+	# Insert before TrainRow.
+	var train_i := train_row.get_index() if train_row else command_vbox.get_child_count()
+	command_vbox.add_child(_build_row)
+	command_vbox.move_child(_build_row, train_i)
+	for def in BUILD_BUTTONS:
+		var bid: String = def["id"]
+		var btn := Button.new()
+		btn.name = "Build_%s" % bid
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.pressed.connect(_on_build_pressed.bind(bid))
+		_build_row.add_child(btn)
+		_build_buttons[bid] = btn
+	_refresh_build_costs()
+
+
+func _refresh_context_ui() -> void:
+	var villager_sel := SelectionManager.has_selected_villager()
+	if _build_row:
+		_build_row.visible = villager_sel
+	if villager_sel:
+		_refresh_build_costs()
+
+	var b := SelectionManager.selected_building
+	var show_train := b != null and is_instance_valid(b)
+	if train_row:
+		train_row.visible = show_train
+	if not show_train:
+		return
+	var is_hall := b is DropOff or b.is_in_group("player_town_hall")
+	var is_barracks := b is Barracks
+	var is_archery := b is ArcheryRange
+	if train_villager:
+		train_villager.visible = is_hall
+	if train_soldier:
+		train_soldier.visible = is_barracks
+	if train_spearman:
+		train_spearman.visible = is_barracks
+	if train_archer:
+		train_archer.visible = is_archery
+
+
+func _refresh_build_costs() -> void:
+	for def in BUILD_BUTTONS:
+		var bid: String = def["id"]
+		var btn: Button = _build_buttons.get(bid)
+		if btn == null:
+			continue
+		var base: Dictionary = BuildingPlacer.COSTS.get(bid, {})
+		var cost := GameManager.adjust_building_cost(base, 0)
+		var cost_txt := CivData.format_cost(cost)
+		btn.text = "%s\n%s" % [def["name"], cost_txt]
+		var unlocked := GameManager.is_building_unlocked(bid)
+		btn.disabled = not unlocked
+		if unlocked:
+			btn.tooltip_text = "Cena (civ): %s" % cost_txt
+		else:
+			var need_age := AgeData.building_unlock_age(bid)
+			btn.tooltip_text = "Zamčeno do věku %s (%d)" % [AgeData.age_name(need_age), need_age]
+
+
+func _on_build_pressed(building_id: String) -> void:
+	if not SelectionManager.has_selected_villager():
+		NotificationManager.show_message("Vyber vesničana ke stavbě.")
+		return
+	var placer := get_tree().get_first_node_in_group("building_placer") as BuildingPlacer
+	if placer:
+		placer.begin_place(building_id)
 
 
 func _on_formation_pressed(kind: String) -> void:
@@ -64,52 +166,16 @@ func _refresh_formation_buttons(_kind: String = "") -> void:
 		btn.modulate = Color(0.75, 1.0, 0.75) if kind == current else Color.WHITE
 
 
-func _on_selection_changed(units: Array) -> void:
-	if units.is_empty():
-		summary_label.text = "Výběr: nic\nLMB výběr / box, RMB pohyb/útok"
-		return
-	var counts := {"soldier": 0, "spearman": 0, "archer": 0, "villager": 0, "other": 0}
-	for u in units:
-		if u is Soldier:
-			counts["soldier"] += 1
-		elif u is Spearman:
-			counts["spearman"] += 1
-		elif u is Archer:
-			counts["archer"] += 1
-		elif u is Villager:
-			counts["villager"] += 1
-		else:
-			counts["other"] += 1
-	var parts: PackedStringArray = []
-	if counts["soldier"] > 0:
-		parts.append("%d zbrojnoš" % counts["soldier"])
-	if counts["spearman"] > 0:
-		parts.append("%d kopiník" % counts["spearman"])
-	if counts["archer"] > 0:
-		parts.append("%d lučištník" % counts["archer"])
-	if counts["villager"] > 0:
-		parts.append("%d vesničan" % counts["villager"])
-	if counts["other"] > 0:
-		parts.append("%d jiní" % counts["other"])
-	summary_label.text = "Výběr: %s\nFormace: %s" % [
-		", ".join(parts), FormationData.display_name(SelectionManager.formation)
-	]
-
-
 func _refresh_age_ui() -> void:
 	if age_label:
-		age_label.text = "Věk: %s (%d) · %s" % [
-			GameManager.get_age_name(), GameManager.current_age, GameManager.get_civ_name(0)
-		]
+		age_label.text = "Věk: %s (%d)" % [GameManager.get_age_name(), GameManager.current_age]
 	_refresh_research_button()
+	_refresh_build_costs()
 
 
 func _refresh_research_button() -> void:
-	# Keep label in sync even if age was set without going through _refresh_age_ui.
 	if age_label:
-		age_label.text = "Věk: %s (%d) · %s" % [
-			GameManager.get_age_name(), GameManager.current_age, GameManager.get_civ_name(0)
-		]
+		age_label.text = "Věk: %s (%d)" % [GameManager.get_age_name(), GameManager.current_age]
 	if research_button == null:
 		return
 	if GameManager.current_age >= AgeData.MAX_AGE:
@@ -149,7 +215,9 @@ func _on_train_spearman_pressed() -> void:
 
 
 func _on_train_archer_pressed() -> void:
-	var range_b := get_tree().get_first_node_in_group("archery_ranges") as ArcheryRange
+	var range_b := SelectionManager.selected_building as ArcheryRange
+	if range_b == null:
+		range_b = get_tree().get_first_node_in_group("archery_ranges") as ArcheryRange
 	if range_b == null:
 		NotificationManager.show_message("Nejdřív postav Střelnici.")
 		return
@@ -157,7 +225,9 @@ func _on_train_archer_pressed() -> void:
 
 
 func _on_train_villager_pressed() -> void:
-	var hall := get_tree().get_first_node_in_group("player_town_hall") as DropOff
+	var hall := SelectionManager.selected_building as DropOff
+	if hall == null:
+		hall = get_tree().get_first_node_in_group("player_town_hall") as DropOff
 	if hall == null:
 		NotificationManager.show_message("Nemáš radnici.")
 		return
@@ -165,8 +235,19 @@ func _on_train_villager_pressed() -> void:
 
 
 func _barracks_enqueue(unit_id: String) -> void:
-	var barracks := get_tree().get_first_node_in_group("barracks") as Barracks
+	var barracks := SelectionManager.selected_building as Barracks
+	if barracks == null:
+		barracks = get_tree().get_first_node_in_group("barracks") as Barracks
 	if barracks == null:
 		NotificationManager.show_message("Nejdřív postav Kasárnu.")
 		return
 	barracks.enqueue_unit(unit_id)
+
+
+## Test helpers
+func get_build_button(building_id: String) -> Button:
+	return _build_buttons.get(building_id) as Button
+
+
+func is_build_row_visible() -> bool:
+	return _build_row != null and _build_row.visible
