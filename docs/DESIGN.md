@@ -16,7 +16,7 @@
 
 Postup věku: výzkum v Radnici (fronta; během výzkumu Radnice netrénuje). Podmínka: **2 dokončené budovy z aktuálního věku** (Radnice se nepočítá). Unlock budov/jednotek: jedna tabulka `AgeData`.
 
-**NÁVRH** (AoE2-like defaults, Honza schvaluje):
+**Schváleno 2026-11-22**:
 
 | Přechod | Cena | Čas |
 |---------|------|-----|

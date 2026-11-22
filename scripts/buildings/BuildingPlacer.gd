@@ -9,6 +9,14 @@ const ARCHERY_SCENE := preload("res://scenes/buildings/ArcheryRange.tscn")
 const LUMBER_SCENE := preload("res://scenes/buildings/LumberCamp.tscn")
 const MILL_SCENE := preload("res://scenes/buildings/Mill.tscn")
 
+const GHOST_TEXTURES := {
+	"house": preload("res://assets/sprites/buildings/house.png"),
+	"barracks": preload("res://assets/sprites/buildings/barracks.png"),
+	"archery_range": preload("res://assets/sprites/buildings/archery_range.png"),
+	"lumber_camp": preload("res://assets/sprites/buildings/lumber_camp.png"),
+	"mill": preload("res://assets/sprites/buildings/mill.png"),
+}
+
 ## DESIGN costs and base build times (1 villager).
 const COSTS := {
 	"house": {"wood": 25},
@@ -39,13 +47,15 @@ const FOOTPRINTS := {
 
 var placing_type: String = ""
 var entities: Node2D
-var _ghost: Polygon2D
+var _ghost: Sprite2D
 
 
 func _ready() -> void:
 	add_to_group("building_placer")
 	entities = get_node_or_null(entities_path)
-	_ghost = Polygon2D.new()
+	_ghost = Sprite2D.new()
+	_ghost.centered = true
+	_ghost.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_ghost.z_index = 100
 	_ghost.visible = false
 	add_child(_ghost)
@@ -60,7 +70,7 @@ func begin_place(building_type: String) -> void:
 		)
 		return
 	placing_type = building_type
-	_configure_ghost(FOOTPRINTS[building_type])
+	_configure_ghost(building_type)
 	_ghost.visible = true
 	NotificationManager.show_message("Stavba: %s (LMB položit, RMB zrušit)" % building_type)
 
@@ -134,7 +144,7 @@ func _process(_delta: float) -> void:
 	var mouse := get_global_mouse_position()
 	_ghost.global_position = mouse
 	var ok := _can_place(placing_type, mouse) and GameManager.can_afford(COSTS[placing_type])
-	_ghost.color = Color(0.2, 0.85, 0.3, 0.35) if ok else Color(0.9, 0.2, 0.2, 0.35)
+	_ghost.modulate = Color(0.35, 1.0, 0.45, 0.45) if ok else Color(1.0, 0.35, 0.35, 0.45)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -167,14 +177,14 @@ func _instantiate_building(building_type: String) -> Building:
 			return null
 
 
-func _configure_ghost(size: Vector2) -> void:
-	var half := size * 0.5
-	_ghost.polygon = PackedVector2Array([
-		Vector2(-half.x, -half.y),
-		Vector2(half.x, -half.y),
-		Vector2(half.x, half.y),
-		Vector2(-half.x, half.y),
-	])
+func _configure_ghost(building_type: String) -> void:
+	var tex: Texture2D = GHOST_TEXTURES.get(building_type)
+	var footprint: Vector2 = FOOTPRINTS[building_type]
+	_ghost.texture = tex
+	_ghost.centered = true
+	if tex:
+		_ghost.offset = Vector2(0.0, footprint.y * 0.5 - float(tex.get_height()) * 0.5)
+	_ghost.modulate = Color(1, 1, 1, 0.45)
 
 
 func _can_place(building_type: String, world_pos: Vector2) -> bool:

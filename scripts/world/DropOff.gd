@@ -33,6 +33,7 @@ func _ready() -> void:
 	hp = max_hp
 	add_to_group("dropoffs")
 	add_to_group("town_halls")
+	_anchor_visual()
 	if team == 0:
 		add_to_group("player_town_hall")
 		add_to_group("player_buildings")
@@ -42,11 +43,19 @@ func _ready() -> void:
 		add_to_group("enemy_buildings")
 		building_name = "Nepřátelská radnice"
 		if has_node("Visual"):
-			$Visual.color = Color(0.35, 0.2, 0.2, 1.0)
-		if has_node("Roof"):
-			$Roof.color = Color(0.45, 0.1, 0.1, 1.0)
+			$Visual.modulate = Color(0.75, 0.45, 0.45, 1.0)
 	if has_node("Label"):
 		$Label.text = building_name
+
+
+func _anchor_visual() -> void:
+	var visual := get_node_or_null("Visual") as Sprite2D
+	if visual == null or visual.texture == null:
+		return
+	visual.centered = true
+	visual.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	# Virtual footprint 80×80 — bottom of sprite on footprint bottom.
+	visual.offset = Vector2(0.0, 40.0 - float(visual.texture.get_height()) * 0.5)
 
 
 func accepts(resource_type: String) -> bool:
@@ -176,8 +185,12 @@ func _complete_training() -> void:
 
 func _draw() -> void:
 	var ratio := clampf(hp / maxf(max_hp, 1.0), 0.0, 1.0)
-	draw_rect(Rect2(Vector2(-40.0, -70.0), Vector2(80.0, 5.0)), Color(0.1, 0.1, 0.1, 0.8))
-	draw_rect(Rect2(Vector2(-40.0, -70.0), Vector2(80.0 * ratio, 5.0)), Color(0.9, 0.2, 0.15, 0.95))
+	var bar_y := -58.0
+	var visual := get_node_or_null("Visual") as Sprite2D
+	if visual and visual.texture:
+		bar_y = visual.offset.y - float(visual.texture.get_height()) * 0.5 - 8.0
+	draw_rect(Rect2(Vector2(-40.0, bar_y), Vector2(80.0, 5.0)), Color(0.1, 0.1, 0.1, 0.8))
+	draw_rect(Rect2(Vector2(-40.0, bar_y), Vector2(80.0 * ratio, 5.0)), Color(0.9, 0.2, 0.15, 0.95))
 
 
 func take_damage(amount: float) -> void:

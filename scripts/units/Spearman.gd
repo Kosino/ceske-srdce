@@ -13,6 +13,7 @@ func _ready() -> void:
 	attack_cooldown = 0.8
 	can_attack = true
 	super._ready()
+	configure_facing_sprites("spearman")
 	add_to_group("soldiers")
-	if has_node("Visual"):
-		$Visual.color = Color(0.15, 0.55, 0.35, 1.0) if team == 0 else Color(0.55, 0.2, 0.2, 1.0)
+	if _visual:
+		_visual.modulate = Color(1, 1, 1, 1) if team == 0 else Color(1.0, 0.55, 0.55, 1.0)

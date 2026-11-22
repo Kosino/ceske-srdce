@@ -8,12 +8,23 @@ const ARCHER_SCENE := preload("res://scenes/units/Archer.tscn")
 const BARRACKS_SCENE := preload("res://scenes/buildings/Barracks.tscn")
 const PROJECTILE_SCENE := preload("res://scenes/combat/Projectile.tscn")
 
+const TEX_GRASS_1 := preload("res://assets/sprites/terrain/grass_1.png")
+const TEX_GRASS_2 := preload("res://assets/sprites/terrain/grass_2.png")
+const TEX_DIRT := preload("res://assets/sprites/terrain/dirt.png")
+
+const TILE := 40
+const MAP_TILES := 75 # 3000 / 40
+const SOURCE_GRASS_1 := 0
+const SOURCE_GRASS_2 := 1
+const SOURCE_DIRT := 2
+
 @onready var units: Node2D = $Units
 @onready var building_placer: BuildingPlacer = $BuildingPlacer
 @onready var victory: VictoryController = $VictoryController
 
 
 func _ready() -> void:
+	_setup_terrain()
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	_spawn_core_demo()
@@ -26,6 +37,61 @@ func _ready() -> void:
 	await _run_age_gate_smoke()
 	await _run_age_locked_building_smoke()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 stavění/trénink.")
+
+
+func _setup_terrain() -> void:
+	var old := get_node_or_null("Ground")
+	if old:
+		old.queue_free()
+
+	var layer := TileMapLayer.new()
+	layer.name = "Terrain"
+	layer.z_index = -10
+	layer.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	layer.tile_set = _build_terrain_tileset()
+	add_child(layer)
+	move_child(layer, 0)
+
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242
+	for x in MAP_TILES:
+		for y in MAP_TILES:
+			var source_id := SOURCE_GRASS_1 if rng.randf() < 0.55 else SOURCE_GRASS_2
+			var alt := rng.randi_range(0, 2)
+			layer.set_cell(Vector2i(x, y), source_id, Vector2i.ZERO, alt)
+
+	# Dirt paths near Radnice (900, 700).
+	var hall := Vector2i(900 / TILE, 700 / TILE)
+	for dx in range(-4, 5):
+		layer.set_cell(hall + Vector2i(dx, 0), SOURCE_DIRT, Vector2i.ZERO)
+		layer.set_cell(hall + Vector2i(dx, 1), SOURCE_DIRT, Vector2i.ZERO)
+	for dy in range(-3, 5):
+		layer.set_cell(hall + Vector2i(0, dy), SOURCE_DIRT, Vector2i.ZERO)
+		layer.set_cell(hall + Vector2i(1, dy), SOURCE_DIRT, Vector2i.ZERO)
+	# Short spur toward wood node (~1080, 620).
+	for dx in range(0, 6):
+		layer.set_cell(hall + Vector2i(dx, -2), SOURCE_DIRT, Vector2i.ZERO)
+
+
+func _build_terrain_tileset() -> TileSet:
+	var tileset := TileSet.new()
+	tileset.tile_size = Vector2i(TILE, TILE)
+	var textures: Array[Texture2D] = [TEX_GRASS_1, TEX_GRASS_2, TEX_DIRT]
+	for i in textures.size():
+		var atlas := TileSetAtlasSource.new()
+		atlas.texture = textures[i]
+		atlas.texture_region_size = Vector2i(TILE, TILE)
+		atlas.create_tile(Vector2i.ZERO)
+		# Light modulate alts soften large flat grass fields (no second overlay).
+		if i != SOURCE_DIRT:
+			for alt_id in range(1, 3):
+				atlas.create_alternative_tile(Vector2i.ZERO, alt_id)
+				var td := atlas.get_tile_data(Vector2i.ZERO, alt_id)
+				if td:
+					var shade := 1.0 - 0.04 * float(alt_id)
+					td.modulate = Color(shade, shade * 1.02, shade * 0.96, 1.0)
+		tileset.add_source(atlas, i)
+	return tileset
 
 
 func _spawn_core_demo() -> void:

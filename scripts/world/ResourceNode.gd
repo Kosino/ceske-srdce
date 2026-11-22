@@ -3,27 +3,46 @@ class_name ResourceNode
 
 signal depleted
 
+const TEX_TREE_OAK := preload("res://assets/sprites/resources/tree_oak.png")
+const TEX_TREE_PINE := preload("res://assets/sprites/resources/tree_pine.png")
+const TEX_BERRY := preload("res://assets/sprites/resources/berry_bush.png")
+const TEX_GOLD := preload("res://assets/sprites/resources/gold_mine.png")
+const TEX_STONE := preload("res://assets/sprites/resources/stone_mine.png")
+
 @export var resource_type: String = "wood"
 @export var amount_remaining: int = 200
 @export var gather_radius: float = 28.0
 
-@onready var visual: Polygon2D = $Visual
+@onready var visual: Sprite2D = $Visual
 @onready var label: Label = $Label
 
 
 func _ready() -> void:
 	add_to_group("resources")
 	_refresh_label()
-	if visual:
-		match resource_type:
-			"food":
-				visual.color = Color(0.75, 0.55, 0.15, 1.0)
-			"gold":
-				visual.color = Color(0.9, 0.8, 0.2, 1.0)
-			"stone":
-				visual.color = Color(0.55, 0.55, 0.6, 1.0)
-			_:
-				visual.color = Color(0.4, 0.25, 0.12, 1.0)
+	_apply_resource_sprite()
+
+
+func _apply_resource_sprite() -> void:
+	if visual == null:
+		return
+	var tex: Texture2D
+	match resource_type:
+		"food":
+			tex = TEX_BERRY
+		"gold":
+			tex = TEX_GOLD
+		"stone":
+			tex = TEX_STONE
+		_:
+			# Alternate oak/pine for wood nodes.
+			var h := int(round(global_position.x * 0.05) + round(global_position.y * 0.05))
+			tex = TEX_TREE_OAK if h % 2 == 0 else TEX_TREE_PINE
+	visual.texture = tex
+	visual.centered = true
+	visual.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	# Feet / trunk near origin bottom.
+	visual.offset = Vector2(0.0, 8.0 - float(tex.get_height()) * 0.5)
 
 
 func is_depleted() -> bool:

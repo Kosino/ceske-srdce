@@ -9,9 +9,9 @@ size = Vector2(16, 16)
 motion_mode = 1
 script = ExtResource("1_soldier")
 
-[node name="Visual" type="Polygon2D" parent="."]
-color = Color(0.2, 0.45, 0.85, 1)
-polygon = PackedVector2Array(0, -10, 10, 8, -10, 8)
+[node name="Visual" type="Sprite2D" parent="."]
+texture_filter = 1
+centered = true
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("RectangleShape2D_body")
