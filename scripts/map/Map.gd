@@ -42,9 +42,65 @@ func _ready() -> void:
 		await _run_age_ui_sync_smoke()
 		await _run_civ_bonus_smoke()
 		await _run_formation_smoke()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--formation-shot"):
+		await prepare_formation_screenshot()
 	else:
 		await _sample_windowed_fps()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 stavění/trénink.")
+
+
+## Windowed screenshot: 5 soldiers in line after group move; hide DebugPanel; save PNG; quit.
+func prepare_formation_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	var cam := get_node_or_null("Camera2D") as Camera2D
+	var squad: Array = []
+	var origin := Vector2(780, 820)
+	for i in 5:
+		var s: Soldier = SOLDIER_SCENE.instantiate() as Soldier
+		s.team = 0
+		s.contribute_population = false
+		s.position = origin + Vector2(float(i) * 14.0, 0.0)
+		units.add_child(s)
+		squad.append(s)
+	await get_tree().physics_frame
+	SelectionManager.select_multiple(squad)
+	SelectionManager.set_formation(FormationData.LINE)
+	SelectionManager.issue_move(Vector2(1100, 820))
+	await get_tree().create_timer(2.4).timeout
+	var mid := Vector2.ZERO
+	var n := 0
+	for u in squad:
+		if is_instance_valid(u):
+			mid += (u as Node2D).global_position
+			n += 1
+	if n > 0:
+		mid /= float(n)
+	if cam:
+		cam.position = mid + Vector2(40.0, -20.0)
+		cam.zoom = Vector2(1.15, 1.15)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var img: Image = get_viewport().get_texture().get_image()
+	if img == null or img.get_width() < 2:
+		push_error("[SHOT] empty image")
+		get_tree().quit(1)
+		return
+	var dir := "res://docs/screenshots"
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir))
+	var path := "%s/pixel_art_formations.png" % dir
+	var save_err := img.save_png(path)
+	if save_err != OK:
+		push_error("[SHOT] save failed %s" % save_err)
+		get_tree().quit(1)
+		return
+	print("[SHOT] saved %s %dx%d squad=%d" % [
+		ProjectSettings.globalize_path(path), img.get_width(), img.get_height(), squad.size()
+	])
+	get_tree().quit(0)
+
 
 
 func _sample_windowed_fps() -> void:
@@ -557,12 +613,23 @@ func _run_civ_bonus_smoke() -> void:
 	var stone_ok := is_equal_approx(stone_m, 1.10) and CivData.HABSBURKOVE == "habsburkove"
 	print("[TEST] civ_habsburkove stone_mult=%.2f id=%s" % [stone_m, CivData.HABSBURKOVE])
 
+	var ids_ok := true
+	for civ_id in CivData.CIVS.keys():
+		var id_str := str(civ_id)
+		var named := CivData.civ_name(id_str)
+		var own: Dictionary = CivData.CIVS[civ_id]
+		var got := CivData.def_for(id_str)
+		var row_ok := named != id_str and got == own
+		print("[TEST] civ_id=%s name=%s own_def=%s" % [id_str, named, row_ok])
+		if not row_ok:
+			ids_ok = false
+
 	GameManager.player_civ = CivData.MORAVANE
 	GameManager.enemy_civ = CivData.HUSITE
-	if wood_ok and cost_ok and hp_ok and stone_ok:
-		print("[TEST] PASS civ bonuses (wood / cost / infantry HP / stone)")
+	if wood_ok and cost_ok and hp_ok and stone_ok and ids_ok:
+		print("[TEST] PASS civ bonuses (wood / cost / infantry HP / stone / ids)")
 	else:
-		print("[TEST] FAIL civ bonuses (wood / cost / infantry HP / stone)")
+		print("[TEST] FAIL civ bonuses (wood / cost / infantry HP / stone / ids)")
 
 
 ## Formation spacing + shared group move speed (slowest unit).

@@ -4,7 +4,7 @@ class_name FormationData
 
 const LINE := "line"
 const SCATTERED := "scattered"
-const BOX := "box" # wedge/box grid
+const BOX := "box"
 
 const NAMES := {
 	LINE: "Řada",

@@ -66,7 +66,7 @@ Skupinový pohyb (2+ jednotky): formace kolem cíle RMB; celá skupina jde rychl
 |---------|------------------|
 | Řada (`line`) | 36 px |
 | Rozptyl (`scattered`) | 56 px |
-| Box (`box`, klín/box) | 40 px |
+| Box (`box`) | 40 px |
 
 ## Core loop
 Resources → Stavění → Produkce jednotek → Combat → Postup věků
