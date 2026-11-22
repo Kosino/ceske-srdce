@@ -286,20 +286,22 @@ func prepare_monk_screenshot() -> void:
 	var ally: Soldier = SOLDIER_SCENE.instantiate() as Soldier
 	ally.team = 0
 	ally.contribute_population = false
-	ally.position = origin
+	ally.position = origin + Vector2(36, 8)
 	units.add_child(ally)
 	var monk: Monk = preload("res://scenes/units/Monk.tscn").instantiate() as Monk
 	monk.team = 0
 	monk.contribute_population = false
-	monk.position = origin + Vector2(-40, 0)
+	monk.position = origin + Vector2(-36, 8)
 	units.add_child(monk)
 	await get_tree().physics_frame
 	await get_tree().physics_frame
-	# Keep ally critically wounded for the shot (heal visibly in progress).
-	ally.hp = 8.0
+	ally.hp = 5.0
 	ally.queue_redraw()
 	monk._facing = "right"
 	monk._apply_facing_texture()
+	if monk._visual:
+		monk._visual.visible = true
+		monk._visual.z_index = 5
 	SelectionManager.select_single(monk)
 	monk.assign_heal(ally)
 	monk.monk_state = Monk.MonkState.HEALING
@@ -307,10 +309,9 @@ func prepare_monk_screenshot() -> void:
 	monk.stop_movement()
 	var cam := get_node_or_null("Camera2D") as RTSCamera
 	if cam:
-		cam.set_zoom_clamped(1.85)
-		cam.center_at(origin + Vector2(-10, -20))
-	await get_tree().create_timer(0.35).timeout
-	# Re-assert critically low HP so the bar reads as wounded in the shot.
+		cam.set_zoom_clamped(1.7)
+		cam.center_at(origin + Vector2(0, -16))
+	await get_tree().create_timer(0.4).timeout
 	ally.hp = 5.0
 	ally.queue_redraw()
 	monk.queue_redraw()
