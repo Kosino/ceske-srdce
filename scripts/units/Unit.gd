@@ -13,6 +13,7 @@ signal died(unit: Unit)
 @export var can_attack: bool = true
 @export var is_cavalry: bool = false
 @export var bonus_vs_cavalry: float = 0.0
+@export var bonus_vs_buildings: float = 0.0
 ## "melee" or "pierce" — archers pierce, others melee.
 @export var attack_type: String = "melee"
 @export var melee_armor: float = 0.0
@@ -216,6 +217,8 @@ func _try_strike() -> void:
 	var damage := attack_damage
 	if attack_target is Unit and (attack_target as Unit).is_cavalry:
 		damage += bonus_vs_cavalry
+	if attack_target is Building or attack_target is DropOff:
+		damage += bonus_vs_buildings
 	if attack_target.has_method("take_damage"):
 		attack_target.call("take_damage", damage, attack_type)
 		print("[COMBAT] team%d hit %s for %.1f (%s)" % [team, attack_target.name, damage, attack_type])

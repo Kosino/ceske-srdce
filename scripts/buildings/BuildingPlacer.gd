@@ -11,6 +11,7 @@ const MINING_SCENE := preload("res://scenes/buildings/MiningCamp.tscn")
 const MILL_SCENE := preload("res://scenes/buildings/Mill.tscn")
 const BLACKSMITH_SCENE := preload("res://scenes/buildings/Blacksmith.tscn")
 const STABLE_SCENE := preload("res://scenes/buildings/Stable.tscn")
+const CASTLE_SCENE := preload("res://scenes/buildings/Castle.tscn")
 
 const GHOST_TEXTURES := {
 	"house": preload("res://assets/sprites/buildings/house.png"),
@@ -21,6 +22,7 @@ const GHOST_TEXTURES := {
 	"mill": preload("res://assets/sprites/buildings/mill.png"),
 	"blacksmith": preload("res://assets/sprites/buildings/blacksmith.png"),
 	"stable": preload("res://assets/sprites/buildings/stable.png"),
+	"castle": preload("res://assets/sprites/buildings/castle.png"),
 }
 
 ## DESIGN costs and base build times (1 villager).
@@ -33,6 +35,7 @@ const COSTS := {
 	"mill": {"wood": 100},
 	"blacksmith": {"wood": 150},
 	"stable": {"wood": 175},
+	"castle": {"stone": 650},
 }
 
 const BUILD_TIMES := {
@@ -44,6 +47,7 @@ const BUILD_TIMES := {
 	"mill": 35.0,
 	"blacksmith": 40.0,
 	"stable": 45.0,
+	"castle": 120.0,
 }
 
 const FOOTPRINTS := {
@@ -55,6 +59,7 @@ const FOOTPRINTS := {
 	"mill": Vector2(72, 72),
 	"blacksmith": Vector2(80, 80),
 	"stable": Vector2(80, 80),
+	"castle": Vector2(160, 160),
 }
 
 ## Extra prerequisites beyond age unlock.
@@ -135,6 +140,10 @@ func place_at(building_type: String, world_pos: Vector2) -> Building:
 		(building as Barracks).spawn_parent = entities
 	elif building is ArcheryRange:
 		(building as ArcheryRange).spawn_parent = entities
+	elif building is Stable:
+		(building as Stable).spawn_parent = entities
+	elif building is Castle:
+		(building as Castle).spawn_parent = entities
 	var build_t: float = float(BUILD_TIMES.get(building_type, building.build_time))
 	building.start_construction(build_t)
 	_assign_builders(building)
@@ -210,6 +219,8 @@ func _instantiate_building(building_type: String) -> Building:
 			return BLACKSMITH_SCENE.instantiate() as Building
 		"stable":
 			return STABLE_SCENE.instantiate() as Building
+		"castle":
+			return CASTLE_SCENE.instantiate() as Building
 		_:
 			return null
 
