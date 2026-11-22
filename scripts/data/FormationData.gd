@@ -1,6 +1,6 @@
 extends Object
 class_name FormationData
-## AoE II-style group formations. Spacing = NÁVRH.
+## AoE II-style group formations. Spacing = Schváleno 2026-11-22.
 
 const LINE := "line"
 const SCATTERED := "scattered"
@@ -12,7 +12,7 @@ const NAMES := {
 	BOX: "Box",
 }
 
-## NÁVRH (Honza schvaluje): spacing between unit centers in px.
+## Schváleno 2026-11-22: spacing between unit centers in px.
 const SPACING := {
 	LINE: 36.0,
 	SCATTERED: 56.0,
@@ -28,7 +28,8 @@ static func spacing(kind: String) -> float:
 	return float(SPACING.get(kind, SPACING[LINE]))
 
 
-## Offsets relative to the click destination; `facing` = move direction.
+## Offsets relative to the click destination; `facing` = march direction.
+## Řada: units stand side-by-side on the axis PERPENDICULAR to facing (AoE II).
 static func offsets(kind: String, count: int, facing: Vector2) -> Array[Vector2]:
 	var out: Array[Vector2] = []
 	if count <= 0:
@@ -36,22 +37,22 @@ static func offsets(kind: String, count: int, facing: Vector2) -> Array[Vector2]
 	var f := facing.normalized()
 	if f.length_squared() < 0.0001:
 		f = Vector2.RIGHT
-	var right := Vector2(-f.y, f.x)
+	var perp := Vector2(-f.y, f.x) # line axis — never along march
 	var gap := spacing(kind)
 	match kind:
 		SCATTERED:
-			_fill_scattered(out, count, f, right, gap)
+			_fill_scattered(out, count, f, perp, gap)
 		BOX:
-			_fill_box(out, count, f, right, gap)
+			_fill_box(out, count, f, perp, gap)
 		_:
-			_fill_line(out, count, right, gap)
+			_fill_line(out, count, perp, gap)
 	return out
 
 
-static func _fill_line(out: Array[Vector2], count: int, right: Vector2, gap: float) -> void:
+static func _fill_line(out: Array[Vector2], count: int, perp: Vector2, gap: float) -> void:
 	var start := -0.5 * float(count - 1) * gap
 	for i in count:
-		out.append(right * (start + float(i) * gap))
+		out.append(perp * (start + float(i) * gap))
 
 
 static func _fill_scattered(out: Array[Vector2], count: int, forward: Vector2, right: Vector2, gap: float) -> void:

@@ -232,9 +232,17 @@ func _go_to_dropoff() -> void:
 
 func _deposit() -> void:
 	if carried_amount > 0 and carried_type != "":
-		GameManager.add_resource(carried_type, carried_amount)
-		print("[GATHER] deposited %s +%d (food=%d wood=%d gold=%d stone=%d)" % [carried_type, carried_amount, GameManager.food, GameManager.wood, GameManager.gold, GameManager.stone])
-		NotificationManager.show_message("+%d %s" % [carried_amount, carried_type])
+		if team == 0:
+			GameManager.add_resource(carried_type, carried_amount)
+			print("[GATHER] deposited %s +%d (food=%d wood=%d gold=%d stone=%d)" % [
+				carried_type, carried_amount, GameManager.food, GameManager.wood, GameManager.gold, GameManager.stone
+			])
+			NotificationManager.show_message("+%d %s" % [carried_amount, carried_type])
+		else:
+			var ai := get_tree().get_first_node_in_group("enemy_ai") as SimpleEnemyAI
+			if ai:
+				ai.add_resource(carried_type, carried_amount)
+			print("[GATHER] AI deposited %s +%d" % [carried_type, carried_amount])
 	carried_amount = 0
 	carried_type = ""
 	_refresh_carry_label()

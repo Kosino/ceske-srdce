@@ -42,14 +42,17 @@ func _ready() -> void:
 		await _run_age_ui_sync_smoke()
 		await _run_civ_bonus_smoke()
 		await _run_formation_smoke()
+		await _run_ai_economy_smoke()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--formation-shot"):
 		await prepare_formation_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--ai-shot"):
+		await prepare_ai_screenshot()
 	else:
 		await _sample_windowed_fps()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 stavění/trénink.")
 
 
-## Windowed screenshot: 5 soldiers in line after group move; hide DebugPanel; save PNG; quit.
+## Windowed screenshot: 5 soldiers in Řada PERPENDICULAR to east march; hide DebugPanel.
 func prepare_formation_screenshot() -> void:
 	DisplayServer.window_set_size(Vector2i(1280, 720))
 	var debug := get_node_or_null("DebugPanel")
@@ -57,19 +60,20 @@ func prepare_formation_screenshot() -> void:
 		debug.visible = false
 	var cam := get_node_or_null("Camera2D") as Camera2D
 	var squad: Array = []
-	var origin := Vector2(780, 820)
+	# Stage already on perpendicular (N–S) so mid-walk still reads as Řada, not along-path.
+	var origin := Vector2(820, 760)
 	for i in 5:
 		var s: Soldier = SOLDIER_SCENE.instantiate() as Soldier
 		s.team = 0
 		s.contribute_population = false
-		s.position = origin + Vector2(float(i) * 14.0, 0.0)
+		s.position = origin + Vector2(0.0, float(i - 2) * 36.0)
 		units.add_child(s)
 		squad.append(s)
 	await get_tree().physics_frame
 	SelectionManager.select_multiple(squad)
 	SelectionManager.set_formation(FormationData.LINE)
-	SelectionManager.issue_move(Vector2(1100, 820))
-	await get_tree().create_timer(2.4).timeout
+	SelectionManager.issue_move(Vector2(1080, 760)) # march east → line stays N–S
+	await get_tree().create_timer(2.6).timeout
 	var mid := Vector2.ZERO
 	var n := 0
 	for u in squad:
@@ -79,10 +83,31 @@ func prepare_formation_screenshot() -> void:
 	if n > 0:
 		mid /= float(n)
 	if cam:
-		cam.position = mid + Vector2(40.0, -20.0)
-		cam.zoom = Vector2(1.15, 1.15)
+		cam.position = mid + Vector2(20.0, 0.0)
+		cam.zoom = Vector2(1.2, 1.2)
 	await get_tree().process_frame
 	await get_tree().process_frame
+	_save_shot("pixel_art_line_perp.png", squad.size())
+
+
+func prepare_ai_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	var cam := get_node_or_null("Camera2D") as Camera2D
+	var ai := get_node_or_null("SimpleEnemyAI") as SimpleEnemyAI
+	if cam and ai:
+		cam.position = ai.base_position
+		cam.zoom = Vector2(0.85, 0.85)
+	await get_tree().create_timer(8.0).timeout
+	if cam and ai:
+		cam.position = ai.base_position + Vector2(-80, 40)
+	await get_tree().process_frame
+	_save_shot("pixel_art_ai_economy.png", 0)
+
+
+func _save_shot(filename: String, squad_n: int) -> void:
 	var img: Image = get_viewport().get_texture().get_image()
 	if img == null or img.get_width() < 2:
 		push_error("[SHOT] empty image")
@@ -90,14 +115,14 @@ func prepare_formation_screenshot() -> void:
 		return
 	var dir := "res://docs/screenshots"
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir))
-	var path := "%s/pixel_art_formations.png" % dir
+	var path := "%s/%s" % [dir, filename]
 	var save_err := img.save_png(path)
 	if save_err != OK:
 		push_error("[SHOT] save failed %s" % save_err)
 		get_tree().quit(1)
 		return
 	print("[SHOT] saved %s %dx%d squad=%d" % [
-		ProjectSettings.globalize_path(path), img.get_width(), img.get_height(), squad.size()
+		ProjectSettings.globalize_path(path), img.get_width(), img.get_height(), squad_n
 	])
 	get_tree().quit(0)
 
@@ -632,7 +657,7 @@ func _run_civ_bonus_smoke() -> void:
 		print("[TEST] FAIL civ bonuses (wood / cost / infantry HP / stone / ids)")
 
 
-## Formation spacing + shared group move speed (slowest unit).
+## Formation spacing + shared speed + Řada perpendicular to march (|dot| < 0.2).
 func _run_formation_smoke() -> void:
 	await get_tree().physics_frame
 	const SPEARMAN_SCENE := preload("res://scenes/units/Spearman.tscn")
@@ -656,6 +681,8 @@ func _run_formation_smoke() -> void:
 	SelectionManager.select_multiple([a, b, c])
 	SelectionManager.set_formation(FormationData.LINE)
 	var dest := Vector2(800, 500)
+	var centroid := (a.global_position + b.global_position + c.global_position) / 3.0
+	var facing := (dest - centroid).normalized()
 	SelectionManager.issue_move(dest)
 	await get_tree().physics_frame
 
@@ -664,6 +691,7 @@ func _run_formation_smoke() -> void:
 	for u in [a, b, c]:
 		if u.navigation_agent:
 			targets.append(u.navigation_agent.target_position)
+	targets.sort_custom(func(p: Vector2, q: Vector2) -> bool: return p.y < q.y)
 	var pair_ds: Array[float] = []
 	for i in targets.size():
 		for j in range(i + 1, targets.size()):
@@ -671,7 +699,6 @@ func _run_formation_smoke() -> void:
 	pair_ds.sort()
 	var spacing_ok := pair_ds.size() == 3
 	if spacing_ok:
-		# Line of 3: two adjacent gaps + one double gap.
 		spacing_ok = (
 			is_equal_approx(pair_ds[0], gap)
 			and is_equal_approx(pair_ds[1], gap)
@@ -680,6 +707,13 @@ func _run_formation_smoke() -> void:
 		print("[TEST] formation_line pairs=%.1f,%.1f,%.1f expect=%.1f,%.1f,%.1f" % [
 			pair_ds[0], pair_ds[1], pair_ds[2], gap, gap, gap * 2.0
 		])
+
+	var perp_ok := targets.size() >= 2
+	if perp_ok:
+		var slot_vec := (targets[targets.size() - 1] - targets[0]).normalized()
+		var dot_af := absf(slot_vec.dot(facing))
+		perp_ok = dot_af < 0.2
+		print("[TEST] formation_perp slot_dot_facing=%.3f (want <0.2)" % dot_af)
 
 	var slowest := minf(a.speed, minf(b.speed, c.speed))
 	var speed_ok := (
@@ -696,10 +730,34 @@ func _run_formation_smoke() -> void:
 	SelectionManager.clear_selection()
 	SelectionManager.set_formation(FormationData.LINE)
 
-	if spacing_ok and speed_ok:
-		print("[TEST] PASS formation spacing + shared speed")
+	if spacing_ok and speed_ok and perp_ok:
+		print("[TEST] PASS formation spacing + shared speed + perpendicular")
 	else:
-		print("[TEST] FAIL formation spacing + shared speed")
+		print("[TEST] FAIL formation spacing + shared speed + perpendicular")
+
+
+## AI economy: places ≥1 building and launches a wave within timeout (Husité).
+func _run_ai_economy_smoke() -> void:
+	var ai := get_node_or_null("SimpleEnemyAI") as SimpleEnemyAI
+	if ai == null:
+		print("[TEST] FAIL ai_economy: no SimpleEnemyAI")
+		return
+	# Wait for bootstrap + house/barracks (3s each) + 3×1.2s train + wave.
+	var placed := false
+	var waved := false
+	for _i in range(80):
+		await get_tree().create_timer(0.35).timeout
+		placed = ai.has_placed_building()
+		waved = ai.has_launched_wave()
+		if placed and waved:
+			break
+	print("[TEST] ai_economy placed=%s waved=%s food=%d wood=%d gold=%d" % [
+		placed, waved, ai.food, ai.wood, ai.gold
+	])
+	if placed and waved:
+		print("[TEST] PASS AI places building and launches wave")
+	else:
+		print("[TEST] FAIL AI places building and launches wave")
 
 
 func _ensure_complete_age1_buildings(need: int) -> void:

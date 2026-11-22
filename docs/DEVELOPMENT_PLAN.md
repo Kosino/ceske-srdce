@@ -18,5 +18,5 @@
 ## Fáze 2: Systémy
 - Věky ✅
 - Civilizace a bonusy ✅ (Schváleno 2026-11-22; unikátní jednotky data-only)
-- Formace ✅ (NÁVRH spacing; řada / rozptyl / box)
-- Lepší AI
+- Formace ✅ (Schváleno spacing; řada / rozptyl / box; řada ⊥ pochod)
+- Lepší AI ✅ (Husité economy + vlny; Schváleno CS Designer wave size/interval)

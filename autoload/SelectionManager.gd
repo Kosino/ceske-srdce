@@ -57,6 +57,15 @@ func issue_move(world_pos: Vector2) -> void:
 		centroid += u.global_position
 	centroid /= float(movers.size())
 	var facing := world_pos - centroid
+	if facing.length_squared() < 0.0001:
+		facing = Vector2.RIGHT
+	else:
+		facing = facing.normalized()
+	# AoE II: line axis is perpendicular to march; sort units along that axis to avoid crossing.
+	var right := Vector2(-facing.y, facing.x)
+	movers.sort_custom(func(a: Unit, b: Unit) -> bool:
+		return a.global_position.dot(right) < b.global_position.dot(right)
+	)
 	var offs := FormationData.offsets(formation, movers.size(), facing)
 	for i in movers.size():
 		movers[i].command_move(world_pos + offs[i], slowest)
