@@ -121,6 +121,8 @@ func _register_team_groups() -> void:
 			GameManager.change_population(1)
 	else:
 		add_to_group("enemy_units")
+	if BalanceSim.active and unit_id != "" and unit_id != "villager":
+		BalanceSim.record_unit_trained(team, unit_id)
 
 
 func _hp_fill_color() -> Color:

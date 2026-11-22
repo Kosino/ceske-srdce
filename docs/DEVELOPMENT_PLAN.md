@@ -39,5 +39,5 @@
 
 ## Fáze 5: Polish
 - Sounds
-- Balance via AI vs AI headless sim
+- Balance via AI vs AI headless sim (`--sim` → `docs/balance/report.md`) ✅ step 1
 - Windows export

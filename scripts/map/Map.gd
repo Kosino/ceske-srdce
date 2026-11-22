@@ -34,6 +34,14 @@ func _ready() -> void:
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	_spawn_core_demo()
+	# Fáze 5 AI vs AI balance suite (or one-game sim-smoke).
+	if BalanceSim.active:
+		await _run_balance_sim_game()
+		if BalanceSim.suite_done():
+			get_tree().quit(0)
+		else:
+			get_tree().reload_current_scene()
+		return
 	# Smoke tests only in headless — keeps normal play FPS clean.
 	if DisplayServer.get_name() == "headless":
 		await _run_friendly_target_smoke()
@@ -59,6 +67,7 @@ func _ready() -> void:
 		await _run_castle_unique_smoke()
 		await _run_walls_towers_smoke()
 		await _run_age34_monk_smoke()
+		await _run_balance_harness_smoke()
 		print("[TEST] all headless smokes finished")
 		get_tree().quit(0)
 		return
@@ -2485,3 +2494,113 @@ func _ensure_complete_age1_buildings(need: int) -> void:
 	for n in get_tree().get_nodes_in_group("player_buildings"):
 		if n is Building and (n as Building).is_complete == false:
 			(n as Building).is_complete = true
+
+
+## Fáze 5: one AI vs AI match under BalanceSim (sped-up).
+func _run_balance_sim_game() -> void:
+	var cfg := BalanceSim.begin_game()
+	var civ_a: String = str(cfg.get("civ_a", CivData.DEFAULT_PLAYER))
+	var civ_b: String = str(cfg.get("civ_b", CivData.DEFAULT_ENEMY))
+	# Hide HUD clutter for speed / noise.
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	# Configure existing enemy AI + spawn player AI.
+	var enemy_ai := get_node_or_null("SimpleEnemyAI") as SimpleEnemyAI
+	if enemy_ai:
+		enemy_ai.team = 1
+		enemy_ai.civ_id = civ_b
+		enemy_ai.base_position = ENEMY_TC_POS
+		GameManager.enemy_civ = civ_b
+	var player_ai := SimpleEnemyAI.new()
+	player_ai.name = "PlayerAI"
+	player_ai.team = 0
+	player_ai.civ_id = civ_a
+	player_ai.base_position = PLAYER_TC_POS
+	GameManager.player_civ = civ_a
+	add_child(player_ai)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+
+	var victory_node := victory
+	victory_node.reset_for_test()
+	var done := false
+	var winner_team := -1
+	var timed_out := false
+	var on_end := func(player_won: bool) -> void:
+		done = true
+		winner_team = 0 if player_won else 1
+	victory_node.match_ended.connect(on_end)
+
+	var sim_t := 0.0
+	var max_t: float = BalanceSim.MAX_GAME_SEC
+	if BalanceSim.smoke_only:
+		max_t = 25.0
+	while not done and sim_t < max_t:
+		await get_tree().process_frame
+		sim_t += get_process_delta_time()
+		BalanceSim.tick_age_schedule(sim_t)
+	if not done:
+		timed_out = true
+		# Prefer team with more military units as soft winner; else draw.
+		var p_n := get_tree().get_nodes_in_group("player_units").size()
+		var e_n := get_tree().get_nodes_in_group("enemy_units").size()
+		if p_n > e_n + 2:
+			winner_team = 0
+			timed_out = false
+		elif e_n > p_n + 2:
+			winner_team = 1
+			timed_out = false
+		else:
+			winner_team = -1
+		print("[SIM] timeout t=%.1fs p_units=%d e_units=%d" % [sim_t, p_n, e_n])
+	if victory_node.match_ended.is_connected(on_end):
+		victory_node.match_ended.disconnect(on_end)
+	BalanceSim.finish_game(winner_team, sim_t, timed_out)
+	Engine.time_scale = 1.0
+	get_tree().paused = false
+
+
+## Harness smoke: civ pairs + report writer (no full suite).
+func _run_balance_harness_smoke() -> void:
+	await get_tree().physics_frame
+	BalanceSim._build_pairs()
+	var pair_ok: bool = BalanceSim.pairs.size() == 6
+	var prev_results: Array[Dictionary] = BalanceSim.results.duplicate()
+	var prev_trains: Dictionary = BalanceSim.unit_trains.duplicate(true)
+	var prev_ages: Dictionary = BalanceSim.age_reach.duplicate(true)
+	var prev_active := BalanceSim.active
+	BalanceSim.active = false
+	BalanceSim.results.clear()
+	BalanceSim.results.append({
+		"civ_a": CivData.MORAVANE,
+		"civ_b": CivData.HUSITE,
+		"winner": CivData.MORAVANE,
+		"loser": CivData.HUSITE,
+		"draw": false,
+		"length": 42.0,
+		"pair_index": 0,
+		"game_index": 0,
+	})
+	for civ in CivData.ALL_CIV_IDS:
+		BalanceSim.unit_trains[civ] = {}
+		BalanceSim.age_reach[civ] = {2: [70.0], 3: [150.0], 4: []}
+	BalanceSim.unit_trains[CivData.MORAVANE] = {"soldier": 3, "bojovnik_bradatice": 1}
+	# Write to a temp path so we don't clobber docs/balance/report.md from a real --sim run.
+	var md := BalanceSim._build_report_markdown()
+	var tmp_path := "res://docs/balance/_harness_smoke.md"
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://docs/balance"))
+	var f := FileAccess.open(tmp_path, FileAccess.WRITE)
+	var report_ok: bool = f != null
+	if f:
+		f.store_string(md)
+		f.close()
+	BalanceSim.results = prev_results
+	BalanceSim.unit_trains = prev_trains
+	BalanceSim.age_reach = prev_ages
+	BalanceSim.active = prev_active
+	print("[TEST] balance_harness pairs=%s report=%s" % [pair_ok, report_ok])
+	if pair_ok and report_ok:
+		print("[TEST] PASS balance harness (pairs + report)")
+	else:
+		print("[TEST] FAIL balance harness (pairs + report)")

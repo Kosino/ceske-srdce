@@ -107,9 +107,9 @@ func enqueue_unit(unit_id: String) -> bool:
 	return true
 
 
-## Enemy AI — caller paid from AI stockpile.
+## AI — caller paid from AI stockpile.
 func ai_enqueue_unit(unit_id: String) -> bool:
-	if team == 0 or not is_complete:
+	if not is_complete:
 		return false
 	if unit_id != unique_unit_id():
 		return false

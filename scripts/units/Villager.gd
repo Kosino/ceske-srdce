@@ -56,7 +56,8 @@ func assign_gather(resource: ResourceNode, dropoff: Node2D = null) -> void:
 	target_resource = resource
 	target_dropoff = dropoff
 	if is_instance_valid(target_resource):
-		target_resource.depleted.connect(_on_resource_depleted, CONNECT_ONE_SHOT)
+		if not target_resource.depleted.is_connected(_on_resource_depleted):
+			target_resource.depleted.connect(_on_resource_depleted, CONNECT_ONE_SHOT)
 	_go_to_resource()
 
 
@@ -333,21 +334,27 @@ func _go_to_dropoff() -> void:
 
 func _deposit() -> void:
 	if carried_amount > 0 and carried_type != "":
-		if team == 0:
+		var ai := _ai_for_team()
+		if ai:
+			ai.add_resource(carried_type, carried_amount)
+			print("[GATHER] AI team=%d deposited %s +%d" % [team, carried_type, carried_amount])
+		elif team == 0:
 			GameManager.add_resource(carried_type, carried_amount)
 			print("[GATHER] deposited %s +%d (food=%d wood=%d gold=%d stone=%d)" % [
 				carried_type, carried_amount, GameManager.food, GameManager.wood, GameManager.gold, GameManager.stone
 			])
 			NotificationManager.show_message("+%d %s" % [carried_amount, carried_type])
-		else:
-			var ai := get_tree().get_first_node_in_group("enemy_ai") as SimpleEnemyAI
-			if ai:
-				ai.add_resource(carried_type, carried_amount)
-			print("[GATHER] AI deposited %s +%d" % [carried_type, carried_amount])
 	carried_amount = 0
 	carried_type = ""
 	_refresh_carry_label()
 	_go_to_resource()
+
+
+func _ai_for_team() -> SimpleEnemyAI:
+	for n in get_tree().get_nodes_in_group("ai_controllers"):
+		if n is SimpleEnemyAI and (n as SimpleEnemyAI).team == team:
+			return n as SimpleEnemyAI
+	return null
 
 
 func _find_nearest_dropoff(resource_type: String) -> Node2D:

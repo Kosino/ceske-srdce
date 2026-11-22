@@ -79,10 +79,16 @@ func _end_match(won: bool) -> void:
 	var secs := match_elapsed_sec()
 	if won:
 		print("[VICTORY] player wins after %.1fs" % secs)
-		NotificationManager.show_message("Vítězství!")
+		if not BalanceSim.active:
+			NotificationManager.show_message("Vítězství!")
 	else:
 		print("[DEFEAT] player loses after %.1fs" % secs)
-		NotificationManager.show_message("Porážka!")
+		if not BalanceSim.active:
+			NotificationManager.show_message("Porážka!")
+	if BalanceSim.active:
+		# Sim: no overlay / pause — BalanceSim advances the suite.
+		match_ended.emit(won)
+		return
 	_show_overlay(won, secs)
 	get_tree().paused = true
 	match_ended.emit(won)

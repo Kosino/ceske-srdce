@@ -51,6 +51,8 @@ func can_enqueue(tech_id: String) -> bool:
 	if researching_tech != "":
 		return false
 	var cost: Dictionary = TechData.tech_def(tech_id).get("cost", {})
+	if _ai_for_team() != null:
+		return _ai_can_afford(cost)
 	if team == 0:
 		return GameManager.can_afford(cost)
 	return _ai_can_afford(cost)
@@ -68,7 +70,10 @@ func enqueue_tech(tech_id: String) -> bool:
 		return false
 	var def := TechData.tech_def(tech_id)
 	var cost: Dictionary = def.get("cost", {})
-	if team == 0:
+	if _ai_for_team() != null:
+		if not _ai_spend(cost):
+			return false
+	elif team == 0:
 		if not GameManager.spend(cost):
 			return false
 	else:
@@ -94,22 +99,31 @@ func _complete_research() -> void:
 	research_changed.emit()
 
 
+func _ai_for_team() -> SimpleEnemyAI:
+	for n in get_tree().get_nodes_in_group("ai_controllers"):
+		if n is SimpleEnemyAI and (n as SimpleEnemyAI).team == team:
+			return n as SimpleEnemyAI
+	return null
+
+
 func _ai_can_afford(cost: Dictionary) -> bool:
-	var ai := get_tree().get_first_node_in_group("enemy_ai") as SimpleEnemyAI
+	var ai := _ai_for_team()
 	if ai == null:
 		return false
 	return (
 		ai.food >= int(cost.get("food", 0))
 		and ai.wood >= int(cost.get("wood", 0))
 		and ai.gold >= int(cost.get("gold", 0))
+		and ai.stone >= int(cost.get("stone", 0))
 	)
 
 
 func _ai_spend(cost: Dictionary) -> bool:
-	var ai := get_tree().get_first_node_in_group("enemy_ai") as SimpleEnemyAI
+	var ai := _ai_for_team()
 	if ai == null or not _ai_can_afford(cost):
 		return false
 	ai.food -= int(cost.get("food", 0))
 	ai.wood -= int(cost.get("wood", 0))
 	ai.gold -= int(cost.get("gold", 0))
+	ai.stone -= int(cost.get("stone", 0))
 	return true
