@@ -8,6 +8,7 @@ const BARRACKS_SCENE := preload("res://scenes/buildings/Barracks.tscn")
 const ARCHERY_SCENE := preload("res://scenes/buildings/ArcheryRange.tscn")
 const LUMBER_SCENE := preload("res://scenes/buildings/LumberCamp.tscn")
 const MILL_SCENE := preload("res://scenes/buildings/Mill.tscn")
+const BLACKSMITH_SCENE := preload("res://scenes/buildings/Blacksmith.tscn")
 
 const GHOST_TEXTURES := {
 	"house": preload("res://assets/sprites/buildings/house.png"),
@@ -15,6 +16,7 @@ const GHOST_TEXTURES := {
 	"archery_range": preload("res://assets/sprites/buildings/archery_range.png"),
 	"lumber_camp": preload("res://assets/sprites/buildings/lumber_camp.png"),
 	"mill": preload("res://assets/sprites/buildings/mill.png"),
+	"blacksmith": preload("res://assets/sprites/buildings/blacksmith.png"),
 }
 
 ## DESIGN costs and base build times (1 villager).
@@ -24,6 +26,7 @@ const COSTS := {
 	"archery_range": {"wood": 175},
 	"lumber_camp": {"wood": 100},
 	"mill": {"wood": 100},
+	"blacksmith": {"wood": 150}, # NÁVRH
 }
 
 const BUILD_TIMES := {
@@ -32,6 +35,7 @@ const BUILD_TIMES := {
 	"archery_range": 50.0,
 	"lumber_camp": 35.0,
 	"mill": 35.0,
+	"blacksmith": 40.0, # NÁVRH
 }
 
 const FOOTPRINTS := {
@@ -40,6 +44,7 @@ const FOOTPRINTS := {
 	"archery_range": Vector2(80, 80),
 	"lumber_camp": Vector2(72, 72),
 	"mill": Vector2(72, 72),
+	"blacksmith": Vector2(80, 80),
 }
 
 @export var map_size: Vector2 = Vector2(3000, 3000)
@@ -173,6 +178,8 @@ func _instantiate_building(building_type: String) -> Building:
 			return LUMBER_SCENE.instantiate() as Building
 		"mill":
 			return MILL_SCENE.instantiate() as Building
+		"blacksmith":
+			return BLACKSMITH_SCENE.instantiate() as Building
 		_:
 			return null
 

@@ -13,7 +13,14 @@ func _ready() -> void:
 	_refresh_age_ui()
 
 
-func _process(_delta: float) -> void:
+var _research_refresh_accum: float = 0.0
+
+
+func _process(delta: float) -> void:
+	_research_refresh_accum += delta
+	if _research_refresh_accum < 0.2:
+		return
+	_research_refresh_accum = 0.0
 	_refresh_research_button()
 
 

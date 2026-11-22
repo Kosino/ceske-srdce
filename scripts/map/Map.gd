@@ -28,15 +28,51 @@ func _ready() -> void:
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	_spawn_core_demo()
-	await _run_friendly_target_smoke()
-	await _run_gather_rmb_smoke()
-	await _run_construction_smoke()
-	await _run_projectile_smoke()
-	await _run_archer_barracks_block_smoke()
-	await _run_age_research_smoke()
-	await _run_age_gate_smoke()
-	await _run_age_locked_building_smoke()
+	# Smoke tests only in headless — keeps normal play FPS clean.
+	if DisplayServer.get_name() == "headless":
+		await _run_friendly_target_smoke()
+		await _run_gather_rmb_smoke()
+		await _run_construction_smoke()
+		await _run_projectile_smoke()
+		await _run_archer_barracks_block_smoke()
+		await _run_age_research_smoke()
+		await _run_age_gate_smoke()
+		await _run_age_locked_building_smoke()
+		await _run_age2_to_age3_gate_smoke()
+	else:
+		await _sample_windowed_fps()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 stavění/trénink.")
+
+
+func _sample_windowed_fps() -> void:
+	## Brief FPS sample for GamingRig verification (skipped in headless).
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	Engine.max_fps = 0
+	print("[FPS] renderer=%s adapter=%s display=%s" % [
+		RenderingServer.get_current_rendering_method(),
+		RenderingServer.get_video_adapter_name(),
+		DisplayServer.get_name(),
+	])
+	await get_tree().create_timer(0.5).timeout
+	var sum := 0.0
+	var mn := 9999.0
+	var mx := 0.0
+	var n := 0
+	var t0 := Time.get_ticks_msec()
+	for _i in range(120):
+		await get_tree().process_frame
+		var fps := float(Engine.get_frames_per_second())
+		if fps <= 0.0:
+			continue
+		sum += fps
+		mn = minf(mn, fps)
+		mx = maxf(mx, fps)
+		n += 1
+	var wall := maxf(float(Time.get_ticks_msec() - t0), 1.0) / 1000.0
+	if n > 0:
+		print("[FPS] windowed avg=%.1f min=%.1f max=%.1f wall=%.1f n=%d" % [
+			sum / float(n), mn, mx, float(n) / wall, n
+		])
 
 
 func _setup_terrain() -> void:
@@ -52,25 +88,20 @@ func _setup_terrain() -> void:
 	add_child(layer)
 	move_child(layer, 0)
 
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 4242
+	# Per-tile seeded scatter (no big grass blocks); hash mix, no per-cell RNG reseed.
 	for x in MAP_TILES:
 		for y in MAP_TILES:
-			var source_id := SOURCE_GRASS_1 if rng.randf() < 0.55 else SOURCE_GRASS_2
-			var alt := rng.randi_range(0, 2)
-			layer.set_cell(Vector2i(x, y), source_id, Vector2i.ZERO, alt)
+			var h := (x * 73856093) ^ (y * 19349663) ^ 4242
+			var source_id := SOURCE_GRASS_1 if (h & 1) == 0 else SOURCE_GRASS_2
+			layer.set_cell(Vector2i(x, y), source_id, Vector2i.ZERO)
 
-	# Dirt paths near Radnice (900, 700).
+	# Narrow dirt paths near Radnice (900, 700) — 1 tile wide, not a full cross pad.
 	var hall := Vector2i(900 / TILE, 700 / TILE)
-	for dx in range(-4, 5):
+	for dx in range(-3, 4):
 		layer.set_cell(hall + Vector2i(dx, 0), SOURCE_DIRT, Vector2i.ZERO)
-		layer.set_cell(hall + Vector2i(dx, 1), SOURCE_DIRT, Vector2i.ZERO)
-	for dy in range(-3, 5):
-		layer.set_cell(hall + Vector2i(0, dy), SOURCE_DIRT, Vector2i.ZERO)
-		layer.set_cell(hall + Vector2i(1, dy), SOURCE_DIRT, Vector2i.ZERO)
-	# Short spur toward wood node (~1080, 620).
-	for dx in range(0, 6):
-		layer.set_cell(hall + Vector2i(dx, -2), SOURCE_DIRT, Vector2i.ZERO)
+	# Short 1-tile spur toward wood (~1080, 620).
+	for dx in range(1, 5):
+		layer.set_cell(hall + Vector2i(dx, -1), SOURCE_DIRT, Vector2i.ZERO)
 
 
 func _build_terrain_tileset() -> TileSet:
@@ -82,14 +113,11 @@ func _build_terrain_tileset() -> TileSet:
 		atlas.texture = textures[i]
 		atlas.texture_region_size = Vector2i(TILE, TILE)
 		atlas.create_tile(Vector2i.ZERO)
-		# Light modulate alts soften large flat grass fields (no second overlay).
-		if i != SOURCE_DIRT:
-			for alt_id in range(1, 3):
-				atlas.create_alternative_tile(Vector2i.ZERO, alt_id)
-				var td := atlas.get_tile_data(Vector2i.ZERO, alt_id)
-				if td:
-					var shade := 1.0 - 0.04 * float(alt_id)
-					td.modulate = Color(shade, shade * 1.02, shade * 0.96, 1.0)
+		# Soften grass_2 slightly (contrast near 1.0).
+		if i == SOURCE_GRASS_2:
+			var td := atlas.get_tile_data(Vector2i.ZERO, 0)
+			if td:
+				td.modulate = Color(0.99, 1.0, 0.985, 1.0)
 		tileset.add_source(atlas, i)
 	return tileset
 
@@ -412,6 +440,54 @@ func _run_age_locked_building_smoke() -> void:
 		print("[TEST] FAIL locked building cannot be placed")
 		if placed != null and is_instance_valid(placed):
 			placed.queue_free()
+
+
+## Age 2→3 gate: Střelnice + Kovárna satisfy the 2 age-2 buildings requirement.
+func _run_age2_to_age3_gate_smoke() -> void:
+	await get_tree().physics_frame
+	var hall := get_tree().get_first_node_in_group("player_town_hall") as DropOff
+	if hall == null:
+		print("[TEST] FAIL age2 gate: no town hall")
+		return
+
+	# Clear non-hall buildings so age-2 count is exact.
+	for n in get_tree().get_nodes_in_group("player_buildings"):
+		if n is DropOff:
+			continue
+		if is_instance_valid(n):
+			n.queue_free()
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+
+	GameManager.current_age = 2
+	var archery: Building = preload("res://scenes/buildings/ArcheryRange.tscn").instantiate() as Building
+	archery.position = Vector2(300, 300)
+	archery.is_complete = true
+	units.add_child(archery)
+	var smith: Building = preload("res://scenes/buildings/Blacksmith.tscn").instantiate() as Building
+	smith.position = Vector2(420, 300)
+	smith.is_complete = true
+	units.add_child(smith)
+	await get_tree().physics_frame
+
+	var age2_count := GameManager.count_age_buildings(2)
+	GameManager.add_resource("food", 800)
+	GameManager.add_resource("gold", 200)
+	var started := hall.start_age_research(0.3)
+	print("[TEST] age2_gate buildings=%d started=%s" % [age2_count, started])
+
+	var advanced := false
+	for _i in range(30):
+		await get_tree().create_timer(0.1).timeout
+		if GameManager.current_age >= 3 and not hall.researching_age:
+			advanced = true
+			break
+
+	print("[TEST] age2_gate age -> %d advanced=%s" % [GameManager.current_age, advanced])
+	if age2_count >= 2 and started and advanced and GameManager.current_age == 3:
+		print("[TEST] PASS age 2→3 gate with Střelnice + Kovárna")
+	else:
+		print("[TEST] FAIL age 2→3 gate with Střelnice + Kovárna")
 
 
 func _ensure_complete_age1_buildings(need: int) -> void:
