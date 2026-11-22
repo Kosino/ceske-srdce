@@ -63,18 +63,29 @@ func accepts(resource_type: String) -> bool:
 
 
 func _process(delta: float) -> void:
-	if team != 0:
-		return
+	## Age research (player Radnice) + villager queues for any team (AI uses ai_enqueue).
 	if researching_age:
+		if team != 0:
+			return
 		research_remaining -= delta
 		if research_remaining <= 0.0:
 			_complete_age_research()
 		return
 	if queue.is_empty():
 		return
+	## Player hall only trains via GameManager path; AI halls via ai_enqueue_villager.
+	if team != 0 and not _has_ai_controller():
+		return
 	train_remaining -= delta
 	if train_remaining <= 0.0:
 		_complete_training()
+
+
+func _has_ai_controller() -> bool:
+	for n in get_tree().get_nodes_in_group("ai_controllers"):
+		if n is SimpleEnemyAI and (n as SimpleEnemyAI).team == team:
+			return true
+	return false
 
 
 func enqueue_villager() -> bool:
@@ -101,6 +112,20 @@ func enqueue_villager() -> bool:
 		train_remaining = VILLAGER_TIME
 	queue_changed.emit()
 	print("[PROD] queued villager (queue=%d)" % queue.size())
+	return true
+
+
+## AI — caller already paid from AI stockpile.
+func ai_enqueue_villager() -> bool:
+	if researching_age:
+		return false
+	if queue.size() >= MAX_QUEUE:
+		return false
+	queue.append("villager")
+	if queue.size() == 1:
+		train_remaining = 1.2 if DisplayServer.get_name() == "headless" else VILLAGER_TIME
+	queue_changed.emit()
+	print("[AI-PROD] queued villager team=%d (queue=%d)" % [team, queue.size()])
 	return true
 
 

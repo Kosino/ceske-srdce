@@ -1,32 +1,33 @@
 extends Node
-## Fáze 5 — AI vs AI headless balance sim. Autoload; activated by `--sim`.
+## Fáze 5 — AI vs AI headless balance sim.
+## Autoload is a no-op unless `--sim` / `--sim-smoke` (no pair build, no Engine.time_scale).
 
 signal game_finished(result: Dictionary)
 signal suite_finished(report_path: String)
 
 const GAMES_PER_PAIR := 20
-const TIME_SCALE := 20.0
-const MAX_GAME_SEC := 150.0 ## simulated seconds before draw
-## Shared age unlock schedule (sim seconds) so both sides get the same tech gate.
-const AGE_AT := {2: 70.0, 3: 150.0, 4: 260.0}
+const TIME_SCALE := 80.0
+const MAX_GAME_SEC := 2400.0 ## 40 in-game minutes; timeout = draw (never army soft-win)
 const REPORT_PATH := "res://docs/balance/report.md"
+const Z95 := 1.96 ## Wilson score interval
 
 var active: bool = false
-var smoke_only: bool = false ## one short game for headless regression
-var pairs: Array[Dictionary] = [] ## [{a, b}] unordered civ pairs
+var smoke_only: bool = false
+var pairs: Array[Dictionary] = []
 var pair_index: int = 0
-var game_index: int = 0 ## 0..GAMES_PER_PAIR-1 within pair
+var game_index: int = 0
 var results: Array[Dictionary] = []
 var unit_trains: Dictionary = {} ## civ_id -> {unit_id -> count}
-var age_reach: Dictionary = {} ## civ_id -> {age -> [times]}  (shared clock recorded per game for both)
-var _match_start_sec: float = 0.0
-var _age_logged: Dictionary = {} ## age -> bool for current game
+var age_reach: Dictionary = {} ## civ_id -> {age -> [sim_sec]}
+var _elapsed_sim: float = 0.0
 var _current_a: String = ""
 var _current_b: String = ""
 var _running_game: bool = false
+var _suite_ready: bool = false
 
 
 func _ready() -> void:
+	## Cheap: only read CLI flags. No CivData / pair work unless activated.
 	var args := OS.get_cmdline_user_args()
 	if args.has("--sim-smoke"):
 		active = true
@@ -34,17 +35,23 @@ func _ready() -> void:
 	elif args.has("--sim"):
 		active = true
 		smoke_only = false
-	if not active:
+	if active:
+		_ensure_suite()
+		print("[SIM] BalanceSim active smoke=%s pairs=%d games/pair=%d max=%.0fs scale=×%.0f" % [
+			smoke_only, pairs.size(), games_per_pair(), MAX_GAME_SEC, TIME_SCALE
+		])
+
+
+func _ensure_suite() -> void:
+	if _suite_ready:
 		return
+	_suite_ready = true
 	_build_pairs()
 	unit_trains = {}
 	age_reach = {}
 	for civ in CivData.ALL_CIV_IDS:
 		unit_trains[civ] = {}
 		age_reach[civ] = {2: [], 3: [], 4: []}
-	print("[SIM] BalanceSim active smoke=%s pairs=%d games/pair=%d" % [
-		smoke_only, pairs.size(), GAMES_PER_PAIR if not smoke_only else 1
-	])
 
 
 func _build_pairs() -> void:
@@ -66,14 +73,16 @@ func current_pair() -> Dictionary:
 
 
 func begin_game() -> Dictionary:
-	## Called by Map when starting a sim match. Returns {civ_a, civ_b, seed}.
+	## Returns {civ_a, civ_b, seed, jitter_a, jitter_b}. No fixed age schedule.
+	if not active:
+		return {}
+	_ensure_suite()
 	_running_game = true
-	_age_logged = {}
-	_match_start_sec = Time.get_ticks_msec() / 1000.0
+	_elapsed_sim = 0.0
 	var pair := current_pair()
 	_current_a = str(pair.get("a", CivData.DEFAULT_PLAYER))
 	_current_b = str(pair.get("b", CivData.DEFAULT_ENEMY))
-	# Alternate home/away each game for fairness.
+	# Alternate home/away each game.
 	if game_index % 2 == 1:
 		var tmp := _current_a
 		_current_a = _current_b
@@ -89,24 +98,38 @@ func begin_game() -> Dictionary:
 	GameManager.population_max = 10
 	GameManager._researched = {0: {}, 1: {}}
 	Engine.time_scale = TIME_SCALE
-	var seed := 4242 + pair_index * 1000 + game_index
-	print("[SIM] game pair=%s vs %s idx=%d seed=%d" % [_current_a, _current_b, game_index, seed])
-	return {"civ_a": _current_a, "civ_b": _current_b, "seed": seed}
+	var sim_seed := 4242 + pair_index * 10007 + game_index * 97 + int(Time.get_ticks_msec()) % 1000
+	var rng := RandomNumberGenerator.new()
+	rng.seed = sim_seed
+	var jitter_a := rng.randf_range(0.90, 1.10)
+	var jitter_b := rng.randf_range(0.90, 1.10)
+	print("[SIM] game pair=%s vs %s idx=%d seed=%d jitter=%.2f/%.2f" % [
+		_current_a, _current_b, game_index, sim_seed, jitter_a, jitter_b
+	])
+	return {
+		"civ_a": _current_a,
+		"civ_b": _current_b,
+		"seed": sim_seed,
+		"jitter_a": jitter_a,
+		"jitter_b": jitter_b,
+	}
 
 
-func tick_age_schedule(elapsed_sim_sec: float) -> void:
-	if not _running_game:
+func note_elapsed(elapsed_sim_sec: float) -> void:
+	if _running_game:
+		_elapsed_sim = elapsed_sim_sec
+
+
+func record_age_reached(team: int, age: int) -> void:
+	if not active or not _running_game:
 		return
-	for age in [2, 3, 4]:
-		var need: float = float(AGE_AT[age])
-		if elapsed_sim_sec >= need and GameManager.current_age < age:
-			GameManager.current_age = age
-		if elapsed_sim_sec >= need and not _age_logged.get(age, false):
-			_age_logged[age] = true
-			# Record shared reach time for both civs in this matchup.
-			(age_reach[_current_a][age] as Array).append(elapsed_sim_sec)
-			(age_reach[_current_b][age] as Array).append(elapsed_sim_sec)
-			print("[SIM] age %d reached at t=%.1fs" % [age, elapsed_sim_sec])
+	if age < 2 or age > 4:
+		return
+	var civ := GameManager.civ_for_team(team)
+	if not age_reach.has(civ):
+		age_reach[civ] = {2: [], 3: [], 4: []}
+	(age_reach[civ][age] as Array).append(_elapsed_sim)
+	print("[SIM] team=%d civ=%s age %d at t=%.1fs" % [team, civ, age, _elapsed_sim])
 
 
 func record_unit_trained(team: int, unit_id: String) -> void:
@@ -126,28 +149,28 @@ func finish_game(winner_team: int, elapsed_sim_sec: float, timed_out: bool = fal
 	Engine.time_scale = 1.0
 	var winner_civ := ""
 	var loser_civ := ""
-	if timed_out or winner_team < 0:
-		winner_civ = ""
-		loser_civ = ""
-	elif winner_team == 0:
-		winner_civ = _current_a
-		loser_civ = _current_b
-	else:
-		winner_civ = _current_b
-		loser_civ = _current_a
+	## Timeout / no TC kill → draw. Never resolve by army size.
+	var is_draw := timed_out or winner_team < 0
+	if not is_draw:
+		if winner_team == 0:
+			winner_civ = _current_a
+			loser_civ = _current_b
+		else:
+			winner_civ = _current_b
+			loser_civ = _current_a
 	var row := {
 		"civ_a": _current_a,
 		"civ_b": _current_b,
 		"winner": winner_civ,
 		"loser": loser_civ,
-		"draw": timed_out or winner_team < 0,
+		"draw": is_draw,
 		"length": elapsed_sim_sec,
 		"pair_index": pair_index,
 		"game_index": game_index,
 	}
 	results.append(row)
 	print("[SIM] finished winner=%s draw=%s length=%.1fs" % [
-		winner_civ if winner_civ != "" else "—", row["draw"], elapsed_sim_sec
+		winner_civ if winner_civ != "" else "—", is_draw, elapsed_sim_sec
 	])
 	game_finished.emit(row)
 	_advance_or_finish()
@@ -163,11 +186,12 @@ func _advance_or_finish() -> void:
 		suite_finished.emit(path)
 		print("[SIM] suite done report=%s" % path)
 		return
-	# Next game — Map reloads itself.
 	print("[SIM] next pair_index=%d game_index=%d" % [pair_index, game_index])
 
 
 func suite_done() -> bool:
+	if not active:
+		return true
 	return smoke_only or pair_index >= pairs.size()
 
 
@@ -185,56 +209,70 @@ func write_report() -> String:
 
 
 func _build_report_markdown() -> String:
+	_ensure_suite()
 	var lines: PackedStringArray = []
 	lines.append("# AI vs AI balance report")
 	lines.append("")
-	lines.append("Generated by headless `--sim` (Fáze 5). Seeded map, two `SimpleEnemyAI`, time scale ×%.0f, max %.0fs/game, %d games/pair." % [
-		TIME_SCALE, MAX_GAME_SEC, GAMES_PER_PAIR if not smoke_only else 1
-	])
-	lines.append("")
-	lines.append("Age unlock schedule (shared): age2@%.0fs, age3@%.0fs, age4@%.0fs." % [
-		AGE_AT[2], AGE_AT[3], AGE_AT[4]
-	])
+	var games_pp := GAMES_PER_PAIR if not smoke_only else 1
+	lines.append((
+		"Generated by headless `--sim` (Fáze 5). Two `SimpleEnemyAI`, economic ages (no fixed timers), "
+		+ "time scale ×%.0f, max **40 in-game minutes** (%.0fs), %d games/pair. "
+		+ "Win = destroy enemy Town Center. Timeouts = draws (not resolved by army size). "
+		+ "Per-game seed offset + AI timing jitter ±10%%."
+	) % [TIME_SCALE, MAX_GAME_SEC, games_pp])
 	lines.append("")
 
-	# Win rates
 	var wins: Dictionary = {}
+	var decided: Dictionary = {}
 	var played: Dictionary = {}
 	var lengths: Array[float] = []
 	for civ in CivData.ALL_CIV_IDS:
 		wins[civ] = 0
+		decided[civ] = 0
 		played[civ] = 0
 	var draws := 0
 	for r in results:
 		lengths.append(float(r["length"]))
+		played[r["civ_a"]] = int(played[r["civ_a"]]) + 1
+		played[r["civ_b"]] = int(played[r["civ_b"]]) + 1
 		if r["draw"]:
 			draws += 1
-			played[r["civ_a"]] = int(played[r["civ_a"]]) + 1
-			played[r["civ_b"]] = int(played[r["civ_b"]]) + 1
 			continue
 		var w: String = str(r["winner"])
 		var l: String = str(r["loser"])
 		wins[w] = int(wins[w]) + 1
-		played[w] = int(played[w]) + 1
-		played[l] = int(played[l]) + 1
+		decided[w] = int(decided[w]) + 1
+		decided[l] = int(decided[l]) + 1
 
-	lines.append("## Win rate per civilization")
+	var total := results.size()
+	var decided_n := total - draws
+	var decided_share := 0.0 if total == 0 else 100.0 * float(decided_n) / float(total)
+
+	lines.append("## Win rate per civilization (decided games)")
 	lines.append("")
-	lines.append("| Civ | Wins | Games | Win % |")
-	lines.append("|-----|------|-------|-------|")
+	lines.append("| Civ | Wins | Decided | Win % | 95% CI | Decided share |")
+	lines.append("|-----|------|---------|-------|--------|---------------|")
 	var outside: Array[String] = []
 	for civ in CivData.ALL_CIV_IDS:
-		var g := int(played.get(civ, 0))
+		var d := int(decided.get(civ, 0))
 		var w := int(wins.get(civ, 0))
-		var pct := 0.0 if g == 0 else 100.0 * float(w) / float(g)
-		lines.append("| %s | %d | %d | %.1f%% |" % [CivData.civ_name(civ), w, g, pct])
-		if g > 0 and (pct < 40.0 or pct > 60.0):
+		var g := int(played.get(civ, 0))
+		var ci := _wilson(w, d)
+		var pct := 0.0 if d == 0 else 100.0 * float(w) / float(d)
+		var share := 0.0 if g == 0 else 100.0 * float(d) / float(g)
+		lines.append("| %s | %d | %d | %.1f%% | [%.1f%%, %.1f%%] | %.0f%% |" % [
+			CivData.civ_name(civ), w, d, pct, ci.lo * 100.0, ci.hi * 100.0, share
+		])
+		if d > 0 and (pct < 40.0 or pct > 60.0):
 			outside.append(civ)
 	lines.append("")
-	lines.append("Draws / timeouts: **%d** / %d games." % [draws, results.size()])
+	lines.append(
+		"Draws / timeouts: **%d** / %d games. Share of decided games: **%.1f%%**." % [
+			draws, total, decided_share
+		]
+	)
 	lines.append("")
 
-	# Avg length
 	var avg_len := 0.0
 	if lengths.size() > 0:
 		for x in lengths:
@@ -242,11 +280,12 @@ func _build_report_markdown() -> String:
 		avg_len /= float(lengths.size())
 	lines.append("## Average game length")
 	lines.append("")
-	lines.append("%.1f simulated seconds (n=%d)." % [avg_len, lengths.size()])
+	lines.append("%.1f simulated seconds (n=%d). Cap = %.0fs (40 min)." % [
+		avg_len, lengths.size(), MAX_GAME_SEC
+	])
 	lines.append("")
 
-	# Age reach
-	lines.append("## Age-reach times (avg sim seconds)")
+	lines.append("## Real age-reach times (avg sim seconds, economic research)")
 	lines.append("")
 	lines.append("| Civ | →Age2 | →Age3 | →Age4 |")
 	lines.append("|-----|-------|-------|-------|")
@@ -259,15 +298,14 @@ func _build_report_markdown() -> String:
 		])
 	lines.append("")
 
-	# Most trained units
-	lines.append("## Most-trained units (per civ)")
+	lines.append("## Army composition (units trained per civ)")
 	lines.append("")
 	for civ in CivData.ALL_CIV_IDS:
 		var bag: Dictionary = unit_trains.get(civ, {})
 		var ranked: Array = bag.keys()
 		ranked.sort_custom(func(a, b): return int(bag[a]) > int(bag[b]))
 		var parts: PackedStringArray = []
-		var n := mini(5, ranked.size())
+		var n := mini(8, ranked.size())
 		for i in range(n):
 			var uid: String = str(ranked[i])
 			parts.append("%s (%d)" % [uid, int(bag[uid])])
@@ -276,7 +314,6 @@ func _build_report_markdown() -> String:
 		])
 	lines.append("")
 
-	# Pair matrix
 	lines.append("## Pair results")
 	lines.append("")
 	lines.append("| Pair | A wins | B wins | Draws | Avg length |")
@@ -289,17 +326,11 @@ func _build_report_markdown() -> String:
 		var dw := 0
 		var lens: Array[float] = []
 		for r in results:
-			var same := (
-				(str(r["civ_a"]) == ca and str(r["civ_b"]) == cb)
-				or (str(r["civ_a"]) == cb and str(r["civ_b"]) == ca)
-			)
-			# Count only games whose unordered pair matches; home/away swapped still same pair.
 			var ra := str(r["civ_a"])
 			var rb := str(r["civ_b"])
 			var match_pair := (ra == ca and rb == cb) or (ra == cb and rb == ca)
 			if not match_pair:
 				continue
-			# Map winner back to unordered labels.
 			if r["draw"]:
 				dw += 1
 			elif str(r["winner"]) == ca:
@@ -317,29 +348,45 @@ func _build_report_markdown() -> String:
 		])
 	lines.append("")
 
-	# Tweaks — propose only, do not apply
 	lines.append("## Proposed tweaks (not applied)")
 	lines.append("")
 	if outside.is_empty():
-		lines.append("All civ win rates are inside **40–60%**. No balance tweaks proposed.")
+		lines.append("All civ win rates (decided) are inside **40–60%**. No balance tweaks proposed.")
 	else:
 		var names: PackedStringArray = []
 		for c in outside:
 			names.append(CivData.civ_name(str(c)))
-		lines.append("Civs outside 40–60%% win rate: **%s**." % ", ".join(names))
+		lines.append("Civs outside 40–60% win rate: **%s**." % ", ".join(names))
 		lines.append("")
 		for civ in outside:
-			var g := int(played.get(civ, 0))
+			var d := int(decided.get(civ, 0))
 			var w := int(wins.get(civ, 0))
-			var pct := 0.0 if g == 0 else 100.0 * float(w) / float(g)
+			var pct := 0.0 if d == 0 else 100.0 * float(w) / float(d)
 			if pct > 60.0:
 				lines.append(_propose_nerf(str(civ), pct))
 			else:
 				lines.append(_propose_buff(str(civ), pct))
 		lines.append("")
-		lines.append("*These are proposals only — do not apply until approved.*")
+		lines.append("*These are NÁVRH proposals only — do not apply until approved.*")
 	lines.append("")
 	return "\n".join(lines)
+
+
+func _wilson(wins: int, n: int) -> Dictionary:
+	if n <= 0:
+		return {"lo": 0.0, "hi": 0.0, "p": 0.0}
+	var p := float(wins) / float(n)
+	var z2 := Z95 * Z95
+	var denom := 1.0 + z2 / float(n)
+	var center := (p + z2 / (2.0 * float(n))) / denom
+	var margin := (
+		Z95 * sqrt((p * (1.0 - p) + z2 / (4.0 * float(n))) / float(n))
+	) / denom
+	return {
+		"lo": clampf(center - margin, 0.0, 1.0),
+		"hi": clampf(center + margin, 0.0, 1.0),
+		"p": p,
+	}
 
 
 func _propose_nerf(civ: String, pct: float) -> String:
@@ -365,7 +412,7 @@ func _propose_buff(civ: String, pct: float) -> String:
 		CivData.HUSITE:
 			return "- **Husité (%.1f%%):** NÁVRH — infantry HP civ bonus +5%%, or Válečný vůz −5 wood cost." % pct
 		CivData.HABSBURKOVE:
-			return "- **Habsburkové (%.1f%%):** NÁVRH — Lancknecht +1 melee armor, or earlier age-3 unique unlock via −50 stone castle (too heavy — prefer unit buff)." % pct
+			return "- **Habsburkové (%.1f%%):** NÁVRH — Lancknecht +1 melee armor, or prefer unit buff over castle discount." % pct
 		_:
 			return "- **%s (%.1f%%):** NÁVRH — +5%% unique unit damage." % [CivData.civ_name(civ), pct]
 

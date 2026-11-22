@@ -50,9 +50,14 @@ func _on_hall_destroyed(hall: DropOff) -> void:
 	if hall.team != 0:
 		_enemy_hall_down = true
 		print("[VICTORY] enemy Radnice destroyed — waiting for remaining units")
+		## Balance sim: win = destroy TC (do not wait for unit wipe).
+		if BalanceSim.active:
+			_end_match(true)
 	else:
 		_player_hall_down = true
 		print("[DEFEAT] player Radnice destroyed — waiting for remaining units")
+		if BalanceSim.active:
+			_end_match(false)
 
 
 func _no_units_in_group(group: String) -> bool:

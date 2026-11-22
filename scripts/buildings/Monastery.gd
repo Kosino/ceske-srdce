@@ -69,6 +69,20 @@ func enqueue_unit(unit_id: String) -> bool:
 	return true
 
 
+## AI — caller already paid from AI stockpile.
+func ai_enqueue_unit(unit_id: String) -> bool:
+	if unit_id != "monk" or not is_complete:
+		return false
+	if queue.size() >= MAX_QUEUE:
+		return false
+	queue.append("monk")
+	if queue.size() == 1:
+		train_remaining = 1.2 if DisplayServer.get_name() == "headless" else MONK_TIME
+	queue_changed.emit()
+	print("[AI-PROD] monastery queued monk (queue=%d)" % queue.size())
+	return true
+
+
 func get_queue_summary() -> String:
 	if queue.is_empty():
 		return "fronta prázdná"

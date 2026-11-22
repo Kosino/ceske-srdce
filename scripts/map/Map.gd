@@ -2501,59 +2501,63 @@ func _run_balance_sim_game() -> void:
 	var cfg := BalanceSim.begin_game()
 	var civ_a: String = str(cfg.get("civ_a", CivData.DEFAULT_PLAYER))
 	var civ_b: String = str(cfg.get("civ_b", CivData.DEFAULT_ENEMY))
-	# Hide HUD clutter for speed / noise.
+	var sim_seed: int = int(cfg.get("seed", 4242))
+	var jitter_a: float = float(cfg.get("jitter_a", 1.0))
+	var jitter_b: float = float(cfg.get("jitter_b", 1.0))
 	var debug := get_node_or_null("DebugPanel")
 	if debug:
 		debug.visible = false
-	# Configure existing enemy AI + spawn player AI.
 	var enemy_ai := get_node_or_null("SimpleEnemyAI") as SimpleEnemyAI
 	if enemy_ai:
 		enemy_ai.team = 1
 		enemy_ai.civ_id = civ_b
 		enemy_ai.base_position = ENEMY_TC_POS
+		enemy_ai.configure_sim(sim_seed, jitter_b)
 		GameManager.enemy_civ = civ_b
 	var player_ai := SimpleEnemyAI.new()
 	player_ai.name = "PlayerAI"
 	player_ai.team = 0
 	player_ai.civ_id = civ_a
 	player_ai.base_position = PLAYER_TC_POS
+	player_ai.configure_sim(sim_seed, jitter_a)
 	GameManager.player_civ = civ_a
 	add_child(player_ai)
+	## Sim harness: TC HP so feudal mix can land, but most games still decide before the cap.
+	for hall in get_tree().get_nodes_in_group("town_halls"):
+		if hall is DropOff:
+			(hall as DropOff).max_hp = 1100.0
+			(hall as DropOff).hp = 1100.0
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 
 	var victory_node := victory
 	victory_node.reset_for_test()
-	var done := false
-	var winner_team := -1
-	var timed_out := false
+	var sim_state := {"done": false, "winner_team": -1}
 	var on_end := func(player_won: bool) -> void:
-		done = true
-		winner_team = 0 if player_won else 1
-	victory_node.match_ended.connect(on_end)
+		sim_state["done"] = true
+		sim_state["winner_team"] = 0 if player_won else 1
+	if not victory_node.match_ended.is_connected(on_end):
+		victory_node.match_ended.connect(on_end)
 
 	var sim_t := 0.0
 	var max_t: float = BalanceSim.MAX_GAME_SEC
 	if BalanceSim.smoke_only:
-		max_t = 25.0
-	while not done and sim_t < max_t:
+		max_t = 400.0
+	var timed_out := false
+	while not bool(sim_state["done"]) and sim_t < max_t:
 		await get_tree().process_frame
 		sim_t += get_process_delta_time()
-		BalanceSim.tick_age_schedule(sim_t)
-	if not done:
+		BalanceSim.note_elapsed(sim_t)
+		## Belt-and-suspenders: VictoryController.ended may set before signal delivery.
+		if victory_node.ended and not bool(sim_state["done"]):
+			sim_state["done"] = true
+			sim_state["winner_team"] = 0 if victory_node.player_won else 1
+	var winner_team: int = int(sim_state["winner_team"])
+	if not bool(sim_state["done"]):
+		## Timeout = draw. Do NOT resolve by army size.
 		timed_out = true
-		# Prefer team with more military units as soft winner; else draw.
-		var p_n := get_tree().get_nodes_in_group("player_units").size()
-		var e_n := get_tree().get_nodes_in_group("enemy_units").size()
-		if p_n > e_n + 2:
-			winner_team = 0
-			timed_out = false
-		elif e_n > p_n + 2:
-			winner_team = 1
-			timed_out = false
-		else:
-			winner_team = -1
-		print("[SIM] timeout t=%.1fs p_units=%d e_units=%d" % [sim_t, p_n, e_n])
+		winner_team = -1
+		print("[SIM] timeout draw t=%.1fs (cap=%.0fs)" % [sim_t, max_t])
 	if victory_node.match_ended.is_connected(on_end):
 		victory_node.match_ended.disconnect(on_end)
 	BalanceSim.finish_game(winner_team, sim_t, timed_out)
@@ -2564,6 +2568,7 @@ func _run_balance_sim_game() -> void:
 ## Harness smoke: civ pairs + report writer (no full suite).
 func _run_balance_harness_smoke() -> void:
 	await get_tree().physics_frame
+	BalanceSim._ensure_suite()
 	BalanceSim._build_pairs()
 	var pair_ok: bool = BalanceSim.pairs.size() == 6
 	var prev_results: Array[Dictionary] = BalanceSim.results.duplicate()
@@ -2584,14 +2589,15 @@ func _run_balance_harness_smoke() -> void:
 	})
 	for civ in CivData.ALL_CIV_IDS:
 		BalanceSim.unit_trains[civ] = {}
-		BalanceSim.age_reach[civ] = {2: [70.0], 3: [150.0], 4: []}
-	BalanceSim.unit_trains[CivData.MORAVANE] = {"soldier": 3, "bojovnik_bradatice": 1}
-	# Write to a temp path so we don't clobber docs/balance/report.md from a real --sim run.
+		BalanceSim.age_reach[civ] = {2: [180.0], 3: [420.0], 4: []}
+	BalanceSim.unit_trains[CivData.MORAVANE] = {
+		"soldier": 3, "spearman": 2, "archer": 2, "bojovnik_bradatice": 1, "monk": 1
+	}
 	var md := BalanceSim._build_report_markdown()
 	var tmp_path := "res://docs/balance/_harness_smoke.md"
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://docs/balance"))
 	var f := FileAccess.open(tmp_path, FileAccess.WRITE)
-	var report_ok: bool = f != null
+	var report_ok: bool = f != null and md.contains("95%") and md.contains("Army composition")
 	if f:
 		f.store_string(md)
 		f.close()
