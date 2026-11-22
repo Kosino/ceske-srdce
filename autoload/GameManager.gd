@@ -24,6 +24,36 @@ var current_age: int:
 		_current_age = value
 		age_changed.emit()
 
+## Fáze 2 — civilizace (default Moravané vs Husité).
+var player_civ: String = CivData.DEFAULT_PLAYER
+var enemy_civ: String = CivData.DEFAULT_ENEMY
+
+
+func civ_for_team(team: int) -> String:
+	return player_civ if team == 0 else enemy_civ
+
+
+func get_civ_name(team: int = 0) -> String:
+	return CivData.civ_name(civ_for_team(team))
+
+
+func gather_rate_mult(team: int, resource_type: String) -> float:
+	return CivData.gather_mult(civ_for_team(team), resource_type)
+
+
+func adjust_building_cost(cost: Dictionary, team: int = 0) -> Dictionary:
+	var out := cost.duplicate()
+	var wood_m := CivData.wood_cost_mult(civ_for_team(team))
+	if wood_m != 1.0 and out.has("wood"):
+		out["wood"] = maxi(1, int(round(float(out["wood"]) * wood_m)))
+	return out
+
+
+func apply_civ_unit_bonuses(unit: Unit) -> void:
+	if unit == null:
+		return
+	CivData.apply_unit_bonuses(unit, civ_for_team(unit.team))
+
 
 func add_resource(type: String, amount: int) -> void:
 	match type:

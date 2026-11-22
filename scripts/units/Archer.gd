@@ -7,6 +7,7 @@ const PROJECTILE_SCENE := preload("res://scenes/combat/Projectile.tscn")
 
 
 func _ready() -> void:
+	unit_id = "archer"
 	speed = 80.0
 	max_hp = 30.0
 	attack_damage = 4.0

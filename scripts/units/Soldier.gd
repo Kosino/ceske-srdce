@@ -5,6 +5,7 @@ class_name Soldier
 
 
 func _ready() -> void:
+	unit_id = "soldier"
 	speed = 80.0
 	max_hp = 45.0
 	attack_damage = 6.0

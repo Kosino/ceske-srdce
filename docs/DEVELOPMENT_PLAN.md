@@ -16,7 +16,7 @@
 7. Jednoduchá AI + Victory
 
 ## Fáze 2: Systémy
-- Věky
-- Civilizace a bonusy
+- Věky ✅
+- Civilizace a bonusy ✅ (NÁVRH čísla; unikátní jednotky data-only)
 - Formace
 - Lepší AI

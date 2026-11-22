@@ -31,7 +31,7 @@ Postup věku: výzkum v Radnici (fronta; během výzkumu Radnice netrénuje). Po
 | 3 Husitství | *(data-only)* stable, monastery | *(data-only)* knight, monk |
 | 4 Habsburkové | *(data-only)* castle, university | *(data-only)* siege |
 
-**NÁVRH – Kovárna (Honza schvaluje čísla):** 150 D, 40 s, HP 1800, footprint 80×80. Zatím jen stavba (gate věk 2→3); žádné techy. Sprite: `assets/sprites/buildings/blacksmith.png` (63×96).
+**Schváleno 2026-11-22 – Kovárna:** 150 D, 40 s, HP 1800, footprint 80×80. Zatím jen stavba (gate věk 2→3); žádné techy. Sprite: `assets/sprites/buildings/blacksmith.png` (63×96).
 
 ## Civilizace (multiplayer)
 | Civilizace   | Unikátní jednotka          | Hlavní síla          |
@@ -40,6 +40,21 @@ Postup věku: výzkum v Radnici (fronta; během výzkumu Radnice netrénuje). Po
 | Přemyslovci | Svatováclavský rytíř     | Mid, zlato + jízda |
 | Husité      | Husitský bojový vůz      | Mid/Late, pěchota  |
 | Habsburkové | Císařská garda          | Late, těžká pěchota|
+
+### Civilizace – bonusy (Fáze 2)
+
+Default skirmish: hráč **Moravané**, AI **Husité**. Unikátní jednotky zatím data-only (`CivData`).
+
+**NÁVRH (Honza schvaluje čísla):**
+
+| Civilizace | Bonusy |
+|------------|--------|
+| Moravané | +15 % těžba dřeva; −10 % cena budov za dřevo |
+| Přemyslovci | +15 % těžba zlata; +10 % poškození jízdy *(až bude jízda)* |
+| Husité | +10 % HP pěchoty; +5 % poškození pěchoty |
+| Habsburkové | +15 % HP pěchoty |
+
+Pěchota = zbrojnoš, kopiník, lučištník. Implementace: `CivData` + `GameManager.player_civ` / `enemy_civ`.
 
 ## Core loop
 Resources → Stavění → Produkce jednotek → Combat → Postup věků
@@ -64,7 +79,7 @@ Těžba za sekundu na vesničana: dřevo 0.40, jídlo z keřů 0.30, farma 0.33,
 | Mlýn | 100 D | 35 s | 1000 | drop-off jídlo, farmy |
 | Kasárna | 175 D | 50 s | 1200 | Zbrojnoš, Kopiník |
 | Střelnice | 175 D | 50 s | 1200 | Lučištník |
-| Kovárna *(NÁVRH)* | 150 D | 40 s | 1800 | věk 2 gate; techy později |
+| Kovárna *(Schváleno 2026-11-22)* | 150 D | 40 s | 1800 | věk 2 gate; techy později |
 
 Poznámka: `population_max` = Radnice +5 a každý Dům +5, strop 200 (`GameManager.add_population_cap` / `can_add_population`).
 Lučištník střílí šípem na zamčenou pozici cíle v okamžiku výstřelu; zásah jen pokud cíl u dopadu zůstal (jinak miss). Žádný friendly fire.

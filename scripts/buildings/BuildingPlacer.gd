@@ -95,7 +95,8 @@ func place_at(building_type: String, world_pos: Vector2) -> Building:
 		return null
 	if not _can_place(building_type, world_pos):
 		return null
-	if not GameManager.spend(COSTS[building_type]):
+	var cost := GameManager.adjust_building_cost(COSTS[building_type], 0)
+	if not GameManager.spend(cost):
 		NotificationManager.show_message("Nedostatek surovin.")
 		return null
 	var building := _instantiate_building(building_type)
@@ -148,7 +149,8 @@ func _process(_delta: float) -> void:
 		return
 	var mouse := get_global_mouse_position()
 	_ghost.global_position = mouse
-	var ok := _can_place(placing_type, mouse) and GameManager.can_afford(COSTS[placing_type])
+	var cost := GameManager.adjust_building_cost(COSTS[placing_type], 0)
+	var ok := _can_place(placing_type, mouse) and GameManager.can_afford(cost)
 	_ghost.modulate = Color(0.35, 1.0, 0.45, 0.45) if ok else Color(1.0, 0.35, 0.35, 0.45)
 
 

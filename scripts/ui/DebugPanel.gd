@@ -36,7 +36,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _refresh_stats() -> void:
-	stats_label.text = "Food: %d\nWood: %d\nGold: %d\nStone: %d\nPop: %d / %d\nAge: %d" % [
+	stats_label.text = "Food: %d\nWood: %d\nGold: %d\nStone: %d\nPop: %d / %d\nAge: %d\nCiv: %s" % [
 		GameManager.food,
 		GameManager.wood,
 		GameManager.gold,
@@ -44,6 +44,7 @@ func _refresh_stats() -> void:
 		GameManager.population,
 		GameManager.population_max,
 		GameManager.current_age,
+		GameManager.get_civ_name(0),
 	]
 
 

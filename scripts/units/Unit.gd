@@ -4,6 +4,7 @@ class_name Unit
 signal died(unit: Unit)
 
 @export var team: int = 0
+@export var unit_id: String = ""
 @export var speed: float = 80.0
 @export var max_hp: float = 25.0
 @export var attack_damage: float = 3.0
@@ -27,6 +28,7 @@ var _visual: Sprite2D
 
 
 func _ready() -> void:
+	GameManager.apply_civ_unit_bonuses(self)
 	hp = max_hp
 	_visual = get_node_or_null("Visual") as Sprite2D
 	add_to_group("units")

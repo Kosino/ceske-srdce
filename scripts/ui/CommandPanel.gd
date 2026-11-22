@@ -56,14 +56,18 @@ func _on_selection_changed(units: Array) -> void:
 
 func _refresh_age_ui() -> void:
 	if age_label:
-		age_label.text = "Věk: %s (%d)" % [GameManager.get_age_name(), GameManager.current_age]
+		age_label.text = "Věk: %s (%d) · %s" % [
+			GameManager.get_age_name(), GameManager.current_age, GameManager.get_civ_name(0)
+		]
 	_refresh_research_button()
 
 
 func _refresh_research_button() -> void:
 	# Keep label in sync even if age was set without going through _refresh_age_ui.
 	if age_label:
-		age_label.text = "Věk: %s (%d)" % [GameManager.get_age_name(), GameManager.current_age]
+		age_label.text = "Věk: %s (%d) · %s" % [
+			GameManager.get_age_name(), GameManager.current_age, GameManager.get_civ_name(0)
+		]
 	if research_button == null:
 		return
 	if GameManager.current_age >= AgeData.MAX_AGE:

@@ -5,6 +5,7 @@ class_name Spearman
 
 
 func _ready() -> void:
+	unit_id = "spearman"
 	speed = 85.0
 	max_hp = 45.0
 	attack_damage = 3.0
