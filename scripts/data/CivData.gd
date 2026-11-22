@@ -1,18 +1,18 @@
 extends Object
 class_name CivData
-## Civilization ids + NÁVRH bonuses. Unique units are data-only for now.
+## Civilization ids + Schváleno bonuses. Unique units are data-only for now.
 
 const MORAVANE := "moravane"
 const PREMYSLOVCI := "premyslovci"
 const HUSITE := "husite"
-const HABSBURKOVE := "habsurkove"
+const HABSBURKOVE := "habsburkove"
 
 const DEFAULT_PLAYER := MORAVANE
 const DEFAULT_ENEMY := HUSITE
 
 const INFANTRY_IDS := ["soldier", "spearman", "archer"]
 
-## NÁVRH — Honza schvaluje čísla. Keys match DESIGN “hlavní síla”.
+## Schváleno 2026-11-22. Keys match DESIGN “hlavní síla”.
 const CIVS := {
 	MORAVANE: {
 		"name": "Moravané",
@@ -35,6 +35,7 @@ const CIVS := {
 	HABSBURKOVE: {
 		"name": "Habsburkové",
 		"unique_unit": "cisarska_garda",
+		"gather": {"stone": 1.10},
 		"infantry_hp": 1.15,
 	},
 }
@@ -72,3 +73,16 @@ static func apply_unit_bonuses(unit: Unit, civ_id: String) -> void:
 		unit.attack_damage *= float(def.get("infantry_damage", 1.0))
 	if unit.is_cavalry:
 		unit.attack_damage *= float(def.get("cavalry_damage", 1.0))
+
+
+static func format_cost(cost: Dictionary) -> String:
+	var parts: PackedStringArray = []
+	if int(cost.get("food", 0)) > 0:
+		parts.append("%d J" % int(cost["food"]))
+	if int(cost.get("wood", 0)) > 0:
+		parts.append("%d D" % int(cost["wood"]))
+	if int(cost.get("gold", 0)) > 0:
+		parts.append("%d Z" % int(cost["gold"]))
+	if int(cost.get("stone", 0)) > 0:
+		parts.append("%d K" % int(cost["stone"]))
+	return ", ".join(parts) if not parts.is_empty() else "—"

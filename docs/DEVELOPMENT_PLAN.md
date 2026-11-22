@@ -17,6 +17,6 @@
 
 ## Fáze 2: Systémy
 - Věky ✅
-- Civilizace a bonusy ✅ (NÁVRH čísla; unikátní jednotky data-only)
-- Formace
+- Civilizace a bonusy ✅ (Schváleno 2026-11-22; unikátní jednotky data-only)
+- Formace ✅ (NÁVRH spacing; řada / rozptyl / box)
 - Lepší AI

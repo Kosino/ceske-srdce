@@ -77,7 +77,10 @@ func begin_place(building_type: String) -> void:
 	placing_type = building_type
 	_configure_ghost(building_type)
 	_ghost.visible = true
-	NotificationManager.show_message("Stavba: %s (LMB položit, RMB zrušit)" % building_type)
+	var cost := GameManager.adjust_building_cost(COSTS[building_type], 0)
+	NotificationManager.show_message(
+		"Stavba: %s (%s) — LMB položit, RMB zrušit" % [building_type, CivData.format_cost(cost)]
+	)
 
 
 func cancel() -> void:

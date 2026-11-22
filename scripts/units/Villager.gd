@@ -114,11 +114,11 @@ func _physics_process(delta: float) -> void:
 			stop_movement()
 
 
-func command_move(world_pos: Vector2) -> void:
+func command_move(world_pos: Vector2, speed_cap: float = -1.0) -> void:
 	_leave_build_site()
 	_interrupt_gather_orders()
 	state = State.MOVING
-	super.command_move(world_pos)
+	super.command_move(world_pos, speed_cap)
 
 
 func command_stop() -> void:
