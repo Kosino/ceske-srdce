@@ -23,6 +23,8 @@ var _attack_timer: float = 0.0
 var _facing: String = "down"
 var _facing_textures: Dictionary = {}
 var _visual: Sprite2D
+## When >= 0, group formation move uses min(speed, cap) so the group keeps pace.
+var _move_speed_cap: float = -1.0
 
 @onready var navigation_agent: NavigationAgent2D = $NavigationAgent2D
 
@@ -36,7 +38,7 @@ func _ready() -> void:
 	if navigation_agent:
 		navigation_agent.velocity_computed.connect(_on_velocity_computed)
 		navigation_agent.avoidance_enabled = true
-		navigation_agent.max_speed = speed
+		navigation_agent.max_speed = effective_move_speed()
 
 
 func configure_facing_sprites(unit_key: String) -> void:
@@ -125,8 +127,17 @@ func is_navigation_finished() -> bool:
 	return navigation_agent == null or navigation_agent.is_navigation_finished()
 
 
-func command_move(world_pos: Vector2) -> void:
+func effective_move_speed() -> float:
+	if _move_speed_cap < 0.0:
+		return speed
+	return minf(speed, _move_speed_cap)
+
+
+func command_move(world_pos: Vector2, speed_cap: float = -1.0) -> void:
 	attack_target = null
+	_move_speed_cap = speed_cap
+	if navigation_agent:
+		navigation_agent.max_speed = effective_move_speed()
 	set_movement_target(world_pos)
 
 
@@ -149,11 +160,17 @@ func command_attack(target: Node2D) -> void:
 		print("[COMBAT] refuse friendly fire team=%d -> %s" % [team, target.name])
 		return
 	attack_target = target
+	_move_speed_cap = -1.0
+	if navigation_agent:
+		navigation_agent.max_speed = speed
 	set_movement_target(target.global_position)
 
 
 func command_stop() -> void:
 	attack_target = null
+	_move_speed_cap = -1.0
+	if navigation_agent:
+		navigation_agent.max_speed = speed
 	stop_movement()
 
 
@@ -213,7 +230,9 @@ func _steer_toward_target() -> void:
 		return
 	var next_pos := navigation_agent.get_next_path_position()
 	var direction := (next_pos - global_position).normalized()
-	navigation_agent.velocity = direction * speed
+	var move_spd := effective_move_speed()
+	navigation_agent.max_speed = move_spd
+	navigation_agent.velocity = direction * move_spd
 
 
 func _on_velocity_computed(safe_velocity: Vector2) -> void:

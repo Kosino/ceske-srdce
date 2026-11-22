@@ -1,8 +1,20 @@
 extends Node
 
 signal selection_changed(units: Array)
+signal formation_changed(kind: String)
 
 var selected_units: Array[Node] = []
+## Current formation for group moves (AoE II style).
+var formation: String = FormationData.LINE
+
+
+func set_formation(kind: String) -> void:
+	if kind != FormationData.LINE and kind != FormationData.SCATTERED and kind != FormationData.BOX:
+		return
+	if formation == kind:
+		return
+	formation = kind
+	formation_changed.emit(formation)
 
 
 func select_single(unit: Node) -> void:
@@ -29,9 +41,25 @@ func clear_selection() -> void:
 
 
 func issue_move(world_pos: Vector2) -> void:
+	var movers: Array[Unit] = []
 	for u in selected_units:
-		if is_instance_valid(u) and u.has_method("command_move"):
-			u.command_move(world_pos)
+		if is_instance_valid(u) and u is Unit and u.has_method("command_move"):
+			movers.append(u as Unit)
+	if movers.is_empty():
+		return
+	if movers.size() == 1:
+		movers[0].command_move(world_pos)
+		return
+	var slowest := movers[0].speed
+	var centroid := Vector2.ZERO
+	for u in movers:
+		slowest = minf(slowest, u.speed)
+		centroid += u.global_position
+	centroid /= float(movers.size())
+	var facing := world_pos - centroid
+	var offs := FormationData.offsets(formation, movers.size(), facing)
+	for i in movers.size():
+		movers[i].command_move(world_pos + offs[i], slowest)
 
 
 func issue_attack(target: Node2D) -> void:

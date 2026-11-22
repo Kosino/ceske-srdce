@@ -13,6 +13,7 @@ func _ready() -> void:
 	GameManager.age_changed.connect(_refresh_stats)
 	_refresh_stats()
 	_refresh_fps()
+	_refresh_build_cost_labels()
 
 
 func _process(delta: float) -> void:
@@ -145,3 +146,29 @@ func _barracks_enqueue(unit_id: String) -> void:
 
 func _placer() -> BuildingPlacer:
 	return get_tree().get_first_node_in_group("building_placer") as BuildingPlacer
+
+
+## Button text/tooltip show civ-discounted wood costs via adjust_building_cost.
+func _refresh_build_cost_labels() -> void:
+	var mapping := {
+		"PlaceHouse": ["Dům", "house"],
+		"PlaceBarracks": ["Kasárna", "barracks"],
+		"PlaceLumber": ["Pila", "lumber_camp"],
+		"PlaceMill": ["Mlýn", "mill"],
+		"PlaceArchery": ["Střelnice", "archery_range"],
+		"PlaceBlacksmith": ["Kovárna", "blacksmith"],
+	}
+	var row := get_node_or_null("Panel/Margin/VBox/BuildButtons")
+	if row == null:
+		return
+	for child_name in mapping.keys():
+		var btn := row.get_node_or_null(child_name) as Button
+		if btn == null:
+			continue
+		var label: String = mapping[child_name][0]
+		var btype: String = mapping[child_name][1]
+		var base: Dictionary = BuildingPlacer.COSTS.get(btype, {})
+		var cost := GameManager.adjust_building_cost(base, 0)
+		var cost_txt := CivData.format_cost(cost)
+		btn.text = "%s %s" % [label, cost_txt]
+		btn.tooltip_text = "Cena (civ): %s" % cost_txt

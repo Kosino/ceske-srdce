@@ -1,5 +1,5 @@
 extends SceneTree
-## Windowed capture → docs/screenshots/pixel_art_civs.png
+## Windowed capture → docs/screenshots/pixel_art_formations.png
 
 
 func _initialize() -> void:
@@ -22,7 +22,7 @@ func _capture_after_delay() -> void:
 		return
 	var dir := "res://docs/screenshots"
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir))
-	var path := "%s/pixel_art_civs.png" % dir
+	var path := "%s/pixel_art_formations.png" % dir
 	var save_err := img.save_png(path)
 	if save_err != OK:
 		push_error("[SHOT] save failed %s" % save_err)

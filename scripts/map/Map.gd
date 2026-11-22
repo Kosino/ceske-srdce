@@ -41,6 +41,7 @@ func _ready() -> void:
 		await _run_age2_to_age3_gate_smoke()
 		await _run_age_ui_sync_smoke()
 		await _run_civ_bonus_smoke()
+		await _run_formation_smoke()
 	else:
 		await _sample_windowed_fps()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 stavění/trénink.")
@@ -530,7 +531,7 @@ func _find_command_panel() -> CommandPanel:
 	return null
 
 
-## Civ gather / wood-cost / infantry HP bonuses (NÁVRH).
+## Civ gather / wood-cost / infantry HP / Habsburkové stone.
 func _run_civ_bonus_smoke() -> void:
 	await get_tree().physics_frame
 	GameManager.player_civ = CivData.MORAVANE
@@ -551,12 +552,87 @@ func _run_civ_bonus_smoke() -> void:
 	print("[TEST] civ_husite soldier_hp=%.1f expect=%.1f" % [soldier.max_hp, expect_hp])
 	soldier.queue_free()
 
+	GameManager.player_civ = CivData.HABSBURKOVE
+	var stone_m := GameManager.gather_rate_mult(0, "stone")
+	var stone_ok := is_equal_approx(stone_m, 1.10) and CivData.HABSBURKOVE == "habsburkove"
+	print("[TEST] civ_habsburkove stone_mult=%.2f id=%s" % [stone_m, CivData.HABSBURKOVE])
+
 	GameManager.player_civ = CivData.MORAVANE
 	GameManager.enemy_civ = CivData.HUSITE
-	if wood_ok and cost_ok and hp_ok:
-		print("[TEST] PASS civ bonuses (wood / cost / infantry HP)")
+	if wood_ok and cost_ok and hp_ok and stone_ok:
+		print("[TEST] PASS civ bonuses (wood / cost / infantry HP / stone)")
 	else:
-		print("[TEST] FAIL civ bonuses (wood / cost / infantry HP)")
+		print("[TEST] FAIL civ bonuses (wood / cost / infantry HP / stone)")
+
+
+## Formation spacing + shared group move speed (slowest unit).
+func _run_formation_smoke() -> void:
+	await get_tree().physics_frame
+	const SPEARMAN_SCENE := preload("res://scenes/units/Spearman.tscn")
+	var a: Soldier = SOLDIER_SCENE.instantiate() as Soldier
+	var b: Spearman = SPEARMAN_SCENE.instantiate() as Spearman
+	var c: Soldier = SOLDIER_SCENE.instantiate() as Soldier
+	a.team = 0
+	b.team = 0
+	c.team = 0
+	a.contribute_population = false
+	b.contribute_population = false
+	c.contribute_population = false
+	a.position = Vector2(500, 500)
+	b.position = Vector2(520, 500)
+	c.position = Vector2(540, 500)
+	units.add_child(a)
+	units.add_child(b)
+	units.add_child(c)
+	await get_tree().physics_frame
+
+	SelectionManager.select_multiple([a, b, c])
+	SelectionManager.set_formation(FormationData.LINE)
+	var dest := Vector2(800, 500)
+	SelectionManager.issue_move(dest)
+	await get_tree().physics_frame
+
+	var gap := FormationData.spacing(FormationData.LINE)
+	var targets: Array[Vector2] = []
+	for u in [a, b, c]:
+		if u.navigation_agent:
+			targets.append(u.navigation_agent.target_position)
+	var pair_ds: Array[float] = []
+	for i in targets.size():
+		for j in range(i + 1, targets.size()):
+			pair_ds.append(targets[i].distance_to(targets[j]))
+	pair_ds.sort()
+	var spacing_ok := pair_ds.size() == 3
+	if spacing_ok:
+		# Line of 3: two adjacent gaps + one double gap.
+		spacing_ok = (
+			is_equal_approx(pair_ds[0], gap)
+			and is_equal_approx(pair_ds[1], gap)
+			and is_equal_approx(pair_ds[2], gap * 2.0)
+		)
+		print("[TEST] formation_line pairs=%.1f,%.1f,%.1f expect=%.1f,%.1f,%.1f" % [
+			pair_ds[0], pair_ds[1], pair_ds[2], gap, gap, gap * 2.0
+		])
+
+	var slowest := minf(a.speed, minf(b.speed, c.speed))
+	var speed_ok := (
+		is_equal_approx(a.effective_move_speed(), slowest)
+		and is_equal_approx(b.effective_move_speed(), slowest)
+		and is_equal_approx(c.effective_move_speed(), slowest)
+	)
+	print("[TEST] formation_speed slowest=%.1f a=%.1f b=%.1f c=%.1f" % [
+		slowest, a.effective_move_speed(), b.effective_move_speed(), c.effective_move_speed()
+	])
+
+	for u in [a, b, c]:
+		u.queue_free()
+	SelectionManager.clear_selection()
+	SelectionManager.set_formation(FormationData.LINE)
+
+	if spacing_ok and speed_ok:
+		print("[TEST] PASS formation spacing + shared speed")
+	else:
+		print("[TEST] FAIL formation spacing + shared speed")
 
 
 func _ensure_complete_age1_buildings(need: int) -> void:
