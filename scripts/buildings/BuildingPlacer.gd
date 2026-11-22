@@ -5,6 +5,7 @@ signal building_placed(building: Building)
 
 const HOUSE_SCENE := preload("res://scenes/buildings/House.tscn")
 const BARRACKS_SCENE := preload("res://scenes/buildings/Barracks.tscn")
+const ARCHERY_SCENE := preload("res://scenes/buildings/ArcheryRange.tscn")
 const LUMBER_SCENE := preload("res://scenes/buildings/LumberCamp.tscn")
 const MILL_SCENE := preload("res://scenes/buildings/Mill.tscn")
 
@@ -12,6 +13,7 @@ const MILL_SCENE := preload("res://scenes/buildings/Mill.tscn")
 const COSTS := {
 	"house": {"wood": 25},
 	"barracks": {"wood": 175},
+	"archery_range": {"wood": 175},
 	"lumber_camp": {"wood": 100},
 	"mill": {"wood": 100},
 }
@@ -19,6 +21,7 @@ const COSTS := {
 const BUILD_TIMES := {
 	"house": 25.0,
 	"barracks": 50.0,
+	"archery_range": 50.0,
 	"lumber_camp": 35.0,
 	"mill": 35.0,
 }
@@ -26,6 +29,7 @@ const BUILD_TIMES := {
 const FOOTPRINTS := {
 	"house": Vector2(56, 56),
 	"barracks": Vector2(80, 80),
+	"archery_range": Vector2(80, 80),
 	"lumber_camp": Vector2(72, 72),
 	"mill": Vector2(72, 72),
 }
@@ -79,6 +83,8 @@ func place_at(building_type: String, world_pos: Vector2) -> Building:
 	entities.add_child(building)
 	if building is Barracks:
 		(building as Barracks).spawn_parent = entities
+	elif building is ArcheryRange:
+		(building as ArcheryRange).spawn_parent = entities
 	var build_t: float = float(BUILD_TIMES.get(building_type, building.build_time))
 	building.start_construction(build_t)
 	_assign_builders(building)
@@ -141,6 +147,8 @@ func _instantiate_building(building_type: String) -> Building:
 			return HOUSE_SCENE.instantiate() as Building
 		"barracks":
 			return BARRACKS_SCENE.instantiate() as Building
+		"archery_range":
+			return ARCHERY_SCENE.instantiate() as Building
 		"lumber_camp":
 			return LUMBER_SCENE.instantiate() as Building
 		"mill":

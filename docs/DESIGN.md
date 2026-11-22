@@ -33,7 +33,7 @@ Těžba za sekundu na vesničana: dřevo 0.40, jídlo z keřů 0.30, farma 0.33,
 | Vesničan | 50 J | 25 s | 25 | 3 | melee | 80 px/s |
 | Zbrojnoš | 60 J, 20 Z | 21 s | 45 | 6 | melee | 80 px/s |
 | Kopiník | 35 J, 25 D | 22 s | 45 | 3 (+15 vs jízda) | melee | 85 px/s |
-| Lučištník | 25 D, 45 Z | 35 s | 30 | 4 | 160 px | 80 px/s |
+| Lučištník | 25 D, 45 Z | 35 s | 30 | 4 (projektil ~400 px/s) | 160 px | 80 px/s |
 
 | Budova | Cena | Stavba | HP | Funkce |
 |--------|------|--------|----|--------|
@@ -41,6 +41,8 @@ Těžba za sekundu na vesničana: dřevo 0.40, jídlo z keřů 0.30, farma 0.33,
 | Dům | 25 D | 25 s | 550 | +5 populace (strop 200) |
 | Pila | 100 D | 35 s | 1000 | drop-off dřevo |
 | Mlýn | 100 D | 35 s | 1000 | drop-off jídlo, farmy |
-| Kasárna | 175 D | 50 s | 1200 | Zbrojnoš, Kopiník, Lučištník (Střelnice až ve Fázi 2) |
+| Kasárna | 175 D | 50 s | 1200 | Zbrojnoš, Kopiník |
+| Střelnice | 175 D | 50 s | 1200 | Lučištník |
 
 Poznámka: `population_max` = Radnice +5 a každý Dům +5, strop 200 (`GameManager.add_population_cap` / `can_add_population`).
+Lučištník střílí šípem na zamčenou pozici cíle v okamžiku výstřelu; zásah jen pokud cíl u dopadu zůstal (jinak miss). Žádný friendly fire.
