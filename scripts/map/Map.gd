@@ -22,6 +22,9 @@ func _ready() -> void:
 	await _run_construction_smoke()
 	await _run_projectile_smoke()
 	await _run_archer_barracks_block_smoke()
+	await _run_age_research_smoke()
+	await _run_age_gate_smoke()
+	await _run_age_locked_building_smoke()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 stavění/trénink.")
 
 
@@ -257,3 +260,112 @@ func _run_archer_barracks_block_smoke() -> void:
 		print("[TEST] FAIL Archer cannot train at Barracks")
 
 	barracks.queue_free()
+
+
+## Age research at Radnice completes and advances age; blocks villager train while researching.
+func _run_age_research_smoke() -> void:
+	await get_tree().physics_frame
+	var hall := get_tree().get_first_node_in_group("player_town_hall") as DropOff
+	if hall == null:
+		print("[TEST] FAIL age research: no town hall")
+		return
+
+	# Ensure two age-1 buildings (construction smoke may have left a house).
+	_ensure_complete_age1_buildings(2)
+	GameManager.add_resource("food", 500)
+	var age_before := GameManager.current_age
+	if age_before != 1:
+		print("[TEST] FAIL age research expected age 1, got %d" % age_before)
+		return
+
+	var started := hall.start_age_research(0.4)
+	var blocked_train := not hall.enqueue_villager()
+	print("[TEST] age_research started=%s blocked_train=%s researching=%s" % [
+		started, blocked_train, hall.researching_age
+	])
+	if not started or not blocked_train or not hall.researching_age:
+		print("[TEST] FAIL age research start")
+		return
+
+	var advanced := false
+	for _i in range(30):
+		await get_tree().create_timer(0.1).timeout
+		if GameManager.current_age > age_before and not hall.researching_age:
+			advanced = true
+			break
+
+	print("[TEST] age_research age %d -> %d advanced=%s" % [age_before, GameManager.current_age, advanced])
+	if advanced and GameManager.current_age == 2:
+		print("[TEST] PASS age research completes and changes age")
+	else:
+		print("[TEST] FAIL age research completes and changes age")
+
+
+## Cannot start age research without 2 buildings from current age.
+func _run_age_gate_smoke() -> void:
+	await get_tree().physics_frame
+	var hall := get_tree().get_first_node_in_group("player_town_hall") as DropOff
+	if hall == null:
+		print("[TEST] FAIL age gate: no town hall")
+		return
+
+	# Reset to age 1 with zero age-1 buildings (remove player buildings except hall).
+	GameManager.current_age = 1
+	for n in get_tree().get_nodes_in_group("player_buildings"):
+		if n is DropOff:
+			continue
+		if is_instance_valid(n):
+			n.queue_free()
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+
+	GameManager.add_resource("food", 500)
+	var count := GameManager.count_age_buildings(1)
+	var refused := not hall.start_age_research(0.2)
+	print("[TEST] age_gate buildings=%d refused=%s" % [count, refused])
+	if refused and count < AgeData.BUILDINGS_REQUIRED_TO_ADVANCE and not hall.researching_age:
+		print("[TEST] PASS cannot start research without 2 buildings")
+	else:
+		print("[TEST] FAIL cannot start research without 2 buildings")
+
+
+## Locked building (archery_range in age 1) cannot be placed.
+func _run_age_locked_building_smoke() -> void:
+	await get_tree().physics_frame
+	GameManager.current_age = 1
+	GameManager.add_resource("wood", 200)
+	var before_wood := GameManager.wood
+	var placed := building_placer.place_at("archery_range", Vector2(400, 400))
+	var unlocked_ok := GameManager.is_building_unlocked("archery_range") == false
+	print("[TEST] locked_building placed=%s unlocked=%s wood %d -> %d" % [
+		placed != null, not unlocked_ok, before_wood, GameManager.wood
+	])
+	if placed == null and unlocked_ok and GameManager.wood == before_wood:
+		print("[TEST] PASS locked building cannot be placed")
+	else:
+		print("[TEST] FAIL locked building cannot be placed")
+		if placed != null and is_instance_valid(placed):
+			placed.queue_free()
+
+
+func _ensure_complete_age1_buildings(need: int) -> void:
+	var have := GameManager.count_age_buildings(1)
+	if have >= need:
+		return
+	var scenes := [
+		preload("res://scenes/buildings/House.tscn"),
+		preload("res://scenes/buildings/LumberCamp.tscn"),
+		preload("res://scenes/buildings/Mill.tscn"),
+		preload("res://scenes/buildings/Barracks.tscn"),
+	]
+	var idx := 0
+	while GameManager.count_age_buildings(1) < need and idx < scenes.size():
+		var b: Building = scenes[idx].instantiate() as Building
+		b.position = Vector2(200.0 + float(idx) * 100.0, 200.0)
+		b.is_complete = true
+		units.add_child(b)
+		idx += 1
+	# House grants pop on finish path; force complete buildings already ready.
+	for n in get_tree().get_nodes_in_group("player_buildings"):
+		if n is Building and (n as Building).is_complete == false:
+			(n as Building).is_complete = true

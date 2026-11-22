@@ -2,11 +2,19 @@ extends PanelContainer
 class_name CommandPanel
 
 @onready var summary_label: Label = %CommandSummary
+@onready var age_label: Label = %AgeLabel
+@onready var research_button: Button = %ResearchAgeButton
 
 
 func _ready() -> void:
 	SelectionManager.selection_changed.connect(_on_selection_changed)
+	GameManager.age_changed.connect(_refresh_age_ui)
 	_on_selection_changed(SelectionManager.selected_units)
+	_refresh_age_ui()
+
+
+func _process(_delta: float) -> void:
+	_refresh_research_button()
 
 
 func _on_selection_changed(units: Array) -> void:
@@ -39,9 +47,41 @@ func _on_selection_changed(units: Array) -> void:
 	summary_label.text = "Výběr: %s" % ", ".join(parts)
 
 
+func _refresh_age_ui() -> void:
+	if age_label:
+		age_label.text = "Věk: %s (%d)" % [GameManager.get_age_name(), GameManager.current_age]
+	_refresh_research_button()
+
+
+func _refresh_research_button() -> void:
+	if research_button == null:
+		return
+	if GameManager.current_age >= AgeData.MAX_AGE:
+		research_button.text = "Max věk"
+		research_button.disabled = true
+		return
+	var hall := get_tree().get_first_node_in_group("player_town_hall") as DropOff
+	if hall != null and hall.researching_age:
+		research_button.text = "Výzkum %.0fs" % maxf(hall.research_remaining, 0.0)
+		research_button.disabled = true
+		return
+	var target := AgeData.next_age(GameManager.current_age)
+	research_button.text = "Výzkum: %s" % AgeData.age_name(target)
+	research_button.disabled = false
+
+
 func _on_stop_pressed() -> void:
 	SelectionManager.issue_stop()
 	NotificationManager.show_message("Stop")
+
+
+func _on_research_age_pressed() -> void:
+	var hall := get_tree().get_first_node_in_group("player_town_hall") as DropOff
+	if hall == null:
+		NotificationManager.show_message("Nemáš radnici.")
+		return
+	hall.start_age_research()
+	_refresh_research_button()
 
 
 func _on_train_soldier_pressed() -> void:

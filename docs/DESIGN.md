@@ -12,6 +12,25 @@
 3. **Husitství**
 4. **Habsburkové**
 
+### Věky – research a unlocky
+
+Postup věku: výzkum v Radnici (fronta; během výzkumu Radnice netrénuje). Podmínka: **2 dokončené budovy z aktuálního věku** (Radnice se nepočítá). Unlock budov/jednotek: jedna tabulka `AgeData`.
+
+**NÁVRH** (AoE2-like defaults, Honza schvaluje):
+
+| Přechod | Cena | Čas |
+|---------|------|-----|
+| 1 → 2 (Přemyslovci) | 500 J | 130 s |
+| 2 → 3 (Husitství) | 800 J, 200 Z | 160 s |
+| 3 → 4 (Habsburkové) | 1000 J, 800 Z | 190 s |
+
+| Od věku | Budovy | Jednotky |
+|---------|--------|----------|
+| 1 Velká Morava | Dům, Pila, Mlýn, Kasárna | Vesničan, Zbrojnoš |
+| 2 Přemyslovci | Střelnice | Kopiník, Lučištník |
+| 3 Husitství | *(data-only)* stable, blacksmith, monastery | *(data-only)* knight, monk |
+| 4 Habsburkové | *(data-only)* castle, university | *(data-only)* siege |
+
 ## Civilizace (multiplayer)
 | Civilizace   | Unikátní jednotka          | Hlavní síla          |
 |--------------|--------------------------|---------------------|
