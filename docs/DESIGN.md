@@ -41,6 +41,21 @@ Postup věku: výzkum v Radnici (fronta; během výzkumu Radnice netrénuje). Po
 | Husité      | Husitský bojový vůz      | Mid/Late, pěchota  |
 | Habsburkové | Císařská garda          | Late, těžká pěchota|
 
+### Civilizace – bonusy (Fáze 2)
+
+Default skirmish: hráč **Moravané**, AI **Husité**. Unikátní jednotky zatím data-only (`CivData`).
+
+**NÁVRH (Honza schvaluje čísla):**
+
+| Civilizace | Bonusy |
+|------------|--------|
+| Moravané | +15 % těžba dřeva; −10 % cena budov za dřevo |
+| Přemyslovci | +15 % těžba zlata; +10 % poškození jízdy *(až bude jízda)* |
+| Husité | +10 % HP pěchoty; +5 % poškození pěchoty |
+| Habsburkové | +15 % HP pěchoty |
+
+Pěchota = zbrojnoš, kopiník, lučištník. Implementace: `CivData` + `GameManager.player_civ` / `enemy_civ`.
+
 ## Core loop
 Resources → Stavění → Produkce jednotek → Combat → Postup věků
 

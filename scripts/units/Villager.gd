@@ -27,6 +27,7 @@ var _harvest_accumulator: float = 0.0
 
 
 func _ready() -> void:
+	unit_id = "villager"
 	can_attack = false
 	max_hp = 25.0
 	speed = 80.0
@@ -70,7 +71,8 @@ func notify_build_finished(building: Building) -> void:
 
 
 func _harvest_rate_for(resource_type: String) -> float:
-	return float(HARVEST_RATES.get(resource_type, 0.30))
+	var base := float(HARVEST_RATES.get(resource_type, 0.30))
+	return base * GameManager.gather_rate_mult(team, resource_type)
 
 
 func _physics_process(delta: float) -> void:

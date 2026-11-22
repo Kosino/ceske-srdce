@@ -40,6 +40,7 @@ func _ready() -> void:
 		await _run_age_locked_building_smoke()
 		await _run_age2_to_age3_gate_smoke()
 		await _run_age_ui_sync_smoke()
+		await _run_civ_bonus_smoke()
 	else:
 		await _sample_windowed_fps()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 stavění/trénink.")
@@ -96,11 +97,17 @@ func _setup_terrain() -> void:
 			var source_id := SOURCE_GRASS_1 if (h & 1) == 0 else SOURCE_GRASS_2
 			layer.set_cell(Vector2i(x, y), source_id, Vector2i.ZERO)
 
-	# 1-tile-wide dirt on two sides of Radnice only (not under the building).
+	# 1-tile dirt: south from Radnice bottom edge (~4), then spur toward wood/forest.
+	# Hall center ~ (22,17); footprint ~2×2 — start at y+2 so nothing under the building.
 	var hall := Vector2i(900 / TILE, 700 / TILE)
-	for dy in range(-2, 3):
-		layer.set_cell(hall + Vector2i(-2, dy), SOURCE_DIRT, Vector2i.ZERO) # left
-		layer.set_cell(hall + Vector2i(2, dy), SOURCE_DIRT, Vector2i.ZERO) # right
+	for i in range(2, 6):
+		layer.set_cell(hall + Vector2i(0, i), SOURCE_DIRT, Vector2i.ZERO)
+	# Spur east toward wood at ~(1080,620) / tile (27,15), then north a bit into forest.
+	var spur_y := 4
+	for dx in range(1, 5):
+		layer.set_cell(hall + Vector2i(dx, spur_y), SOURCE_DIRT, Vector2i.ZERO)
+	for dy in range(1, 3):
+		layer.set_cell(hall + Vector2i(4, spur_y - dy), SOURCE_DIRT, Vector2i.ZERO)
 
 
 func _build_terrain_tileset() -> TileSet:
@@ -521,6 +528,35 @@ func _find_command_panel() -> CommandPanel:
 		if c is CommandPanel:
 			return c as CommandPanel
 	return null
+
+
+## Civ gather / wood-cost / infantry HP bonuses (NÁVRH).
+func _run_civ_bonus_smoke() -> void:
+	await get_tree().physics_frame
+	GameManager.player_civ = CivData.MORAVANE
+	var wood_m := GameManager.gather_rate_mult(0, "wood")
+	var house_cost := GameManager.adjust_building_cost({"wood": 25}, 0)
+	var wood_ok := is_equal_approx(wood_m, 1.15)
+	var cost_ok := int(house_cost.get("wood", 0)) == 23 # 25 * 0.90 rounded
+	print("[TEST] civ_moravane wood_mult=%.2f house_wood=%s" % [wood_m, house_cost.get("wood", 0)])
+
+	GameManager.player_civ = CivData.HUSITE
+	var soldier: Soldier = SOLDIER_SCENE.instantiate() as Soldier
+	soldier.team = 0
+	soldier.contribute_population = false
+	units.add_child(soldier)
+	await get_tree().physics_frame
+	var expect_hp := 45.0 * 1.10
+	var hp_ok := is_equal_approx(soldier.max_hp, expect_hp)
+	print("[TEST] civ_husite soldier_hp=%.1f expect=%.1f" % [soldier.max_hp, expect_hp])
+	soldier.queue_free()
+
+	GameManager.player_civ = CivData.MORAVANE
+	GameManager.enemy_civ = CivData.HUSITE
+	if wood_ok and cost_ok and hp_ok:
+		print("[TEST] PASS civ bonuses (wood / cost / infantry HP)")
+	else:
+		print("[TEST] FAIL civ bonuses (wood / cost / infantry HP)")
 
 
 func _ensure_complete_age1_buildings(need: int) -> void:
