@@ -11,6 +11,8 @@ var selected_building: Node = null
 ## Selected / hovered map resource — amount shown in SelectionInfo (no world labels).
 var selected_resource: ResourceNode = null
 var hovered_resource: ResourceNode = null
+## Hovered fortification (wall/gate) — name/HP only while hovered.
+var hovered_building: Building = null
 ## Current formation for group moves (AoE II style).
 var formation: String = FormationData.LINE
 
@@ -49,6 +51,8 @@ func select_building(building: Node) -> void:
 	_clear_building()
 	if building and is_instance_valid(building):
 		selected_building = building
+		if building is Building:
+			(building as Building).set_ui_selected(true)
 	building_selection_changed.emit(selected_building)
 	selection_changed.emit(selected_units)
 
@@ -67,6 +71,16 @@ func select_resource(resource: ResourceNode) -> void:
 func set_hovered_resource(resource: ResourceNode) -> void:
 	hovered_resource = resource if resource and is_instance_valid(resource) else null
 	resource_focus_changed.emit(focused_resource())
+
+
+func set_hovered_building(building: Building) -> void:
+	if hovered_building == building:
+		return
+	if hovered_building != null and is_instance_valid(hovered_building):
+		hovered_building.set_ui_hovered(false)
+	hovered_building = building if building and is_instance_valid(building) else null
+	if hovered_building != null:
+		hovered_building.set_ui_hovered(true)
 
 
 func notify_resource_amount_changed(resource: ResourceNode) -> void:
@@ -102,6 +116,8 @@ func clear_selection(emit_building: bool = true) -> void:
 func _clear_building() -> void:
 	if selected_building == null:
 		return
+	if selected_building is Building and is_instance_valid(selected_building):
+		(selected_building as Building).set_ui_selected(false)
 	selected_building = null
 	building_selection_changed.emit(null)
 
@@ -156,6 +172,14 @@ func issue_build(building: Building) -> void:
 	for u in selected_units:
 		if is_instance_valid(u) and u is Villager:
 			(u as Villager).assign_build(building)
+
+
+func issue_repair(building: Building) -> void:
+	if building == null or not is_instance_valid(building) or not building.needs_repair():
+		return
+	for u in selected_units:
+		if is_instance_valid(u) and u is Villager:
+			(u as Villager).assign_repair(building)
 
 
 func issue_stop() -> void:

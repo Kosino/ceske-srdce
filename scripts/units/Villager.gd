@@ -1,7 +1,10 @@
 extends Unit
 class_name Villager
 
-enum State { IDLE, MOVING, MOVE_TO_RESOURCE, HARVESTING, MOVE_TO_DROPOFF, MOVE_TO_BUILD, BUILDING }
+enum State {
+	IDLE, MOVING, MOVE_TO_RESOURCE, HARVESTING, MOVE_TO_DROPOFF,
+	MOVE_TO_BUILD, BUILDING, MOVE_TO_REPAIR, REPAIRING
+}
 
 ## DESIGN: wood 0.40/s; gold/stone = wood × 0.9; food 0.31/s. Carry 10.
 const WOOD_HARVEST_RATE := 0.40
@@ -13,6 +16,7 @@ const HARVEST_RATES := {
 }
 
 const BUILD_RANGE := 40.0
+const REPAIR_HP_PER_SEC := 1.0
 
 @export var carry_capacity: int = 10
 
@@ -20,9 +24,12 @@ var state: State = State.IDLE
 var target_resource: ResourceNode
 var target_dropoff: Node2D
 var target_building: Building
+var target_repair: Building
 var carried_type: String = ""
 var carried_amount: int = 0
 var _harvest_accumulator: float = 0.0
+var _repair_accum: float = 0.0
+var _build_chain: Array = []
 
 @onready var carry_label: Label = $CarryLabel
 
@@ -57,6 +64,8 @@ func assign_build(building: Building) -> void:
 	if building == null or not is_instance_valid(building) or building.is_complete:
 		return
 	_interrupt_gather_orders()
+	_leave_repair()
+	_build_chain.clear()
 	target_building = building
 	state = State.MOVE_TO_BUILD
 	attack_target = null
@@ -64,11 +73,49 @@ func assign_build(building: Building) -> void:
 	print("[BUILD] villager assigned to %s" % building.display_name)
 
 
+func assign_build_chain(segments: Array) -> void:
+	var chain: Array = []
+	for s in segments:
+		if s is Building and is_instance_valid(s) and not (s as Building).is_complete:
+			chain.append(s)
+	if chain.is_empty():
+		return
+	var first: Building = chain.pop_front() as Building
+	assign_build(first)
+	_build_chain = chain
+
+
+func assign_repair(building: Building) -> void:
+	if building == null or not is_instance_valid(building) or not building.needs_repair():
+		return
+	if building.team != team:
+		return
+	_interrupt_gather_orders()
+	_leave_build_site()
+	_build_chain.clear()
+	target_repair = building
+	state = State.MOVE_TO_REPAIR
+	attack_target = null
+	_repair_accum = 0.0
+	set_movement_target(building.global_position)
+	print("[REPAIR] villager assigned to %s" % building.display_name)
+
+
 func notify_build_finished(building: Building) -> void:
-	if target_building == building:
-		_leave_build_site()
-		state = State.IDLE
-		stop_movement()
+	if target_building != null and target_building != building and is_instance_valid(target_building):
+		return
+	_leave_build_site()
+	# Sequential chain: next unfinished segment (preserve remainder).
+	var rest: Array = _build_chain.duplicate()
+	_build_chain.clear()
+	while not rest.is_empty():
+		var next: Building = rest.pop_front() as Building
+		if next != null and is_instance_valid(next) and not next.is_complete:
+			assign_build(next)
+			_build_chain = rest
+			return
+	state = State.IDLE
+	stop_movement()
 
 
 func _harvest_rate_for(resource_type: String) -> float:
@@ -106,17 +153,52 @@ func _physics_process(delta: float) -> void:
 				_begin_building()
 		State.BUILDING:
 			stop_movement()
-			if not _building_valid() or target_building.is_complete:
+			if not _building_valid():
 				_leave_build_site()
 				state = State.IDLE
 				return
+			if target_building.is_complete:
+				# notify_build_finished already ran from Building._finish_construction
+				return
 			target_building.register_builder(self)
+		State.MOVE_TO_REPAIR:
+			if not _repair_valid():
+				_leave_repair()
+				state = State.IDLE
+				stop_movement()
+				return
+			set_movement_target(target_repair.global_position)
+			_steer_toward_target()
+			if global_position.distance_to(target_repair.global_position) <= _repair_reach():
+				state = State.REPAIRING
+				_repair_accum = 0.0
+				stop_movement()
+				target_repair.register_repairer(self)
+		State.REPAIRING:
+			stop_movement()
+			if not _repair_valid() or not target_repair.needs_repair():
+				_leave_repair()
+				state = State.IDLE
+				return
+			target_repair.register_repairer(self)
+			_repair_accum += REPAIR_HP_PER_SEC * delta
+			if _repair_accum >= 1.0:
+				var chunk := floorf(_repair_accum)
+				_repair_accum -= chunk
+				var done := target_repair.apply_repair(chunk)
+				if done <= 0.0:
+					# Out of resources — idle.
+					_leave_repair()
+					state = State.IDLE
+					NotificationManager.show_message("Nedostatek surovin na opravu.")
 		State.IDLE:
 			stop_movement()
 
 
 func command_move(world_pos: Vector2, speed_cap: float = -1.0) -> void:
 	_leave_build_site()
+	_leave_repair()
+	_build_chain.clear()
 	_interrupt_gather_orders()
 	state = State.MOVING
 	super.command_move(world_pos, speed_cap)
@@ -124,6 +206,8 @@ func command_move(world_pos: Vector2, speed_cap: float = -1.0) -> void:
 
 func command_stop() -> void:
 	_leave_build_site()
+	_leave_repair()
+	_build_chain.clear()
 	_interrupt_gather_orders()
 	state = State.IDLE
 	super.command_stop()
@@ -146,14 +230,30 @@ func _leave_build_site() -> void:
 	target_building = null
 
 
+func _leave_repair() -> void:
+	if target_repair != null and is_instance_valid(target_repair):
+		target_repair.unregister_repairer(self)
+	target_repair = null
+
+
 func _building_valid() -> bool:
 	return target_building != null and is_instance_valid(target_building)
+
+
+func _repair_valid() -> bool:
+	return target_repair != null and is_instance_valid(target_repair)
 
 
 func _build_reach() -> float:
 	if not _building_valid():
 		return BUILD_RANGE
 	return BUILD_RANGE + target_building.footprint.length() * 0.2
+
+
+func _repair_reach() -> float:
+	if not _repair_valid():
+		return BUILD_RANGE
+	return BUILD_RANGE + target_repair.footprint.length() * 0.2
 
 
 func _begin_building() -> void:
