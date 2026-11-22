@@ -44,8 +44,12 @@ func _ready() -> void:
 		await _run_formation_smoke()
 		await _run_ai_economy_smoke()
 		await _run_hud_layout_smoke()
+		await _run_victory_smoke()
+		await _run_defeat_smoke()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--hud-shot"):
 		await prepare_hud_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--victory-shot"):
+		await prepare_victory_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--formation-shot"):
 		await prepare_formation_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--ai-shot"):
@@ -53,6 +57,35 @@ func _ready() -> void:
 	else:
 		await _sample_windowed_fps()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 debug.")
+
+
+## Windowed screenshot of victory overlay (enemy hall + units cleared).
+func prepare_victory_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	var ai := get_node_or_null("SimpleEnemyAI") as SimpleEnemyAI
+	if ai:
+		ai.set_process(false)
+	var victory := get_node_or_null("VictoryController") as VictoryController
+	await get_tree().create_timer(0.4).timeout
+	for n in get_tree().get_nodes_in_group("enemy_units"):
+		if is_instance_valid(n):
+			n.queue_free()
+	await get_tree().physics_frame
+	var enemy_hall := get_tree().get_first_node_in_group("enemy_town_hall") as DropOff
+	if enemy_hall:
+		enemy_hall.take_damage(enemy_hall.max_hp + 10.0)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	if victory:
+		victory.force_check()
+	# Unpause so the viewport can present the overlay for capture.
+	get_tree().paused = false
+	await get_tree().create_timer(0.4, true, false, true).timeout
+	await get_tree().process_frame
+	_save_shot("victory.png", 0)
 
 
 ## Windowed screenshot of AoE-like HUD with a villager selected (build buttons).
@@ -812,6 +845,80 @@ func _run_hud_layout_smoke() -> void:
 		print("[TEST] PASS HUD layout + villager builds + DebugPanel hidden")
 	else:
 		print("[TEST] FAIL HUD layout + villager builds + DebugPanel hidden")
+
+
+## Win = enemy hall down + no enemy units; overlay Vítězství!
+func _run_victory_smoke() -> void:
+	await get_tree().physics_frame
+	var victory := get_node_or_null("VictoryController") as VictoryController
+	var ai := get_node_or_null("SimpleEnemyAI") as SimpleEnemyAI
+	if victory == null:
+		print("[TEST] FAIL victory: no VictoryController")
+		return
+	if ai:
+		ai.set_process(false)
+	victory.reset_for_test()
+	for n in get_tree().get_nodes_in_group("enemy_units"):
+		if is_instance_valid(n):
+			n.queue_free()
+	await get_tree().physics_frame
+	var enemy_hall := get_tree().get_first_node_in_group("enemy_town_hall") as DropOff
+	if enemy_hall == null:
+		print("[TEST] FAIL victory: no enemy hall")
+		return
+	enemy_hall.take_damage(enemy_hall.max_hp + 10.0)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	victory.force_check()
+	await get_tree().process_frame
+	var overlay := victory.get_overlay()
+	var title_ok := false
+	if overlay:
+		var title := overlay.find_child("EndTitle", true, false) as Label
+		title_ok = title != null and title.text.contains("Vítězství")
+	var ok := victory.ended and victory.player_won and title_ok
+	print("[TEST] victory ended=%s won=%s title_ok=%s" % [victory.ended, victory.player_won, title_ok])
+	if ok:
+		print("[TEST] PASS victory overlay")
+	else:
+		print("[TEST] FAIL victory overlay")
+	victory.reset_for_test()
+
+
+## Loss = player hall down + no player units; overlay Porážka.
+func _run_defeat_smoke() -> void:
+	await get_tree().physics_frame
+	var victory := get_node_or_null("VictoryController") as VictoryController
+	if victory == null:
+		print("[TEST] FAIL defeat: no VictoryController")
+		return
+	victory.reset_for_test()
+	# Keep a spare unit list; free player units after hall dies.
+	var player_hall := get_tree().get_first_node_in_group("player_town_hall") as DropOff
+	if player_hall == null:
+		print("[TEST] FAIL defeat: no player hall")
+		return
+	player_hall.take_damage(player_hall.max_hp + 10.0)
+	await get_tree().physics_frame
+	for n in get_tree().get_nodes_in_group("player_units"):
+		if is_instance_valid(n):
+			n.queue_free()
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	victory.force_check()
+	await get_tree().process_frame
+	var overlay := victory.get_overlay()
+	var title_ok := false
+	if overlay:
+		var title := overlay.find_child("EndTitle", true, false) as Label
+		title_ok = title != null and title.text.contains("Porážka")
+	var ok := victory.ended and not victory.player_won and title_ok
+	print("[TEST] defeat ended=%s won=%s title_ok=%s" % [victory.ended, victory.player_won, title_ok])
+	if ok:
+		print("[TEST] PASS defeat overlay")
+	else:
+		print("[TEST] FAIL defeat overlay")
+	victory.reset_for_test()
 
 
 ## AI economy: places ≥1 building and launches a wave within timeout (Husité).

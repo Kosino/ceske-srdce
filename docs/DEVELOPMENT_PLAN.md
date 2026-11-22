@@ -24,8 +24,8 @@
 ## Fáze 3: Hratelnost & UI
 - AoE-like bottom HUD (resources top; command panel bottom-left; selection info center; minimap bottom-right) ✅
 - DebugPanel F3 only ✅
-- Victory/Defeat (enemy Radnice + all units destroyed)
-- Main menu civ pick (player + AI)
+- Victory/Defeat (enemy Radnice + all units destroyed) ✅
+- Main menu civ pick (player + AI) ✅
 - WASD/edge camera + zoom
 
 ## Fáze 4: Obsah
