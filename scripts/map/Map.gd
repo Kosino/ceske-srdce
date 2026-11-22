@@ -39,6 +39,7 @@ func _ready() -> void:
 		await _run_age_gate_smoke()
 		await _run_age_locked_building_smoke()
 		await _run_age2_to_age3_gate_smoke()
+		await _run_age_ui_sync_smoke()
 	else:
 		await _sample_windowed_fps()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 stavění/trénink.")
@@ -95,13 +96,11 @@ func _setup_terrain() -> void:
 			var source_id := SOURCE_GRASS_1 if (h & 1) == 0 else SOURCE_GRASS_2
 			layer.set_cell(Vector2i(x, y), source_id, Vector2i.ZERO)
 
-	# Narrow dirt paths near Radnice (900, 700) — 1 tile wide, not a full cross pad.
+	# 1-tile-wide dirt on two sides of Radnice only (not under the building).
 	var hall := Vector2i(900 / TILE, 700 / TILE)
-	for dx in range(-3, 4):
-		layer.set_cell(hall + Vector2i(dx, 0), SOURCE_DIRT, Vector2i.ZERO)
-	# Short 1-tile spur toward wood (~1080, 620).
-	for dx in range(1, 5):
-		layer.set_cell(hall + Vector2i(dx, -1), SOURCE_DIRT, Vector2i.ZERO)
+	for dy in range(-2, 3):
+		layer.set_cell(hall + Vector2i(-2, dy), SOURCE_DIRT, Vector2i.ZERO) # left
+		layer.set_cell(hall + Vector2i(2, dy), SOURCE_DIRT, Vector2i.ZERO) # right
 
 
 func _build_terrain_tileset() -> TileSet:
@@ -113,11 +112,7 @@ func _build_terrain_tileset() -> TileSet:
 		atlas.texture = textures[i]
 		atlas.texture_region_size = Vector2i(TILE, TILE)
 		atlas.create_tile(Vector2i.ZERO)
-		# Soften grass_2 slightly (contrast near 1.0).
-		if i == SOURCE_GRASS_2:
-			var td := atlas.get_tile_data(Vector2i.ZERO, 0)
-			if td:
-				td.modulate = Color(0.99, 1.0, 0.985, 1.0)
+		# grass_2 already brightness-matched — modulate 1.0 (default).
 		tileset.add_source(atlas, i)
 	return tileset
 
@@ -488,6 +483,44 @@ func _run_age2_to_age3_gate_smoke() -> void:
 		print("[TEST] PASS age 2→3 gate with Střelnice + Kovárna")
 	else:
 		print("[TEST] FAIL age 2→3 gate with Střelnice + Kovárna")
+
+
+## AgeLabel and research button must match GameManager.current_age.
+func _run_age_ui_sync_smoke() -> void:
+	await get_tree().physics_frame
+	var panel := _find_command_panel()
+	if panel == null:
+		print("[TEST] FAIL age_ui: no CommandPanel")
+		return
+
+	GameManager.current_age = 1
+	await get_tree().process_frame
+	panel._refresh_age_ui()
+	var label_ok_1 := panel.age_label.text.contains("Velká Morava") and panel.age_label.text.contains("(1)")
+	var btn_ok_1 := panel.research_button.text.contains("Přemyslovci")
+	print("[TEST] age_ui age1 label=%s btn=%s" % [panel.age_label.text, panel.research_button.text])
+
+	GameManager.current_age = 2
+	await get_tree().process_frame
+	panel._refresh_age_ui()
+	var label_ok_2 := panel.age_label.text.contains("Přemyslovci") and panel.age_label.text.contains("(2)")
+	var btn_ok_2 := panel.research_button.text.contains("Husitství")
+	print("[TEST] age_ui age2 label=%s btn=%s" % [panel.age_label.text, panel.research_button.text])
+
+	if label_ok_1 and btn_ok_1 and label_ok_2 and btn_ok_2:
+		print("[TEST] PASS age UI label/button match current_age")
+	else:
+		print("[TEST] FAIL age UI label/button match current_age")
+
+
+func _find_command_panel() -> CommandPanel:
+	var ui := get_node_or_null("UI")
+	if ui == null:
+		return null
+	for c in ui.get_children():
+		if c is CommandPanel:
+			return c as CommandPanel
+	return null
 
 
 func _ensure_complete_age1_buildings(need: int) -> void:

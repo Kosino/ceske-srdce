@@ -183,6 +183,10 @@ func _complete_training() -> void:
 		train_remaining = VILLAGER_TIME
 
 
+func _hp_fill_color() -> Color:
+	return Color(0.2, 0.85, 0.25, 0.95) if team == 0 else Color(0.9, 0.2, 0.15, 0.95)
+
+
 func _draw() -> void:
 	var ratio := clampf(hp / maxf(max_hp, 1.0), 0.0, 1.0)
 	var bar_y := -58.0
@@ -190,7 +194,7 @@ func _draw() -> void:
 	if visual and visual.texture:
 		bar_y = visual.offset.y - float(visual.texture.get_height()) * 0.5 - 8.0
 	draw_rect(Rect2(Vector2(-40.0, bar_y), Vector2(80.0, 5.0)), Color(0.1, 0.1, 0.1, 0.8))
-	draw_rect(Rect2(Vector2(-40.0, bar_y), Vector2(80.0 * ratio, 5.0)), Color(0.9, 0.2, 0.15, 0.95))
+	draw_rect(Rect2(Vector2(-40.0, bar_y), Vector2(80.0 * ratio, 5.0)), _hp_fill_color())
 
 
 func take_damage(amount: float) -> void:

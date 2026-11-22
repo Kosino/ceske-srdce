@@ -159,13 +159,17 @@ func _refresh_label() -> void:
 			$Label.text = "%s %d%%" % [display_name, int(build_progress * 100.0)]
 
 
+func _hp_fill_color() -> Color:
+	return Color(0.2, 0.85, 0.25, 0.95) if team == 0 else Color(0.9, 0.2, 0.15, 0.95)
+
+
 func _draw() -> void:
 	var bar_w := footprint.x * 0.8
 	var origin := Vector2(-bar_w * 0.5, -footprint.y * 0.5 - 10.0)
 	draw_rect(Rect2(origin, Vector2(bar_w, 4.0)), Color(0.1, 0.1, 0.1, 0.8))
 	if is_complete:
 		var ratio := clampf(hp / maxf(max_hp, 1.0), 0.0, 1.0)
-		draw_rect(Rect2(origin, Vector2(bar_w * ratio, 4.0)), Color(0.85, 0.25, 0.2, 0.95))
+		draw_rect(Rect2(origin, Vector2(bar_w * ratio, 4.0)), _hp_fill_color())
 	else:
 		draw_rect(Rect2(origin, Vector2(bar_w * build_progress, 4.0)), Color(0.95, 0.85, 0.2, 0.95))
 

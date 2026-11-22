@@ -88,6 +88,10 @@ func _register_team_groups() -> void:
 		add_to_group("enemy_units")
 
 
+func _hp_fill_color() -> Color:
+	return Color(0.2, 0.85, 0.25, 0.95) if team == 0 else Color(0.9, 0.2, 0.15, 0.95)
+
+
 func _draw() -> void:
 	if selected:
 		draw_arc(Vector2.ZERO, 14.0, 0.0, TAU, 28, Color(1.0, 0.9, 0.2, 0.95), 2.0)
@@ -95,7 +99,7 @@ func _draw() -> void:
 	var bar_w := 20.0
 	var bar_y := _hp_bar_y()
 	draw_rect(Rect2(Vector2(-bar_w * 0.5, bar_y), Vector2(bar_w, 3.0)), Color(0.1, 0.1, 0.1, 0.8))
-	draw_rect(Rect2(Vector2(-bar_w * 0.5, bar_y), Vector2(bar_w * ratio, 3.0)), Color(0.2, 0.85, 0.25, 0.95))
+	draw_rect(Rect2(Vector2(-bar_w * 0.5, bar_y), Vector2(bar_w * ratio, 3.0)), _hp_fill_color())
 
 
 func set_selected(value: bool) -> void:

@@ -13,7 +13,16 @@ var stone: int = 0
 var population: int = 0
 ## Starts at 0; Radnice/Dům přidávají +5 (strop 200).
 var population_max: int = 0
-var current_age: int = 1
+var _current_age: int = 1
+## Always emit age_changed so AgeLabel / research button stay in sync.
+var current_age: int:
+	get:
+		return _current_age
+	set(value):
+		if _current_age == value:
+			return
+		_current_age = value
+		age_changed.emit()
 
 
 func add_resource(type: String, amount: int) -> void:
@@ -110,6 +119,5 @@ func can_research_next_age(tree: SceneTree = null) -> bool:
 func advance_age() -> void:
 	if current_age >= AgeData.MAX_AGE:
 		return
-	current_age += 1
-	age_changed.emit()
+	current_age += 1 # setter emits age_changed
 	print("[AGE] advanced to %d (%s)" % [current_age, get_age_name()])
