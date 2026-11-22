@@ -1,0 +1,21 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/units/Knight.gd" id="1_knight"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_body"]
+size = Vector2(20, 18)
+
+[node name="Knight" type="CharacterBody2D"]
+motion_mode = 1
+script = ExtResource("1_knight")
+
+[node name="Visual" type="Sprite2D" parent="."]
+texture_filter = 1
+centered = true
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_body")
+
+[node name="NavigationAgent2D" type="NavigationAgent2D" parent="."]
+radius = 10.0
+max_speed = 108.0

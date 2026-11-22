@@ -17,6 +17,8 @@ signal died(unit: Unit)
 @export var attack_type: String = "melee"
 @export var melee_armor: float = 0.0
 @export var pierce_armor: float = 0.0
+## Sight / LOS in pixels (6 tiles = 240 for light cavalry).
+@export var sight_range: float = 200.0
 ## When false, population was already reserved (e.g. production queue).
 @export var contribute_population: bool = true
 

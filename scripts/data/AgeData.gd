@@ -28,8 +28,8 @@ const BUILDING_UNLOCK_AGE := {
 	"barracks": 1,
 	"archery_range": 2,
 	"blacksmith": 2,
+	"stable": 2, # requires Barracks (checked in BuildingPlacer)
 	# Age 3+ placeholders (data-only; no scenes yet):
-	"stable": 3,
 	"monastery": 3,
 	"castle": 4,
 	"university": 4,
@@ -40,8 +40,9 @@ const UNIT_UNLOCK_AGE := {
 	"soldier": 1,
 	"spearman": 2,
 	"archer": 2,
-	# Age 3+ placeholders (data-only):
+	"light_cavalry": 2,
 	"knight": 3,
+	# Age 3+ placeholders (data-only):
 	"monk": 3,
 	"siege": 4,
 }

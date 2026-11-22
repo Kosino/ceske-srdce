@@ -55,6 +55,10 @@ func _ready() -> void:
 		await _run_camera_minimap_smoke()
 		await _run_map_mines_smoke()
 		await _run_blacksmith_tech_smoke()
+		await _run_stable_cavalry_smoke()
+		print("[TEST] all headless smokes finished")
+		get_tree().quit(0)
+		return
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--hud-shot"):
 		await prepare_hud_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--victory-shot"):
@@ -65,6 +69,8 @@ func _ready() -> void:
 		await prepare_mines_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--blacksmith-shot"):
 		await prepare_blacksmith_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--stable-shot"):
+		await prepare_stable_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--formation-shot"):
 		await prepare_formation_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--ai-shot"):
@@ -72,6 +78,50 @@ func _ready() -> void:
 	else:
 		await _sample_windowed_fps()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 debug.")
+
+
+## Stable + cavalry moving/fighting (feature in action).
+func prepare_stable_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	GameManager.current_age = 2
+	GameManager.add_resource("food", 300)
+	GameManager.add_resource("wood", 200)
+	var barracks: Barracks = BARRACKS_SCENE.instantiate() as Barracks
+	barracks.team = 0
+	barracks.position = PLAYER_TC_POS + Vector2(120, -40)
+	barracks.is_complete = true
+	barracks.spawn_parent = units
+	units.add_child(barracks)
+	var stable: Stable = preload("res://scenes/buildings/Stable.tscn").instantiate() as Stable
+	stable.team = 0
+	stable.position = PLAYER_TC_POS + Vector2(200, 40)
+	stable.is_complete = true
+	stable.spawn_parent = units
+	units.add_child(stable)
+	await get_tree().physics_frame
+	var cav: LightCavalry = preload("res://scenes/units/LightCavalry.tscn").instantiate() as LightCavalry
+	cav.team = 0
+	cav.contribute_population = false
+	cav.position = stable.global_position + Vector2(40, 50)
+	units.add_child(cav)
+	var enemy: Soldier = SOLDIER_SCENE.instantiate() as Soldier
+	enemy.team = 1
+	enemy.contribute_population = false
+	enemy.position = cav.global_position + Vector2(120, 20)
+	units.add_child(enemy)
+	await get_tree().physics_frame
+	SelectionManager.select_building(stable)
+	cav.command_attack(enemy)
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	if cam:
+		cam.set_zoom_clamped(1.0)
+		cam.center_at((cav.global_position + stable.global_position) * 0.5)
+	await get_tree().create_timer(0.9).timeout
+	await get_tree().process_frame
+	_save_shot("stable.png", 0)
 
 
 ## Blacksmith selected with research running (feature in action).
@@ -997,6 +1047,105 @@ func _run_hud_layout_smoke() -> void:
 		print("[TEST] PASS HUD layout + villager builds + DebugPanel hidden")
 	else:
 		print("[TEST] FAIL HUD layout + villager builds + DebugPanel hidden")
+
+
+## Stable training, Spearman vs cavalry bonus, Přemyslovci cav bonus, Knight age lock.
+func _run_stable_cavalry_smoke() -> void:
+	await get_tree().physics_frame
+	GameManager.current_age = 2
+	GameManager.add_resource("food", 400)
+	GameManager.add_resource("wood", 400)
+	GameManager.add_resource("gold", 200)
+
+	var barracks: Barracks = BARRACKS_SCENE.instantiate() as Barracks
+	barracks.team = 0
+	barracks.position = PLAYER_TC_POS + Vector2(100, -60)
+	barracks.is_complete = true
+	barracks.spawn_parent = units
+	units.add_child(barracks)
+	await get_tree().physics_frame
+
+	var stable: Stable = preload("res://scenes/buildings/Stable.tscn").instantiate() as Stable
+	stable.team = 0
+	stable.position = PLAYER_TC_POS + Vector2(180, 50)
+	stable.is_complete = true
+	stable.spawn_parent = units
+	units.add_child(stable)
+	await get_tree().physics_frame
+
+	var food_before := GameManager.food
+	var queued := stable.enqueue_unit("light_cavalry")
+	var spend_ok := queued and GameManager.food == food_before - 80
+	# Finish train quickly.
+	stable.train_remaining = 0.0
+	stable._complete_training()
+	await get_tree().physics_frame
+	var cav: LightCavalry = null
+	for n in get_tree().get_nodes_in_group("cavalry"):
+		if n is LightCavalry and (n as LightCavalry).team == 0:
+			cav = n as LightCavalry
+			break
+	var train_ok := cav != null and is_equal_approx(cav.speed, 80.0 * 1.6)
+
+	# Spearman +15 vs cavalry.
+	var spear: Spearman = preload("res://scenes/units/Spearman.tscn").instantiate() as Spearman
+	spear.team = 0
+	spear.contribute_population = false
+	spear.position = PLAYER_TC_POS + Vector2(60, 100)
+	units.add_child(spear)
+	await get_tree().physics_frame
+	var dummy: LightCavalry = preload("res://scenes/units/LightCavalry.tscn").instantiate() as LightCavalry
+	dummy.team = 1
+	dummy.contribute_population = false
+	dummy.position = spear.global_position + Vector2(30, 0)
+	units.add_child(dummy)
+	await get_tree().physics_frame
+	var hp_before := dummy.hp
+	# Simulate strike damage calc: base 3 + 15 bonus.
+	var expected := 3.0 + 15.0
+	dummy.take_damage(expected, "melee")
+	var spear_bonus_ok := is_equal_approx(spear.bonus_vs_cavalry, 15.0) and dummy.hp <= hp_before - 1.0
+	# Also verify Unit strike path applies bonus.
+	var hp2 := dummy.hp
+	spear.attack_target = dummy
+	spear._try_strike()
+	var strike_ok := dummy.hp < hp2 - 10.0 # 3+15 through armor 0
+
+	# Přemyslovci +10% cavalry damage.
+	GameManager.player_civ = CivData.PREMYSLOVCI
+	var cav2: LightCavalry = preload("res://scenes/units/LightCavalry.tscn").instantiate() as LightCavalry
+	cav2.team = 0
+	cav2.contribute_population = false
+	cav2.position = PLAYER_TC_POS + Vector2(40, 120)
+	units.add_child(cav2)
+	await get_tree().physics_frame
+	var prem_ok := cav2.attack_damage >= 4.0 * 1.10 - 0.01
+	GameManager.player_civ = CivData.DEFAULT_PLAYER
+
+	# Knight locked under age 3.
+	GameManager.current_age = 2
+	var knight_locked := not GameManager.is_unit_unlocked("knight")
+	var food_mid := GameManager.food
+	var knight_q := stable.enqueue_unit("knight")
+	var knight_block_ok := knight_locked and not knight_q and GameManager.food == food_mid
+	GameManager.current_age = 3
+	var knight_open := GameManager.is_unit_unlocked("knight")
+	var food3 := GameManager.food
+	var knight_q2 := stable.enqueue_unit("knight")
+	var knight_ok := knight_open and knight_q2 and GameManager.food == food3 - 60 and GameManager.gold >= 0
+
+	print(
+		"[TEST] stable spend=%s train=%s spear=%s strike=%s prem=%s knight_lock=%s knight_age3=%s"
+		% [spend_ok, train_ok, spear_bonus_ok, strike_ok, prem_ok, knight_block_ok, knight_ok]
+	)
+	if spend_ok and train_ok and spear_bonus_ok and strike_ok and prem_ok and knight_block_ok and knight_ok:
+		print("[TEST] PASS stable cavalry + spearman + civ + age lock")
+	else:
+		print("[TEST] FAIL stable cavalry + spearman + civ + age lock")
+
+	for n in [barracks, stable, spear, dummy, cav2]:
+		if is_instance_valid(n):
+			n.queue_free()
 
 
 ## Blacksmith techs: spend, apply to existing+new, armor min 1, no double research.

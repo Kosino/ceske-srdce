@@ -27,9 +27,11 @@ Postup věku: výzkum v Radnici (fronta; během výzkumu Radnice netrénuje). Po
 | Od věku | Budovy | Jednotky |
 |---------|--------|----------|
 | 1 Velká Morava | Dům, Pila, Mlýn, Kasárna | Vesničan, Zbrojnoš |
-| 2 Přemyslovci | Střelnice, Kovárna | Kopiník, Lučištník |
-| 3 Husitství | *(data-only)* stable, monastery | *(data-only)* knight, monk |
+| 2 Přemyslovci | Střelnice, Kovárna, Stáj | Kopiník, Lučištník, Lehký jezdec |
+| 3 Husitství | *(data-only)* monastery | Rytíř; *(data-only)* monk |
 | 4 Habsburkové | *(data-only)* castle, university | *(data-only)* siege |
+
+**Schváleno 2026-11-22 – Stáj:** 175 D, 45 s, HP 1500, 80×80, věk 2, vyžaduje Kasárnu. Lehký jezdec (80 J, 30 s, HP 60, útok 4, zbroj 0/2, 1.6×) / Rytíř věk 3 (60 J+75 Z, 30 s, HP 100, útok 10, zbroj 2/2, 1.35×). Kopiník +15 vs jízda. Přemyslovci +10 % dmg jízdy. Kovářství platí i na jízdu. AI od věku 2 staví Stáj a míchá lehkou jízdu do vln.
 
 **Schváleno 2026-11-22 – Kovárna:** 150 D, 40 s, HP 1800, footprint 80×80. Sprite: `assets/sprites/buildings/blacksmith.png` (63×96).
 
@@ -58,7 +60,7 @@ Default skirmish: hráč **Moravané**, AI **Husité**. Unikátní jednotky zat�
 | Civilizace | Bonusy |
 |------------|--------|
 | Moravané | +15 % těžba dřeva; −10 % cena budov za dřevo |
-| Přemyslovci | +15 % těžba zlata; +10 % poškození jízdy *(až bude jízda)* |
+| Přemyslovci | +15 % těžba zlata; +10 % poškození jízdy |
 | Husité | +10 % HP pěchoty; +5 % poškození pěchoty |
 | Habsburkové | +10 % těžba kamene; +15 % HP pěchoty |
 
@@ -97,12 +99,14 @@ Resources → Stavění → Produkce jednotek → Combat → Postup věků
 Měřítko: 1 dlaždice = 40 px. Vesničan nese 10 jednotek suroviny. Start: 200 J, 200 D, 100 Z, 0 K.
 Těžba za sekundu na vesničana: dřevo 0.40, jídlo z keřů 0.30, farma 0.33, zlato/kámen = dřevo × 0.9 (0.36).
 
-| Jednotka | Cena | Čas | HP | Útok | Dosah | Rychlost |
-|----------|------|-----|----|------|-------|----------|
-| Vesničan | 50 J | 25 s | 25 | 3 | melee | 80 px/s |
-| Zbrojnoš | 60 J, 20 Z | 21 s | 45 | 6 | melee | 80 px/s |
-| Kopiník | 35 J, 25 D | 22 s | 45 | 3 (+15 vs jízda) | melee | 85 px/s |
-| Lučištník | 25 D, 45 Z | 35 s | 30 | 4 (projektil ~400 px/s) | 160 px | 80 px/s |
+| Jednotka | Cena | Čas | HP | Útok | Dosah | Rychlost | Zbroj (M/P) |
+|----------|------|-----|----|------|-------|----------|-------------|
+| Vesničan | 50 J | 25 s | 25 | 3 | melee | 80 px/s | 0/0 |
+| Zbrojnoš | 60 J, 20 Z | 21 s | 45 | 6 | melee | 80 px/s | 0/0 |
+| Kopiník | 35 J, 25 D | 22 s | 45 | 3 (+15 vs jízda) | melee | 85 px/s | 0/0 |
+| Lučištník | 25 D, 45 Z | 35 s | 30 | 4 pierce | 160 px | 80 px/s | 0/0 |
+| Lehký jezdec | 80 J | 30 s | 60 | 4 melee | melee | 128 px/s (1.6×) | 0/2 |
+| Rytíř *(věk 3)* | 60 J, 75 Z | 30 s | 100 | 10 melee | melee | 108 px/s (1.35×) | 2/2 |
 
 | Budova | Cena | Stavba | HP | Funkce |
 |--------|------|--------|----|--------|
@@ -114,6 +118,7 @@ Těžba za sekundu na vesničana: dřevo 0.40, jídlo z keřů 0.30, farma 0.33,
 | Kasárna | 175 D | 50 s | 1200 | Zbrojnoš, Kopiník |
 | Střelnice | 175 D | 50 s | 1200 | Lučištník |
 | Kovárna *(Schváleno 2026-11-22)* | 150 D | 40 s | 1800 | věk 2 gate; techy viz výše |
+| Stáj | 175 D | 45 s | 1500 | 80×80, věk 2, vyžaduje Kasárnu; Lehký jezdec / Rytíř |
 
 ### Mapa & doly (Fáze 4)
 Deterministický generátor (seed). U každé radnice (≤12 dlaždic): 1 les (~25 stromů), 6 keřů bobulí, 1 zlatý důl (7 dlaždic × 800), 1 kamenný důl (5 × 350). Zbytek mapy: 6–8 lesů + 2–3 doly (zlato/kámen), zrcadlově férové. Žádné zdroje na cestách/budovách.

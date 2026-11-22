@@ -46,6 +46,8 @@ func _refresh(_units: Array = []) -> void:
 			var smith := b as Blacksmith
 			var prog := smith.research_progress_line()
 			line2 = prog if prog != "" else "Výzkum technologií"
+		elif b is Stable:
+			line2 = (b as Stable).get_queue_summary()
 		label.text = "Výběr: %s\n%s" % [name, line2]
 		return
 	var units: Array = SelectionManager.selected_units
