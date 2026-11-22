@@ -71,8 +71,35 @@ func _single_select_at(world_pos: Vector2) -> void:
 			best = unit
 	if best:
 		SelectionManager.select_single(best)
+		return
+	var building := _find_player_building_at(world_pos)
+	if building:
+		SelectionManager.select_building(building)
 	else:
 		SelectionManager.clear_selection()
+
+
+func _find_player_building_at(world_pos: Vector2) -> Node:
+	var best: Node = null
+	var best_dist := 48.0
+	for group_name in ["player_town_hall", "barracks", "archery_ranges", "player_buildings"]:
+		for node in get_tree().get_nodes_in_group(group_name):
+			if not (node is Node2D):
+				continue
+			if node is Building and not (node as Building).is_complete:
+				continue
+			if "team" in node and int(node.get("team")) != 0:
+				continue
+			var radius := 36.0
+			if node is DropOff:
+				radius = (node as DropOff).dropoff_radius
+			elif node is Building:
+				radius = (node as Building).footprint.length() * 0.35
+			var d := (node as Node2D).global_position.distance_to(world_pos)
+			if d < best_dist + radius * 0.35:
+				best_dist = d
+				best = node
+	return best
 
 
 func _box_select(world_rect: Rect2) -> void:

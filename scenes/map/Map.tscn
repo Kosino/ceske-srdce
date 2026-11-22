@@ -111,6 +111,7 @@ layout_mode = 2
 text = "Stop"
 
 [node name="TrainRow" type="HBoxContainer" parent="UI/CommandPanel/CommandMargin/CommandVBox"]
+visible = false
 layout_mode = 2
 theme_override_constants/separation = 4
 

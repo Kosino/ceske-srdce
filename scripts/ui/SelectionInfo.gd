@@ -8,18 +8,33 @@ class_name SelectionInfo
 
 func _ready() -> void:
 	add_to_group("hud_selection_info")
-	SelectionManager.selection_changed.connect(_on_selection_changed)
-	SelectionManager.formation_changed.connect(_on_formation_changed)
-	_on_selection_changed(SelectionManager.selected_units)
+	SelectionManager.selection_changed.connect(_refresh)
+	SelectionManager.building_selection_changed.connect(_on_building)
+	SelectionManager.formation_changed.connect(_on_formation)
+	_refresh(SelectionManager.selected_units)
 
 
-func _on_formation_changed(_kind: String) -> void:
-	_on_selection_changed(SelectionManager.selected_units)
+func _on_formation(_kind: String) -> void:
+	_refresh(SelectionManager.selected_units)
 
 
-func _on_selection_changed(units: Array) -> void:
+func _on_building(_b: Node) -> void:
+	_refresh(SelectionManager.selected_units)
+
+
+func _refresh(_units: Array = []) -> void:
 	if label == null:
 		return
+	var b := SelectionManager.selected_building
+	if b != null and is_instance_valid(b):
+		var name := "Budova"
+		if b is DropOff:
+			name = (b as DropOff).building_name
+		elif b is Building:
+			name = (b as Building).display_name
+		label.text = "Výběr: %s\nTrénink / produkce" % name
+		return
+	var units: Array = SelectionManager.selected_units
 	if units.is_empty():
 		label.text = "Výběr: nic\nLMB výběr / box · RMB pohyb/útok"
 		return

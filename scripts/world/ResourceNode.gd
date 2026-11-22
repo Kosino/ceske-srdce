@@ -61,6 +61,20 @@ func harvest(amount: int) -> int:
 	return taken
 
 
+func _czech_type_name() -> String:
+	match resource_type:
+		"wood":
+			return "Dřevo"
+		"food":
+			return "Jídlo"
+		"gold":
+			return "Zlato"
+		"stone":
+			return "Kámen"
+		_:
+			return resource_type.capitalize()
+
+
 func _refresh_label() -> void:
 	if label:
-		label.text = "%s %d" % [resource_type.capitalize(), amount_remaining]
+		label.text = "%s %d" % [_czech_type_name(), amount_remaining]
