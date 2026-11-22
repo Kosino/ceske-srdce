@@ -78,12 +78,29 @@ func enqueue_unit(unit_id: String) -> bool:
 		NotificationManager.show_message("Nedostatek surovin na %s." % def["label"])
 		return false
 	GameManager.change_population(1)
-	queue.append(unit_id)
-	if queue.size() == 1:
-		train_remaining = float(def["time"])
-	queue_changed.emit()
+	_push_queue(unit_id, float(def["time"]))
 	print("[PROD] queued %s (queue=%d)" % [unit_id, queue.size()])
 	return true
+
+
+## Enemy AI training — caller already paid from AI stockpile (no GameManager).
+func ai_enqueue_unit(unit_id: String) -> bool:
+	if team == 0 or not is_complete or unit_id not in UNIT_DEFS:
+		return false
+	if queue.size() >= MAX_QUEUE:
+		return false
+	var def: Dictionary = UNIT_DEFS[unit_id]
+	var t := 1.2 if DisplayServer.get_name() == "headless" else float(def["time"])
+	_push_queue(unit_id, t)
+	print("[AI-PROD] queued %s (queue=%d t=%.1f)" % [unit_id, queue.size(), t])
+	return true
+
+
+func _push_queue(unit_id: String, train_time: float) -> void:
+	queue.append(unit_id)
+	if queue.size() == 1:
+		train_remaining = train_time
+	queue_changed.emit()
 
 
 func get_queue_summary() -> String:
@@ -115,7 +132,10 @@ func _complete_training() -> void:
 	queue_changed.emit()
 	if not queue.is_empty():
 		var next_id: String = queue[0]
-		train_remaining = float(UNIT_DEFS[next_id]["time"])
+		if team != 0 and DisplayServer.get_name() == "headless":
+			train_remaining = 1.2
+		else:
+			train_remaining = float(UNIT_DEFS[next_id]["time"])
 
 
 func _instantiate_unit(unit_id: String) -> Node2D:

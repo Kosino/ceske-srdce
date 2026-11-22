@@ -59,14 +59,27 @@ Pěchota = zbrojnoš, kopiník, lučištník. Implementace: `CivData` + `GameMan
 ### Formace (Fáze 2)
 
 Skupinový pohyb (2+ jednotky): formace kolem cíle RMB; celá skupina jde rychlostí nejpomalejší jednotky. Přepínač v CommandPanel.
+**Řada:** jednotky stojí vedle sebe na ose **kolmé** na směr pochodu (AoE II), ne podél něj.
 
-**NÁVRH (Honza schvaluje spacing):**
+**Schváleno 2026-11-22:**
 
 | Formace | Spacing (středy) |
 |---------|------------------|
 | Řada (`line`) | 36 px |
 | Rozptyl (`scattered`) | 56 px |
 | Box (`box`) | 40 px |
+
+### Lepší AI (Fáze 2)
+
+Nepřítel = **Husité**. Vlastní stockpile (ne GameManager hráče). Bootstrap: radnice + 3 vesničané + zdroje. Economy: těžba, Dům, Kasárna, trénink zbrojnošů. Po `WAVE_MIN_UNITS` jednotkách vysílá vlnu na hráče.
+
+**Schváleno (CS Designer) 2026-11-22:**
+
+| Parametr | Hodnota |
+|----------|---------|
+| `WAVE_MIN_UNITS` | 3 |
+| `WAVE_INTERVAL_SEC` | 40 s |
+| Start AI stockpile | 220 J, 220 D, 80 Z |
 
 ## Core loop
 Resources → Stavění → Produkce jednotek → Combat → Postup věků
