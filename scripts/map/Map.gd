@@ -2504,6 +2504,8 @@ func _run_balance_sim_game() -> void:
 	var sim_seed: int = int(cfg.get("seed", 4242))
 	var jitter_a: float = float(cfg.get("jitter_a", 1.0))
 	var jitter_b: float = float(cfg.get("jitter_b", 1.0))
+	var strat_a: String = str(cfg.get("strategy_a", BalanceSim.STRAT_RUSH))
+	var strat_b: String = str(cfg.get("strategy_b", BalanceSim.STRAT_RUSH))
 	var debug := get_node_or_null("DebugPanel")
 	if debug:
 		debug.visible = false
@@ -2512,21 +2514,26 @@ func _run_balance_sim_game() -> void:
 		enemy_ai.team = 1
 		enemy_ai.civ_id = civ_b
 		enemy_ai.base_position = ENEMY_TC_POS
-		enemy_ai.configure_sim(sim_seed, jitter_b)
+		enemy_ai.configure_sim(sim_seed, jitter_b, strat_b)
 		GameManager.enemy_civ = civ_b
 	var player_ai := SimpleEnemyAI.new()
 	player_ai.name = "PlayerAI"
 	player_ai.team = 0
 	player_ai.civ_id = civ_a
 	player_ai.base_position = PLAYER_TC_POS
-	player_ai.configure_sim(sim_seed, jitter_a)
+	player_ai.configure_sim(sim_seed, jitter_a, strat_a)
 	GameManager.player_civ = civ_a
 	add_child(player_ai)
-	## Sim harness: TC HP so feudal mix can land, but most games still decide before the cap.
+	## Sim-only TC HP (normal play unchanged). Soft phase + post-12min burst resolve fights.
+	var tc_hp := 1600.0
+	if strat_a == BalanceSim.STRAT_RUSH and strat_b == BalanceSim.STRAT_RUSH:
+		tc_hp = 1200.0
+	elif strat_a != BalanceSim.STRAT_RUSH and strat_b != BalanceSim.STRAT_RUSH:
+		tc_hp = 2000.0
 	for hall in get_tree().get_nodes_in_group("town_halls"):
 		if hall is DropOff:
-			(hall as DropOff).max_hp = 1100.0
-			(hall as DropOff).hp = 1100.0
+			(hall as DropOff).max_hp = tc_hp
+			(hall as DropOff).hp = tc_hp
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 
@@ -2542,7 +2549,7 @@ func _run_balance_sim_game() -> void:
 	var sim_t := 0.0
 	var max_t: float = BalanceSim.MAX_GAME_SEC
 	if BalanceSim.smoke_only:
-		max_t = 400.0
+		max_t = 900.0
 	var timed_out := false
 	while not bool(sim_state["done"]) and sim_t < max_t:
 		await get_tree().process_frame
@@ -2580,24 +2587,32 @@ func _run_balance_harness_smoke() -> void:
 	BalanceSim.results.append({
 		"civ_a": CivData.MORAVANE,
 		"civ_b": CivData.HUSITE,
+		"strategy_a": BalanceSim.STRAT_BOOM,
+		"strategy_b": BalanceSim.STRAT_RUSH,
 		"winner": CivData.MORAVANE,
 		"loser": CivData.HUSITE,
 		"draw": false,
-		"length": 42.0,
+		"length": 900.0,
 		"pair_index": 0,
 		"game_index": 0,
 	})
 	for civ in CivData.ALL_CIV_IDS:
 		BalanceSim.unit_trains[civ] = {}
-		BalanceSim.age_reach[civ] = {2: [180.0], 3: [420.0], 4: []}
+		BalanceSim.age_reach[civ] = {2: [180.0], 3: [420.0], 4: [900.0]}
 	BalanceSim.unit_trains[CivData.MORAVANE] = {
-		"soldier": 3, "spearman": 2, "archer": 2, "bojovnik_bradatice": 1, "monk": 1
+		"soldier": 3, "spearman": 2, "archer": 2, "bojovnik_bradatice": 2, "monk": 1, "light_cavalry": 2
 	}
 	var md := BalanceSim._build_report_markdown()
 	var tmp_path := "res://docs/balance/_harness_smoke.md"
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://docs/balance"))
 	var f := FileAccess.open(tmp_path, FileAccess.WRITE)
-	var report_ok: bool = f != null and md.contains("95%") and md.contains("Army composition")
+	var report_ok: bool = (
+		f != null
+		and md.contains("95%")
+		and md.contains("Army composition")
+		and md.contains("Strategies")
+		and md.contains("p25")
+	)
 	if f:
 		f.store_string(md)
 		f.close()

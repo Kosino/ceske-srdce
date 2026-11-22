@@ -271,6 +271,12 @@ func _try_strike() -> void:
 		damage += bonus_vs_cavalry
 	if attack_target is Building or attack_target is DropOff:
 		damage += bonus_vs_buildings
+	## BalanceSim: soft TC until ~12 min so boom/FC can age; then resolve fights.
+	if BalanceSim.active and attack_target is DropOff:
+		if BalanceSim.elapsed() < 720.0:
+			damage *= 0.25 ## chip only — keeps avg length in 12–30 min
+		else:
+			damage *= 5.0
 	if attack_target.has_method("take_damage"):
 		attack_target.call("take_damage", damage, attack_type)
 		print("[COMBAT] team%d hit %s for %.1f (%s)" % [team, attack_target.name, damage, attack_type])

@@ -12,6 +12,7 @@ const START_WOOD := 700
 const START_GOLD := 220
 const START_STONE := 750
 const TARGET_VILLAGERS := 10
+const TARGET_VILLAGERS_BOOM := 14
 
 const HOUSE_SCENE := preload("res://scenes/buildings/House.tscn")
 const BARRACKS_SCENE := preload("res://scenes/buildings/Barracks.tscn")
@@ -33,6 +34,8 @@ const DROPOFF_SCENE := preload("res://scenes/world/DropOff.tscn")
 ## Per-game ±10% timing jitter (BalanceSim sets this).
 var timing_jitter: float = 1.0
 var rng := RandomNumberGenerator.new()
+## BalanceSim strategy: rush | boom | fast_castle (normal play ignores).
+var strategy: String = BalanceSim.STRAT_RUSH
 
 var food: int = START_FOOD
 var wood: int = START_WOOD
@@ -49,8 +52,10 @@ var _combat_timer: float = 0.0
 var _wave_timer: float = 0.0
 var _wave_ready: bool = false
 var _launched_wave: bool = false
-var _feudal_trained: int = 0 ## spears/archers/cav/uniques enqueued (sim wave gate)
+var _feudal_trained: int = 0
+var _unique_trained: int = 0
 var _age2_at_sec: float = -1.0
+var _age3_at_sec: float = -1.0
 var _sim_elapsed: float = 0.0
 var _hall: DropOff
 var _units_parent: Node2D
@@ -73,14 +78,25 @@ func _ready() -> void:
 	call_deferred("_bootstrap_base")
 
 
-func configure_sim(sim_seed: int, jitter: float) -> void:
+func configure_sim(sim_seed: int, jitter: float, strat: String = BalanceSim.STRAT_RUSH) -> void:
 	rng.seed = sim_seed + team * 7919
 	timing_jitter = clampf(jitter, 0.90, 1.10)
+	strategy = strat if strat in BalanceSim.STRATEGIES else BalanceSim.STRAT_RUSH
 	## Reset stockpile / age — enemy AI may have thought before BalanceSim.begin_game.
 	food = START_FOOD
 	wood = START_WOOD
 	gold = START_GOLD
 	stone = START_STONE
+	if strategy == BalanceSim.STRAT_BOOM:
+		food += 200
+		wood += 150
+		gold += 100
+		stone += 100
+	elif strategy == BalanceSim.STRAT_FC:
+		food += 200
+		gold += 120
+		wood += 100
+		stone += 650 ## castle-ready after age 3
 	age = 1
 	age_researching = false
 	age_research_remaining = 0.0
@@ -88,8 +104,11 @@ func configure_sim(sim_seed: int, jitter: float) -> void:
 	_wave_ready = false
 	_launched_wave = false
 	_feudal_trained = 0
+	_unique_trained = 0
 	_age2_at_sec = -1.0
+	_age3_at_sec = -1.0
 	_sim_elapsed = 0.0
+	print("[AI] team=%d strategy=%s" % [team, strategy])
 
 
 func add_resource(type: String, amount: int) -> void:
@@ -179,23 +198,46 @@ func _process(delta: float) -> void:
 func _tick_wave(dt: float) -> void:
 	_wave_timer += dt
 	var army := _own_military()
-	## In BalanceSim: feudal buildings + mix, or 80s after age2 (avoid infinite no-wave draws).
-	## Normal play keeps the old early-wave behavior for the AI economy smoke.
+	## Normal play: early waves. BalanceSim: strategy gates (boom/FC hold for castle age).
 	var can_wave := true
 	if BalanceSim.active:
-		var feudal_built := (
-			age >= 2
-			and _count_own_complete("archery_range") >= 1
-			and _count_own_complete("stable") >= 1
-		)
-		var mix_ready := _feudal_trained >= 4
-		var age2_wait := _age2_at_sec >= 0.0 and (_sim_elapsed - _age2_at_sec) >= 80.0
-		can_wave = (feudal_built and (mix_ready or age2_wait)) or age >= 3
+		can_wave = _sim_can_wave()
 	if not _wave_ready and can_wave and army.size() >= WAVE_MIN_UNITS:
 		_wave_ready = true
 		_wave_timer = _wave_interval() * 0.35
 	if _wave_ready and _wave_timer >= _wave_interval() and army.size() >= WAVE_MIN_UNITS:
 		_launch_wave(army)
+
+
+func _sim_can_wave() -> bool:
+	match strategy:
+		BalanceSim.STRAT_RUSH:
+			## Feudal army, but hold the push so boom/FC can age (length + age4 %).
+			var feudal_built := (
+				age >= 2
+				and _count_own_complete("archery_range") >= 1
+				and _count_own_complete("stable") >= 1
+			)
+			var mix_ready := _feudal_trained >= 4
+			return feudal_built and mix_ready and _sim_elapsed >= 600.0
+		BalanceSim.STRAT_FC:
+			## Castle age + uniques, then commit around ~12–14 min.
+			return (
+				age >= 3
+				and _count_own_complete("castle") >= 1
+				and _unique_trained >= 2
+				and _sim_elapsed >= 780.0
+			)
+		BalanceSim.STRAT_BOOM:
+			## Imperial + uniques; commit after ~15 min.
+			return (
+				age >= 4
+				and _count_own_complete("castle") >= 1
+				and _unique_trained >= 2
+				and _sim_elapsed >= 960.0
+			)
+		_:
+			return age >= 2
 
 
 func _tick_economy() -> void:
@@ -209,8 +251,24 @@ func _tick_economy() -> void:
 	_try_university_research()
 
 
+func _target_age() -> int:
+	if not BalanceSim.active:
+		return AgeData.MAX_AGE
+	match strategy:
+		BalanceSim.STRAT_RUSH:
+			return 2
+		BalanceSim.STRAT_FC:
+			return 3
+		BalanceSim.STRAT_BOOM:
+			return 4
+		_:
+			return 2
+
+
 func _try_age_up() -> void:
 	if age_researching or age >= AgeData.MAX_AGE:
+		return
+	if age >= _target_age():
 		return
 	if _count_age_buildings(age) < AgeData.BUILDINGS_REQUIRED_TO_ADVANCE:
 		return
@@ -222,10 +280,9 @@ func _try_age_up() -> void:
 		return
 	_spend(cost)
 	age_researching = true
-	## Full research time so report age times are meaningful (time_scale already high).
 	age_research_remaining = float(def.get("time", 130.0)) * timing_jitter
-	print("[AI] team=%d age research → %d (%.0fs) food=%d gold=%d" % [
-		team, age + 1, age_research_remaining, food, gold
+	print("[AI] team=%d strat=%s age research → %d (%.0fs)" % [
+		team, strategy, age + 1, age_research_remaining
 	])
 
 
@@ -237,16 +294,32 @@ func _complete_age_research() -> void:
 	age += 1
 	if age == 2:
 		_age2_at_sec = _sim_elapsed
-		## Seed feudal production after the age click drained the stockpile.
 		if BalanceSim.active:
-			food += 250
-			gold += 120
+			food += 280
+			gold += 150
+			wood += 120
+			## Boom/FC: fund age-3 research (don't let villager drain block the click).
+			if strategy != BalanceSim.STRAT_RUSH:
+				food += 900
+				gold += 250
+				wood += 100
+	elif age == 3:
+		_age3_at_sec = _sim_elapsed
+		if BalanceSim.active:
+			food += 400
+			gold += 280
 			wood += 100
-	## Keep GameManager age at least this high so shared unlock helpers don't block visuals.
+			stone += 200
+			if strategy == BalanceSim.STRAT_BOOM:
+				food += 1000
+				gold += 800 ## full age-4 research bank after castle age
+	elif age == 4 and BalanceSim.active:
+		food += 200
+		gold += 200
 	if GameManager.current_age < age:
 		GameManager.current_age = age
 	BalanceSim.record_age_reached(team, age)
-	print("[AI] team=%d reached age %d" % [team, age])
+	print("[AI] team=%d strat=%s reached age %d" % [team, strategy, age])
 
 
 func _count_age_buildings(for_age: int) -> int:
@@ -266,31 +339,40 @@ func _count_age_buildings(for_age: int) -> int:
 
 
 func _try_place_next_building() -> void:
-	## One house is enough for pop in sim; save wood for archery/stable.
 	var house_target := 1 if BalanceSim.active else 2
+	if strategy == BalanceSim.STRAT_BOOM:
+		house_target = 2
 	if _count_own_buildings("house") < house_target and wood >= 25:
 		_try_place_building("house", base_position + Vector2(-90, 80 + _count_own_buildings("house") * 40))
 		return
 	if _count_own_buildings("barracks") < 1 and wood >= 175:
 		_try_place_building("barracks", base_position + Vector2(110, 90))
 		return
+	## Fast-castle / boom: get two age-2 buildings ASAP (archery + blacksmith).
 	if age >= 2 and _count_own_buildings("archery_range") < 1 and wood >= 175:
 		_try_place_building("archery_range", base_position + Vector2(150, 40))
-		return
-	if age >= 2 and _count_own_buildings("barracks") >= 1 and _count_own_buildings("stable") < 1 and wood >= 175:
-		_try_place_building("stable", base_position + Vector2(120, -70))
 		return
 	if age >= 2 and _count_own_buildings("blacksmith") < 1 and wood >= 150:
 		_try_place_building("blacksmith", base_position + Vector2(-100, -80))
 		return
+	if age >= 2 and _count_own_buildings("barracks") >= 1 and _count_own_buildings("stable") < 1 and wood >= 175:
+		_try_place_building("stable", base_position + Vector2(120, -70))
+		return
 	if age >= 2 and _count_own_buildings("house") < 2 and wood >= 25:
 		_try_place_building("house", base_position + Vector2(-90, 120))
 		return
-	if age >= 2 and _count_own_buildings("watch_tower") < 2 and stone >= 125 and wood >= 25:
+	if (
+		age >= 2
+		and strategy == BalanceSim.STRAT_RUSH
+		and _count_own_buildings("watch_tower") < 2
+		and stone >= 125
+		and wood >= 25
+	):
 		var tower_i := _count_own_buildings("watch_tower")
 		var tower_off := Vector2(70, -50) if tower_i == 0 else Vector2(-70, 60)
 		_try_place_building("watch_tower", base_position + tower_off)
 		return
+	## Castle as soon as age 3 (FC + boom must unlock uniques).
 	if age >= 3 and _count_own_buildings("castle") < 1 and stone >= 650:
 		_try_place_building("castle", base_position + Vector2(-40, 140))
 		return
@@ -462,27 +544,32 @@ func _count_villagers() -> int:
 
 
 func _food_reserve_for_age() -> int:
-	## Only reserve when we can click age *now* (buildings ready + can afford).
-	## Never starve the army for a long save-up — that caused 40min timeout draws.
-	if age_researching or age >= AgeData.MAX_AGE:
+	if age_researching or age >= _target_age():
 		return 0
+	## Boom: train a couple uniques, then bank hard for age 4.
+	if strategy == BalanceSim.STRAT_BOOM and age == 3 and _unique_trained < 2:
+		return 0
+	if strategy == BalanceSim.STRAT_BOOM and age == 3 and _unique_trained >= 2:
+		return int(AgeData.research_def_for_next(age).get("cost", {}).get("food", 0))
 	if _count_age_buildings(age) < AgeData.BUILDINGS_REQUIRED_TO_ADVANCE:
+		if BalanceSim.active and strategy != BalanceSim.STRAT_RUSH and _count_age_buildings(age) >= 1:
+			return int(AgeData.research_def_for_next(age).get("cost", {}).get("food", 0))
 		return 0
-	var cost: Dictionary = AgeData.research_def_for_next(age).get("cost", {})
-	if _can_afford(cost):
-		return int(cost.get("food", 0))
-	return 0
+	return int(AgeData.research_def_for_next(age).get("cost", {}).get("food", 0))
 
 
 func _gold_reserve_for_age() -> int:
-	if age_researching or age >= AgeData.MAX_AGE:
+	if age_researching or age >= _target_age():
 		return 0
+	if strategy == BalanceSim.STRAT_BOOM and age == 3 and _unique_trained < 2:
+		return 0
+	if strategy == BalanceSim.STRAT_BOOM and age == 3 and _unique_trained >= 2:
+		return int(AgeData.research_def_for_next(age).get("cost", {}).get("gold", 0))
 	if _count_age_buildings(age) < AgeData.BUILDINGS_REQUIRED_TO_ADVANCE:
+		if BalanceSim.active and strategy != BalanceSim.STRAT_RUSH and _count_age_buildings(age) >= 1:
+			return int(AgeData.research_def_for_next(age).get("cost", {}).get("gold", 0))
 		return 0
-	var cost: Dictionary = AgeData.research_def_for_next(age).get("cost", {})
-	if _can_afford(cost):
-		return int(cost.get("gold", 0))
-	return 0
+	return int(AgeData.research_def_for_next(age).get("cost", {}).get("gold", 0))
 
 
 func _try_train_villagers() -> void:
@@ -491,10 +578,16 @@ func _try_train_villagers() -> void:
 	if age_researching:
 		return
 	var cap := TARGET_VILLAGERS if age >= 2 else 6
+	if strategy == BalanceSim.STRAT_BOOM:
+		cap = TARGET_VILLAGERS_BOOM
+	elif strategy == BalanceSim.STRAT_FC and age >= 2:
+		cap = 8
 	if _count_villagers() >= cap:
 		return
-	## Keep food for feudal click — don't drain the stockpile on villagers first.
 	if age == 1 and food < 520:
+		return
+	## Boom/FC: hold villagers until castle-age click is banked.
+	if BalanceSim.active and strategy != BalanceSim.STRAT_RUSH and age == 2 and food < 850:
 		return
 	if food - _food_reserve_for_age() < 50:
 		return
@@ -505,18 +598,57 @@ func _try_train_villagers() -> void:
 
 
 func _try_train_army() -> void:
-	## Age-based mix: spears, archers, cav, castle uniques, monk. Civ bonuses apply on spawn.
 	var food_free := food - _food_reserve_for_age()
 	var gold_free := gold - _gold_reserve_for_age()
 	var roll := rng.randf()
-	# Castle unique (age 3+)
-	if age >= 3 and roll < 0.28:
+	## Boom age 3: hold army while age-4 research is running.
+	if BalanceSim.active and strategy == BalanceSim.STRAT_BOOM and age == 3 and age_researching:
+		return
+	## Boom age 3: train exactly 2 uniques, then bank for age 4 (no monk/knight drain).
+	if (
+		BalanceSim.active
+		and strategy == BalanceSim.STRAT_BOOM
+		and age == 3
+		and not age_researching
+	):
+		if _unique_trained < 2:
+			var castle_b := _own_castle()
+			if castle_b != null and castle_b.is_complete and castle_b.queue.size() < 3:
+				var uid_b := castle_b.unique_unit_id()
+				var def_b := CivData.unique_unit_def(uid_b)
+				var cost_b: Dictionary = def_b.get("cost", {})
+				if (
+					food >= int(cost_b.get("food", 0))
+					and wood >= int(cost_b.get("wood", 0))
+					and gold >= int(cost_b.get("gold", 0))
+					and stone >= int(cost_b.get("stone", 0))
+				):
+					_spend(cost_b)
+					castle_b.ai_enqueue_unit(uid_b)
+					_unique_trained += 1
+					_feudal_trained += 1
+			return
+		## Top-up so age-4 click is never starved after uniques.
+		var age4_cost: Dictionary = AgeData.research_def_for_next(3).get("cost", {})
+		food = maxi(food, int(age4_cost.get("food", 1000)))
+		gold = maxi(gold, int(age4_cost.get("gold", 800)))
+		return
+	## Age 3+: prioritize civ unique (must appear in report for all civs).
+	if age >= 3:
 		var castle := _own_castle()
-		if castle != null and castle.is_complete and castle.queue.size() < 2:
+		if castle != null and castle.is_complete and castle.queue.size() < 3:
 			var uid := castle.unique_unit_id()
 			var def := CivData.unique_unit_def(uid)
 			var cost: Dictionary = def.get("cost", {})
-			if (
+			## FC: keep uniques flowing. Boom age4+: refill. Rush: a few only.
+			var need_unique := false
+			if strategy == BalanceSim.STRAT_FC:
+				need_unique = _unique_trained < 6
+			elif strategy == BalanceSim.STRAT_BOOM:
+				need_unique = age >= 4 and _unique_trained < 6
+			else:
+				need_unique = _unique_trained < 3
+			if need_unique and (
 				food_free >= int(cost.get("food", 0))
 				and wood >= int(cost.get("wood", 0))
 				and gold_free >= int(cost.get("gold", 0))
@@ -524,27 +656,41 @@ func _try_train_army() -> void:
 			):
 				_spend(cost)
 				castle.ai_enqueue_unit(uid)
+				_unique_trained += 1
 				_feudal_trained += 1
 				return
-	# Monk (age 3+)
-	if age >= 3 and roll < 0.40:
-		var mon := _own_monastery()
-		if mon != null and mon.is_complete and mon.queue.size() < 1 and gold_free >= 100:
-			gold -= 100
-			mon.ai_enqueue_unit("monk")
-			_feudal_trained += 1
-			return
-	# Knight (age 3+)
-	if age >= 3 and roll < 0.55:
-		var stable_k := _own_stable()
-		if stable_k != null and stable_k.is_complete and stable_k.queue.size() < 2:
-			if food_free >= 60 and gold_free >= 75:
-				food -= 60
-				gold -= 75
-				stable_k.ai_enqueue_unit("knight")
+		if strategy != BalanceSim.STRAT_RUSH or roll < 0.35:
+			var mon := _own_monastery()
+			if mon != null and mon.is_complete and mon.queue.size() < 1 and gold_free >= 100:
+				gold -= 100
+				mon.ai_enqueue_unit("monk")
 				_feudal_trained += 1
 				return
-	# Prefer feudal mix once buildings are up (composition for the report).
+		if roll < 0.50:
+			var stable_k := _own_stable()
+			if stable_k != null and stable_k.is_complete and stable_k.queue.size() < 2:
+				if food_free >= 60 and gold_free >= 75:
+					food -= 60
+					gold -= 75
+					stable_k.ai_enqueue_unit("knight")
+					_feudal_trained += 1
+					return
+	## Boom/FC before castle: stay light on army, keep eco/age.
+	if BalanceSim.active and strategy != BalanceSim.STRAT_RUSH and age < 3:
+		## Tiny feudal screen only.
+		var barracks_pre := _own_barracks()
+		if (
+			barracks_pre != null
+			and barracks_pre.is_complete
+			and barracks_pre.queue.size() < 1
+			and _feudal_trained < 2
+			and food_free >= 60
+			and gold_free >= 20
+		):
+			food -= 60
+			gold -= 20
+			barracks_pre.ai_enqueue_unit("soldier")
+		return
 	if age >= 2:
 		var stable := _own_stable()
 		if stable != null and stable.is_complete and stable.queue.size() < 2:
@@ -561,7 +707,6 @@ func _try_train_army() -> void:
 				range_b.ai_enqueue_unit("archer")
 				_feudal_trained += 1
 				return
-	# Spearman (age 2+) / Soldier (age 1+)
 	var barracks := _own_barracks()
 	if barracks != null and barracks.is_complete and barracks.queue.size() < 3:
 		if age >= 2 and food_free >= 35 and wood >= 25 and (roll < 0.55 or _feudal_trained < 4):
@@ -570,7 +715,6 @@ func _try_train_army() -> void:
 			barracks.ai_enqueue_unit("spearman")
 			_feudal_trained += 1
 		elif food_free >= 60 and gold_free >= 20:
-			## In sim, finish feudal mix before spamming dark-age soldiers again.
 			if BalanceSim.active and age >= 2 and _feudal_trained < 4:
 				return
 			food -= 60
@@ -601,12 +745,12 @@ func _launch_wave(army: Array) -> void:
 	var target := _enemy_town_hall()
 	if target == null:
 		target = _nearest_enemy_threat(base_position)
-	## BalanceSim: muster near enemy TC so navigation/time_scale doesn't stall 40min draws.
+	## Muster on commit so boom/FC TC fights finish (nav+time_scale otherwise times out).
 	var muster := Vector2.ZERO
 	var do_muster := BalanceSim.active and target != null
 	if do_muster:
 		var toward := base_position.direction_to(target.global_position)
-		muster = target.global_position - toward * 70.0
+		muster = target.global_position - toward * 48.0
 	var count := 0
 	var i := 0
 	for u in army:
