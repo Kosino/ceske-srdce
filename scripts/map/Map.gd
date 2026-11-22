@@ -85,63 +85,84 @@ func _ready() -> void:
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 debug.")
 
 
-## All buildings side-by-side + group of all unit types (art pass).
+## All buildings side-by-side + labeled units (art pass). No TC overlap.
 func prepare_art_pass_screenshot() -> void:
 	DisplayServer.window_set_size(Vector2i(1280, 720))
 	var debug := get_node_or_null("DebugPanel")
 	if debug:
 		debug.visible = false
+	# Hide default demo TC / villagers so Barracks isn't stacked on Radnice.
+	for n in get_tree().get_nodes_in_group("player_town_hall"):
+		if n is Node2D:
+			(n as Node2D).visible = false
+			(n as Node2D).position = Vector2(-4000, -4000)
+	for n in get_tree().get_nodes_in_group("villagers"):
+		if n is Villager and (n as Villager).team == 0:
+			(n as Villager).visible = false
+			(n as Villager).position = Vector2(-4000, -4000)
 	GameManager.current_age = 3
 	GameManager.player_civ = CivData.MORAVANE
 	GameManager.add_population_cap(40)
-	var origin := PLAYER_TC_POS + Vector2(-80, -40)
+	# Spaced strip well clear of default TC spawn.
+	var origin := Vector2(520, 420)
 	var building_defs: Array = [
-		["house", preload("res://scenes/buildings/House.tscn"), Vector2(0, 40)],
-		["barracks", BARRACKS_SCENE, Vector2(100, 20)],
-		["stable", preload("res://scenes/buildings/Stable.tscn"), Vector2(220, 20)],
-		["lumber_camp", preload("res://scenes/buildings/LumberCamp.tscn"), Vector2(340, 30)],
-		["mining_camp", preload("res://scenes/buildings/MiningCamp.tscn"), Vector2(460, 30)],
-		["blacksmith", preload("res://scenes/buildings/Blacksmith.tscn"), Vector2(580, 10)],
-		["castle", preload("res://scenes/buildings/Castle.tscn"), Vector2(740, -20)],
+		[preload("res://scenes/buildings/House.tscn"), Vector2(0, 40)],
+		[BARRACKS_SCENE, Vector2(140, 20)],
+		[preload("res://scenes/buildings/Stable.tscn"), Vector2(300, 30)],
+		[preload("res://scenes/buildings/LumberCamp.tscn"), Vector2(460, 30)],
+		[preload("res://scenes/buildings/MiningCamp.tscn"), Vector2(620, 30)],
+		[preload("res://scenes/buildings/Blacksmith.tscn"), Vector2(780, 10)],
+		[preload("res://scenes/buildings/Castle.tscn"), Vector2(980, -30)],
 	]
 	for row in building_defs:
-		var b: Building = (row[1] as PackedScene).instantiate() as Building
+		var b: Building = (row[0] as PackedScene).instantiate() as Building
 		b.team = 0
-		b.position = origin + (row[2] as Vector2)
+		b.position = origin + (row[1] as Vector2)
 		b.is_complete = true
 		if b is Castle:
 			(b as Castle).spawn_parent = units
 		units.add_child(b)
 	await get_tree().physics_frame
-	var unit_scenes: Array = [
-		preload("res://scenes/units/Villager.tscn"),
-		SOLDIER_SCENE,
-		preload("res://scenes/units/Spearman.tscn"),
-		ARCHER_SCENE,
-		preload("res://scenes/units/LightCavalry.tscn"),
-		preload("res://scenes/units/Knight.tscn"),
-		preload("res://scenes/units/BojovnikBradatice.tscn"),
-		preload("res://scenes/units/Druzinik.tscn"),
-		preload("res://scenes/units/ValecnyVuz.tscn"),
-		preload("res://scenes/units/Lancknecht.tscn"),
+	var unit_rows: Array = [
+		[preload("res://scenes/units/Villager.tscn"), "Vesničan"],
+		[SOLDIER_SCENE, "Zbrojnoš"],
+		[preload("res://scenes/units/Spearman.tscn"), "Kopiník"],
+		[ARCHER_SCENE, "Lučištník"],
+		[preload("res://scenes/units/LightCavalry.tscn"), "Lehký jezdec"],
+		[preload("res://scenes/units/Knight.tscn"), "Rytíř"],
+		[preload("res://scenes/units/BojovnikBradatice.tscn"), "Bradatice"],
+		[preload("res://scenes/units/Druzinik.tscn"), "Družiník"],
+		[preload("res://scenes/units/ValecnyVuz.tscn"), "Válečný vůz"],
+		[preload("res://scenes/units/Lancknecht.tscn"), "Lancknecht"],
 	]
-	var u_origin := origin + Vector2(40, 200)
+	var u_origin := origin + Vector2(20, 220)
 	var i := 0
-	for scn in unit_scenes:
-		var u: Unit = (scn as PackedScene).instantiate() as Unit
+	for row in unit_rows:
+		var u: Unit = (row[0] as PackedScene).instantiate() as Unit
 		u.team = 0
 		u.contribute_population = false
-		u.position = u_origin + Vector2(float(i) * 52.0, 0.0)
+		var pos := u_origin + Vector2(float(i) * 72.0, 0.0)
+		u.position = pos
 		units.add_child(u)
+		var lab := Label.new()
+		lab.text = str(row[1])
+		lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lab.position = Vector2(-36, 28)
+		lab.size = Vector2(72, 18)
+		lab.add_theme_font_size_override("font_size", 11)
+		lab.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+		lab.add_theme_color_override("font_outline_color", Color(0, 0, 0, 1))
+		lab.add_theme_constant_override("outline_size", 3)
+		u.add_child(lab)
 		i += 1
 	await get_tree().physics_frame
 	var cam := get_node_or_null("Camera2D") as RTSCamera
 	if cam:
-		cam.set_zoom_clamped(0.85)
-		cam.center_at(origin + Vector2(420, 120))
+		cam.set_zoom_clamped(0.75)
+		cam.center_at(origin + Vector2(520, 100))
 	await get_tree().create_timer(0.6).timeout
 	await get_tree().process_frame
-	_save_shot("art_pass.png", unit_scenes.size())
+	_save_shot("art_pass.png", unit_rows.size())
 
 
 ## Castle + unique unit (feature in action).

@@ -183,93 +183,98 @@ def window(img, x, y, w=5, h=6) -> None:
 # ---------- Buildings ----------
 
 def gen_stable() -> None:
-    """Wooden stable with horse pen + thatch — ~100×88 for 80 footprint."""
-    w, h = 108, 88
+    """LONG low stable + side pen with horse & hay — unique wide silhouette."""
+    w, h = 128, 72
     img = blank(w, h)
-    # pen fence (front-left)
-    for i, fx in enumerate(range(4, 42, 5)):
-        rect(img, fx, 58, fx + 2, 84, WOOD_LT if i % 2 == 0 else WOOD)
-        px(img, fx, 57, OUT)
-        px(img, fx + 1, 57, OUT)
-        px(img, fx + 2, 57, OUT)
-    rect(img, 4, 70, 42, 71, WOOD_DK)  # rail
-    # horse in pen
-    rect(img, 14, 64, 34, 74, HORSE)
-    rect(img, 32, 62, 40, 70, HORSE_LT)  # head
-    px(img, 38, 64, OUT)  # eye
-    for lx in (16, 22, 28, 32):
-        rect(img, lx, 74, lx + 2, 82, HORSE_DK)
-    # main barn
-    log_wall(img, 40, 34, 102, 78)
-    thatch_roof(img, (71, 6), 36, 36, 106)
-    door(img, 62, 48, 82, 78)
-    window(img, 48, 44)
-    window(img, 88, 44)
-    # hay bale
-    outline_rect(img, 44, 68, 56, 78, THATCH_LT)
-    for y in range(69, 78):
-        for x in range(45, 56):
-            if (x + y) % 3 == 0:
+    # long low barn body (wide rectangle, low roof)
+    log_wall(img, 48, 28, 122, 64)
+    # low shallow thatch (not tall gable)
+    d = ImageDraw.Draw(img)
+    d.polygon([(44, 30), (85, 8), (126, 30)], fill=THATCH, outline=OUT)
+    for x in range(46, 125):
+        t = (x - 44) / 41 if x < 85 else (126 - x) / 41
+        y_top = int(30 - 22 * max(0.0, min(1.0, t if x < 85 else t)))
+        if x <= 85:
+            y_top = int(30 + (8 - 30) * (x - 44) / max(85 - 44, 1))
+        else:
+            y_top = int(8 + (30 - 8) * (x - 85) / max(126 - 85, 1))
+        for y in range(y_top + 1, 30):
+            if (x + y * 2) % 3 == 0:
+                px(img, x, y, THATCH_DK)
+            elif (x * 3 + y) % 5 == 0:
+                px(img, x, y, THATCH_LT)
+    d.line([(44, 30), (85, 8), (126, 30)], fill=OUT)
+    # wide stall doors (3 bays) — reads as stable
+    for bx in (54, 78, 102):
+        outline_rect(img, bx, 40, bx + 16, 64, WOOD_DK)
+        for y in range(42, 64):
+            px(img, bx + 8, y, OUT)
+    # hay loft opening
+    outline_rect(img, 86, 32, 98, 40, (40, 30, 20, 255))
+    # === PEN (left, dominant silhouette) ===
+    for i, fx in enumerate(range(4, 50, 4)):
+        outline_rect(img, fx, 36, fx + 2, 68, WOOD_LT if i % 2 else WOOD)
+    rect(img, 4, 50, 50, 52, WOOD_DK)
+    rect(img, 4, 62, 50, 64, WOOD_DK)
+    # horse profile in pen (clear)
+    outline_rect(img, 12, 44, 36, 56, HORSE)
+    outline_rect(img, 34, 40, 46, 52, HORSE_LT)  # neck/head
+    px(img, 44, 44, OUT)
+    for lx in (14, 20, 28, 34):
+        outline_rect(img, lx, 56, lx + 2, 66, HORSE_DK)
+    for y in range(46, 56):
+        px(img, 10, y, HAIR)  # tail
+    # hay stack
+    outline_rect(img, 4, 56, 14, 68, THATCH_LT)
+    for y in range(57, 68):
+        for x in range(5, 14):
+            if (x + y) % 2:
                 px(img, x, y, THATCH)
-    # grass strip
     for x in range(2, w - 2):
-        if (x % 3) != 0:
+        if x % 2:
             px(img, x, h - 2, GRASS)
     save("assets/sprites/buildings/stable.png", img)
 
 
 def gen_castle() -> None:
-    """Czech stone castle — largest sprite (~156×172) for 160 footprint."""
+    """Czech stone castle — largest sprite for 160 footprint."""
     w, h = 156, 172
     img = blank(w, h)
-    # curtain wall base
     stone_fill(img, 18, 70, 138, 160)
-    # crenellations on wall top
     for cx in range(18, 139, 10):
         stone_fill(img, cx, 58, min(cx + 6, 138), 70)
-        # merlon cap highlight
         for x in range(cx + 1, min(cx + 6, 138)):
             px(img, x, 59, STONE_LT)
-    # left tower
     stone_fill(img, 8, 28, 42, 160)
     for cx in range(8, 43, 7):
         stone_fill(img, cx, 16, min(cx + 4, 42), 28)
     shingle_roof(img, (25, 2), 20, 6, 44)
-    # right tower
     stone_fill(img, 114, 28, 148, 160)
     for cx in range(114, 149, 7):
         stone_fill(img, cx, 16, min(cx + 4, 148), 28)
     shingle_roof(img, (131, 2), 20, 112, 150)
-    # keep / gatehouse
     stone_fill(img, 48, 48, 108, 160)
     shingle_roof(img, (78, 18), 50, 44, 112)
-    # wooden gallery under keep eaves
     rect(img, 52, 50, 104, 56, WOOD)
     for x in range(54, 104, 6):
         rect(img, x, 56, x + 1, 62, WOOD_DK)
     ImageDraw.Draw(img).rectangle([52, 50, 104, 56], outline=OUT)
-    # gate
     outline_rect(img, 68, 110, 88, 160, (24, 20, 16, 255))
-    # arch
     for dy, inset in [(0, 0), (1, 1), (2, 2), (3, 3)]:
         for x in range(68 + inset, 89 - inset):
             px(img, x, 110 + dy, WOOD_DK if dy > 1 else OUT)
-    # door wood
     for y in range(118, 160):
         for x in range(70, 87):
             px(img, x, y, WOOD if (x - 70) % 4 else WOOD_DK)
-    # windows
     window(img, 56, 78, 8, 10)
     window(img, 92, 78, 8, 10)
     window(img, 18, 80, 6, 10)
     window(img, 128, 80, 6, 10)
-    # team banner on keep
     rect(img, 78, 22, 79, 46, WOOD_DK)
     for y in range(24, 40):
         for x in range(80, 96):
             px(img, x, y, TEAM if (x + y) % 2 == 0 else TEAM_LT)
     ImageDraw.Draw(img).rectangle([80, 24, 95, 39], outline=OUT)
-    # grass
     for x in range(4, w - 4):
         if x % 2:
             px(img, x, h - 3, GRASS)
@@ -277,78 +282,111 @@ def gen_castle() -> None:
 
 
 def gen_mining_camp() -> None:
-    """Mining camp — ore piles + pickaxe, not a lumber clone. ~80×84."""
-    w, h = 84, 86
+    """Mining: stone base shed + big ore cart + pickaxe + ore — not a wood hut."""
+    w, h = 96, 90
     img = blank(w, h)
-    # stone foundation
-    stone_fill(img, 8, 58, 76, 78)
-    log_wall(img, 12, 30, 72, 60)
-    thatch_roof(img, (42, 4), 32, 8, 76)
-    # open shed / dark mouth
-    outline_rect(img, 28, 40, 56, 60, (30, 24, 18, 255))
-    # ore piles
-    for ox, oy in [(6, 64), (58, 62)]:
-        for i in range(10):
-            x = ox + (i % 5) * 3
-            y = oy + (i // 5) * 4
-            outline_rect(img, x, y, x + 4, y + 4, ORE if i % 2 == 0 else ORE_DK)
-    # pickaxe
-    ImageDraw.Draw(img).line([(64, 48), (74, 36)], fill=WOOD_LT, width=2)
-    ImageDraw.Draw(img).line([(70, 34), (78, 38)], fill=IRON, width=2)
-    # cart
-    outline_rect(img, 30, 66, 50, 78, WOOD)
-    outline_rect(img, 28, 72, 34, 80, BOOT)
-    outline_rect(img, 46, 72, 52, 80, BOOT)
-    for x in range(10, w - 10):
+    # rocky ground / stone pad (unique vs lumber)
+    stone_fill(img, 4, 70, 92, 86)
+    # small shed BACK — short, stone+wood mix
+    stone_fill(img, 28, 38, 72, 70)
+    log_wall(img, 32, 34, 68, 50)
+    # flat stone slab roof (not thatch) — unique silhouette
+    outline_rect(img, 26, 28, 74, 36, STONE)
+    for x in range(28, 74, 5):
+        px(img, x, 30, STONE_LT)
+        px(img, x + 1, 32, STONE_DK)
+    ImageDraw.Draw(img).rectangle([26, 28, 74, 36], outline=OUT)
+    # dark mine mouth
+    outline_rect(img, 40, 48, 60, 70, (20, 16, 12, 255))
+    # === DOMINANT: ore cart in front ===
+    outline_rect(img, 8, 52, 40, 68, WOOD)
+    for y in range(54, 68):
+        if y % 3 == 0:
+            for x in range(10, 40):
+                px(img, x, y, WOOD_DK)
+    # ore overflowing cart
+    for i, (ox, oy) in enumerate([(12, 48), (18, 46), (24, 48), (30, 47), (16, 52), (26, 52)]):
+        outline_rect(img, ox, oy, ox + 6, oy + 6, ORE if i % 2 == 0 else ORE_DK)
+    # cart wheels
+    outline_rect(img, 10, 66, 18, 78, BOOT)
+    outline_rect(img, 30, 66, 38, 78, BOOT)
+    px(img, 14, 71, IRON_LT)
+    px(img, 34, 71, IRON_LT)
+    # large pickaxe silhouette (right)
+    d = ImageDraw.Draw(img)
+    d.line([(78, 70), (88, 28)], fill=WOOD_LT, width=3)
+    d.line([(82, 26), (94, 34)], fill=IRON, width=3)
+    d.line([(82, 26), (94, 22)], fill=IRON_LT, width=2)
+    # ore pile right
+    for i, (ox, oy) in enumerate([(70, 72), (76, 74), (82, 72), (74, 78)]):
+        outline_rect(img, ox, oy, ox + 7, oy + 6, ORE_DK if i % 2 else ORE)
+    for x in range(2, w - 2):
         if x % 3:
             px(img, x, h - 2, GRASS)
     save("assets/sprites/buildings/mining_camp.png", img)
 
 
 def gen_lumber_camp() -> None:
-    """Refresh lumber camp in same generator for consistency."""
-    w, h = 84, 86
+    """Lumber: OPEN shed (posts + roof only) + huge log pile + saw — not a closed hut."""
+    w, h = 100, 88
     img = blank(w, h)
-    log_wall(img, 14, 28, 74, 64)
-    thatch_roof(img, (44, 4), 30, 10, 78)
-    outline_rect(img, 30, 40, 58, 64, (32, 24, 16, 255))
-    # log pile
-    for i, (lx, ly) in enumerate([(4, 58), (8, 62), (12, 58), (6, 66), (10, 70)]):
-        outline_rect(img, lx, ly, lx + 14, ly + 5, WOOD_LT if i % 2 else WOOD)
-        px(img, lx + 1, ly + 2, WOOD_HL)
-    # sawhorse
-    ImageDraw.Draw(img).line([(50, 70), (70, 58)], fill=WOOD_DK, width=2)
-    ImageDraw.Draw(img).line([(50, 70), (70, 78)], fill=WOOD_DK, width=2)
-    ImageDraw.Draw(img).line([(48, 68), (72, 68)], fill=WOOD_LT, width=2)
-    # stump + axe
-    outline_rect(img, 66, 70, 78, 82, WOOD)
-    ImageDraw.Draw(img).line([(72, 60), (72, 72)], fill=WOOD_DK, width=2)
-    ImageDraw.Draw(img).line([(68, 60), (76, 62)], fill=IRON, width=2)
-    for x in range(8, w - 8):
-        if x % 3:
+    # open shed: 4 posts + roof only (no front wall = unique)
+    for px_x in (48, 90):
+        outline_rect(img, px_x, 28, px_x + 4, 72, WOOD)
+        for y in range(30, 72):
+            px(img, px_x + 1, y, WOOD_LT)
+    # cross beam
+    outline_rect(img, 48, 28, 94, 34, WOOD_DK)
+    # thatch roof over open bay
+    thatch_roof(img, (71, 4), 30, 42, 98)
+    # hanging saw blade (circular) — unique prop
+    cx, cy, r = 70, 48, 10
+    for y in range(cy - r, cy + r + 1):
+        for x in range(cx - r, cx + r + 1):
+            if (x - cx) ** 2 + (y - cy) ** 2 <= r * r:
+                px(img, x, y, IRON if ((x + y) % 3) else IRON_LT)
+    ImageDraw.Draw(img).ellipse([cx - r, cy - r, cx + r, cy + r], outline=OUT)
+    px(img, cx, cy, OUT)
+    # === DOMINANT: log pile left (pyramid) ===
+    rows = [
+        [(6, 70, 28), (10, 70, 28), (14, 70, 28)],
+        [(8, 64, 26), (12, 64, 26)],
+        [(10, 58, 24)],
+    ]
+    for row in rows:
+        for lx, ly, lw in [(a, b, c) for a, b, c in [(6, 70, 22), (14, 70, 22), (22, 70, 22),
+                                                       (10, 64, 22), (18, 64, 22),
+                                                       (14, 58, 22)]]:
+            outline_rect(img, lx, ly, lx + lw, ly + 5, WOOD_LT)
+            px(img, lx + 2, ly + 2, WOOD_HL)
+            # end-grain rings
+            outline_rect(img, lx, ly, lx + 3, ly + 5, WOOD)
+    # sawhorse + plank in open bay
+    ImageDraw.Draw(img).line([(50, 68), (62, 56)], fill=WOOD_DK, width=2)
+    ImageDraw.Draw(img).line([(50, 68), (62, 76)], fill=WOOD_DK, width=2)
+    ImageDraw.Draw(img).line([(48, 66), (88, 66)], fill=WOOD_LT, width=2)
+    # stump far right
+    outline_rect(img, 88, 68, 98, 80, WOOD)
+    for x in range(4, w - 4):
+        if x % 2:
             px(img, x, h - 2, GRASS)
     save("assets/sprites/buildings/lumber_camp.png", img)
 
 
 def gen_blacksmith() -> None:
-    """Blacksmith refresh — open forge, warm wood, matches TC style."""
+    """Blacksmith — open forge glow + chimney (keep distinct)."""
     w, h = 72, 100
     img = blank(w, h)
-    # stone base
     stone_fill(img, 6, 78, 66, 94)
     log_wall(img, 8, 36, 64, 78)
     thatch_roof(img, (36, 4), 38, 4, 68)
-    # chimney
     stone_fill(img, 48, 10, 60, 36)
     outline_rect(img, 46, 6, 62, 12, STONE_DK)
-    # open front
     outline_rect(img, 16, 48, 56, 78, (40, 28, 18, 255))
-    # forge glow
     outline_rect(img, 28, 54, 46, 70, STONE_DK)
     for y in range(58, 68):
         for x in range(32, 44):
             px(img, x, y, (240, 140, 40, 255) if (x + y) % 2 else (255, 200, 60, 255))
-    # anvil
     outline_rect(img, 18, 68, 30, 76, IRON_DK)
     outline_rect(img, 16, 66, 32, 70, IRON)
     for x in range(4, w - 4):
@@ -366,6 +404,15 @@ def unit_canvas() -> Image.Image:
     return blank(36, 44)
 
 
+def cav_canvas() -> Image.Image:
+    """~1.5× infantry width for cavalry readability."""
+    return blank(54, 48)
+
+
+def wagon_canvas() -> Image.Image:
+    return blank(48, 44)
+
+
 def draw_legs(img, cx, y, facing) -> None:
     if facing in ("down", "up"):
         outline_rect(img, cx - 5, y, cx - 1, y + 8, BOOT)
@@ -377,7 +424,6 @@ def draw_legs(img, cx, y, facing) -> None:
 def draw_torso(img, cx, y0, y1, facing, color=TEAM) -> None:
     if facing in ("down", "up"):
         outline_rect(img, cx - 6, y0, cx + 6, y1, color)
-        # fold shading
         for y in range(y0 + 1, y1):
             px(img, cx - 5, y, TEAM_DK if color == TEAM else WOOD_DK)
             px(img, cx + 5, y, TEAM_LT if color == TEAM else WOOD_LT)
@@ -390,7 +436,6 @@ def draw_head(img, cx, y, facing, helm=False) -> None:
         outline_rect(img, cx - 5, y, cx + 5, y + 8, IRON)
         for x in range(cx - 4, cx + 5):
             px(img, x, y + 1, IRON_LT)
-        # face opening
         if facing != "up":
             outline_rect(img, cx - 3, y + 4, cx + 3, y + 8, SKIN)
             px(img, cx - 1, y + 6, OUT)
@@ -405,15 +450,13 @@ def draw_head(img, cx, y, facing, helm=False) -> None:
 
 
 def draw_shield(img, x, y, facing) -> None:
-    """Round shield with TEAM face."""
     if facing == "left":
-        return  # behind
+        return
     outline_rect(img, x, y, x + 9, y + 10, TEAM)
     for yy in range(y + 1, y + 10):
         for xx in range(x + 1, x + 9):
             if (xx + yy) % 3 == 0:
                 px(img, xx, yy, TEAM_LT)
-    # boss
     outline_rect(img, x + 3, y + 3, x + 6, y + 6, IRON_LT)
 
 
@@ -423,271 +466,271 @@ def draw_banner_tiny(img, x, y) -> None:
     px(img, x + 2, y + 2, TEAM_LT)
 
 
-def facing_variants(draw_fn, prefix: str) -> None:
+def facing_variants(draw_fn, prefix: str, canvas_fn=unit_canvas) -> None:
     for facing in FACINGS:
-        img = unit_canvas()
+        img = canvas_fn()
         draw_fn(img, facing)
         save(f"assets/sprites/units/{prefix}_{facing}.png", img)
 
 
 def draw_horse(img, cx, cy, facing) -> None:
-    """Readable horse: body, neck, head, legs, mane, tail."""
+    """Clear horse silhouette — body, neck, head, legs, mane, tail."""
     d = ImageDraw.Draw(img)
     if facing in ("down", "up"):
-        # body oval-ish via stacked rects
-        outline_rect(img, cx - 9, cy + 2, cx + 9, cy + 14, HORSE)
-        for y in range(cy + 3, cy + 14):
-            px(img, cx - 8, y, HORSE_DK)
-            px(img, cx + 8, y, HORSE_LT)
-            if (y % 3) == 0:
-                px(img, cx, y, HORSE_DK)
-        # chest / rump
-        outline_rect(img, cx - 7, cy, cx + 7, cy + 4, HORSE_LT)
-        if facing == "down":
-            # neck up toward viewer-ish
-            outline_rect(img, cx - 3, cy - 6, cx + 4, cy + 2, HORSE)
-            for y in range(cy - 5, cy + 1):
-                px(img, cx - 2, y, HORSE_DK)
-            # head
-            outline_rect(img, cx - 2, cy - 12, cx + 6, cy - 5, HORSE_LT)
-            px(img, cx + 4, cy - 9, OUT)  # eye
-            px(img, cx + 5, cy - 7, OUT)  # nostril
-            # mane
-            for y in range(cy - 10, cy - 2):
-                px(img, cx - 3, y, HAIR)
-                if y % 2:
-                    px(img, cx - 4, y, HAIR)
-        else:
-            outline_rect(img, cx - 4, cy - 4, cx + 3, cy + 2, HORSE)
-            outline_rect(img, cx - 6, cy - 10, cx + 2, cy - 3, HORSE_LT)
-            px(img, cx - 4, cy - 7, OUT)
-            for y in range(cy - 8, cy - 1):
-                px(img, cx + 2, y, HAIR)
-        # legs with joints
-        for i, lx in enumerate((cx - 7, cx - 2, cx + 2, cx + 7)):
-            outline_rect(img, lx, cy + 14, lx + 2, cy + 22, HORSE_DK)
-            px(img, lx, cy + 18, BOOT)
-        # tail
-        for y in range(cy + 4, cy + 14):
-            px(img, cx - 11, y, HAIR)
-            if y % 2:
-                px(img, cx - 12, y, HAIR)
-    else:
-        # side profile — classic horse silhouette
-        outline_rect(img, cx - 12, cy + 2, cx + 10, cy + 14, HORSE)
-        for y in range(cy + 3, cy + 13):
+        outline_rect(img, cx - 12, cy + 4, cx + 12, cy + 18, HORSE)
+        for y in range(cy + 5, cy + 18):
             px(img, cx - 11, y, HORSE_DK)
-            px(img, cx + 9, y, HORSE_LT)
+            px(img, cx + 11, y, HORSE_LT)
+        outline_rect(img, cx - 8, cy, cx + 8, cy + 6, HORSE_LT)
+        if facing == "down":
+            outline_rect(img, cx - 4, cy - 8, cx + 5, cy + 2, HORSE)
+            outline_rect(img, cx - 2, cy - 14, cx + 8, cy - 6, HORSE_LT)
+            px(img, cx + 6, cy - 10, OUT)
+            for y in range(cy - 12, cy - 2):
+                px(img, cx - 5, y, HAIR)
+        else:
+            outline_rect(img, cx - 5, cy - 6, cx + 4, cy + 2, HORSE)
+            outline_rect(img, cx - 8, cy - 12, cx + 2, cy - 4, HORSE_LT)
+            px(img, cx - 6, cy - 8, OUT)
+            for y in range(cy - 10, cy - 1):
+                px(img, cx + 3, y, HAIR)
+        for lx in (cx - 10, cx - 3, cx + 3, cx + 10):
+            outline_rect(img, lx, cy + 18, lx + 3, cy + 28, HORSE_DK)
+            px(img, lx + 1, cy + 23, BOOT)
+        for y in range(cy + 6, cy + 18):
+            px(img, cx - 14, y, HAIR)
+            px(img, cx - 15, y, HAIR)
+    else:
+        # side: long body
+        outline_rect(img, cx - 16, cy + 4, cx + 12, cy + 18, HORSE)
+        for y in range(cy + 5, cy + 17):
+            px(img, cx - 15, y, HORSE_DK)
+            px(img, cx + 11, y, HORSE_LT)
+            if y % 4 == 0:
+                for x in range(cx - 12, cx + 10):
+                    px(img, x, y, HORSE_DK)
         if facing == "right":
-            # neck + head to the right
             d.polygon(
-                [(cx + 8, cy + 4), (cx + 14, cy - 2), (cx + 18, cy + 2), (cx + 16, cy + 8), (cx + 8, cy + 10)],
+                [(cx + 10, cy + 6), (cx + 18, cy - 4), (cx + 24, cy + 2),
+                 (cx + 22, cy + 10), (cx + 10, cy + 12)],
                 fill=HORSE_LT, outline=OUT,
             )
-            outline_rect(img, cx + 16, cy, cx + 22, cy + 6, HORSE)
-            px(img, cx + 20, cy + 2, OUT)
-            px(img, cx + 21, cy + 4, OUT)
-            for y in range(cy - 1, cy + 8):
-                px(img, cx + 13, y, HAIR)
-            # tail left
-            for y in range(cy + 4, cy + 14):
-                px(img, cx - 14, y, HAIR)
-                px(img, cx - 15, y, HAIR)
+            outline_rect(img, cx + 20, cy, cx + 28, cy + 8, HORSE)
+            px(img, cx + 26, cy + 3, OUT)
+            px(img, cx + 27, cy + 5, OUT)
+            for y in range(cy - 2, cy + 10):
+                px(img, cx + 16, y, HAIR)
+            for y in range(cy + 6, cy + 18):
+                px(img, cx - 18, y, HAIR)
+                px(img, cx - 19, y, HAIR)
         else:
             d.polygon(
-                [(cx - 8, cy + 4), (cx - 14, cy - 2), (cx - 18, cy + 2), (cx - 16, cy + 8), (cx - 8, cy + 10)],
+                [(cx - 10, cy + 6), (cx - 18, cy - 4), (cx - 24, cy + 2),
+                 (cx - 22, cy + 10), (cx - 10, cy + 12)],
                 fill=HORSE_LT, outline=OUT,
             )
-            outline_rect(img, cx - 22, cy, cx - 16, cy + 6, HORSE)
-            px(img, cx - 20, cy + 2, OUT)
-            for y in range(cy - 1, cy + 8):
-                px(img, cx - 13, y, HAIR)
-            for y in range(cy + 4, cy + 14):
-                px(img, cx + 12, y, HAIR)
-        for lx in (cx - 8, cx - 2, cx + 3, cx + 8):
-            outline_rect(img, lx, cy + 14, lx + 2, cy + 22, HORSE_DK)
-            px(img, lx, cy + 18, BOOT)
-
-
-def draw_spearman(img, facing) -> None:
-    cx = 18
-    draw_legs(img, cx, 32, facing)
-    # tunic with shading like soldier
-    outline_rect(img, cx - 7, 16, cx + 7, 32, TEAM)
-    for y in range(17, 32):
-        px(img, cx - 6, y, TEAM_DK)
-        px(img, cx + 6, y, TEAM_LT)
-        if y % 4 == 0:
-            for x in range(cx - 4, cx + 5):
-                px(img, x, y, TEAM_DK)
-    # belt
-    rect(img, cx - 6, 26, cx + 6, 28, WOOD_DK)
-    draw_head(img, cx, 6, facing, helm=True)
-    d = ImageDraw.Draw(img)
-    if facing == "right":
-        d.line([(cx + 6, 28), (cx + 16, 2)], fill=WOOD_LT, width=2)
-        outline_rect(img, cx + 14, 0, cx + 17, 5, IRON_LT)
-        draw_shield(img, cx - 14, 18, facing)
-    elif facing == "left":
-        d.line([(cx - 6, 28), (cx - 16, 2)], fill=WOOD_LT, width=2)
-        outline_rect(img, cx - 17, 0, cx - 14, 5, IRON_LT)
-    elif facing == "down":
-        d.line([(cx + 8, 30), (cx + 8, 1)], fill=WOOD_LT, width=2)
-        outline_rect(img, cx + 6, 0, cx + 10, 4, IRON_LT)
-        draw_shield(img, cx - 15, 18, facing)
-    else:
-        d.line([(cx - 8, 30), (cx - 8, 1)], fill=WOOD_LT, width=2)
-        outline_rect(img, cx - 10, 0, cx - 6, 4, IRON_LT)
+            outline_rect(img, cx - 28, cy, cx - 20, cy + 8, HORSE)
+            px(img, cx - 26, cy + 3, OUT)
+            for y in range(cy - 2, cy + 10):
+                px(img, cx - 16, y, HAIR)
+            for y in range(cy + 6, cy + 18):
+                px(img, cx + 14, y, HAIR)
+        for lx in (cx - 12, cx - 4, cx + 2, cx + 8):
+            outline_rect(img, lx, cy + 18, lx + 3, cy + 28, HORSE_DK)
+            px(img, lx + 1, cy + 23, BOOT)
 
 
 def draw_rider(img, cx, cy, facing, armored: bool) -> None:
     body = IRON if armored else TEAM
     if facing in ("down", "up"):
-        outline_rect(img, cx - 6, cy - 4, cx + 6, cy + 10, body)
-        for y in range(cy - 3, cy + 10):
-            px(img, cx - 5, y, IRON_DK if armored else TEAM_DK)
-            px(img, cx + 5, y, IRON_LT if armored else TEAM_LT)
+        outline_rect(img, cx - 7, cy - 6, cx + 7, cy + 10, body)
+        for y in range(cy - 5, cy + 10):
+            px(img, cx - 6, y, IRON_DK if armored else TEAM_DK)
+            px(img, cx + 6, y, IRON_LT if armored else TEAM_LT)
         if armored:
-            rect(img, cx - 4, cy + 2, cx + 4, cy + 5, TEAM)
-        draw_head(img, cx, cy - 14, facing, helm=True)
-        draw_banner_tiny(img, cx + 8, cy - 16)
-        ImageDraw.Draw(img).line([(cx + 5, cy + 2), (cx + 13, cy - 8)], fill=IRON_LT, width=2)
+            rect(img, cx - 5, cy + 1, cx + 5, cy + 5, TEAM)
+        draw_head(img, cx, cy - 16, facing, helm=True)
+        draw_banner_tiny(img, cx + 10, cy - 18)
+        ImageDraw.Draw(img).line([(cx + 6, cy + 2), (cx + 16, cy - 10)], fill=IRON_LT, width=2)
     else:
-        rx = cx + (1 if facing == "right" else -1)
-        outline_rect(img, rx - 5, cy - 4, rx + 5, cy + 10, body)
+        rx = cx + (2 if facing == "right" else -2)
+        outline_rect(img, rx - 6, cy - 6, rx + 6, cy + 10, body)
         if armored:
-            rect(img, rx - 3, cy + 2, rx + 3, cy + 5, TEAM)
+            rect(img, rx - 4, cy + 1, rx + 4, cy + 5, TEAM)
         else:
-            for y in range(cy - 2, cy + 8):
-                px(img, rx - 4, y, TEAM_DK)
-        draw_head(img, rx, cy - 14, facing, helm=True)
-        draw_shield(img, rx + (7 if facing == "right" else -15), cy - 2, facing)
-        tip = rx + (15 if facing == "right" else -15)
-        ImageDraw.Draw(img).line([(rx + 2, cy + 2), (tip, cy - 8)], fill=IRON_LT, width=2)
+            for y in range(cy - 4, cy + 8):
+                px(img, rx - 5, y, TEAM_DK)
+        draw_head(img, rx, cy - 16, facing, helm=True)
+        draw_shield(img, rx + (8 if facing == "right" else -16), cy - 4, facing)
+        tip = rx + (18 if facing == "right" else -18)
+        ImageDraw.Draw(img).line([(rx + 2, cy + 2), (tip, cy - 10)], fill=IRON_LT, width=2)
+
+
+def draw_spearman(img, facing) -> None:
+    """Long spear above head — unique silhouette."""
+    cx = 18
+    draw_legs(img, cx, 32, facing)
+    outline_rect(img, cx - 7, 16, cx + 7, 32, TEAM)
+    for y in range(17, 32):
+        px(img, cx - 6, y, TEAM_DK)
+        px(img, cx + 6, y, TEAM_LT)
+    rect(img, cx - 6, 26, cx + 6, 28, WOOD_DK)
+    draw_head(img, cx, 6, facing, helm=True)
+    d = ImageDraw.Draw(img)
+    # spear shaft extends well above head
+    if facing == "right":
+        d.line([(cx + 6, 30), (cx + 14, 0)], fill=WOOD_LT, width=2)
+        outline_rect(img, cx + 12, 0, cx + 16, 4, IRON_LT)
+        draw_shield(img, cx - 14, 18, facing)
+    elif facing == "left":
+        d.line([(cx - 6, 30), (cx - 14, 0)], fill=WOOD_LT, width=2)
+        outline_rect(img, cx - 16, 0, cx - 12, 4, IRON_LT)
+    elif facing == "down":
+        d.line([(cx + 8, 32), (cx + 8, 0)], fill=WOOD_LT, width=2)
+        outline_rect(img, cx + 6, 0, cx + 10, 3, IRON_LT)
+        draw_shield(img, cx - 15, 18, facing)
+    else:
+        d.line([(cx - 8, 32), (cx - 8, 0)], fill=WOOD_LT, width=2)
+        outline_rect(img, cx - 10, 0, cx - 6, 3, IRON_LT)
 
 
 def draw_light_cavalry(img, facing) -> None:
-    cx, cy = 18, 20
+    cx, cy = 27, 18
     draw_horse(img, cx, cy, facing)
     draw_rider(img, cx, cy, facing, armored=False)
 
 
 def draw_knight(img, facing) -> None:
-    cx, cy = 18, 20
+    cx, cy = 27, 18
     draw_horse(img, cx, cy, facing)
     draw_rider(img, cx, cy, facing, armored=True)
 
 
 def draw_bradaticar(img, facing) -> None:
+    """Bearded axe — wide blade silhouette."""
     cx = 18
     draw_legs(img, cx, 32, facing)
-    draw_torso(img, cx, 18, 32, facing, TEAM)
-    draw_head(img, cx, 8, facing, helm=False)
-    # hair more
+    outline_rect(img, cx - 7, 16, cx + 7, 32, TEAM)
+    for y in range(17, 32):
+        px(img, cx - 6, y, TEAM_DK)
+    rect(img, cx - 6, 26, cx + 6, 28, WOOD_DK)
+    draw_head(img, cx, 6, facing, helm=False)
     for x in range(cx - 3, cx + 4):
-        px(img, x, 8, HAIR)
+        px(img, x, 6, HAIR)
     d = ImageDraw.Draw(img)
-    # bearded axe
+    # large bearded axe head
     if facing == "right":
-        d.line([(cx + 5, 24), (cx + 14, 10)], fill=WOOD_LT, width=2)
-        d.polygon([(cx + 12, 6), (cx + 18, 12), (cx + 14, 14), (cx + 10, 8)], fill=IRON)
-        draw_shield(img, cx - 14, 20, facing)
+        d.line([(cx + 5, 24), (cx + 12, 8)], fill=WOOD_LT, width=2)
+        d.polygon([(cx + 10, 2), (cx + 20, 10), (cx + 18, 16), (cx + 8, 8)], fill=IRON)
+        for x in range(cx + 12, cx + 18):
+            px(img, x, 12, IRON_LT)
+        draw_shield(img, cx - 14, 18, facing)
     elif facing == "left":
-        d.line([(cx - 5, 24), (cx - 14, 10)], fill=WOOD_LT, width=2)
-        d.polygon([(cx - 12, 6), (cx - 18, 12), (cx - 14, 14), (cx - 10, 8)], fill=IRON)
+        d.line([(cx - 5, 24), (cx - 12, 8)], fill=WOOD_LT, width=2)
+        d.polygon([(cx - 10, 2), (cx - 20, 10), (cx - 18, 16), (cx - 8, 8)], fill=IRON)
     elif facing == "down":
-        d.line([(cx + 7, 22), (cx + 12, 6)], fill=WOOD_LT, width=2)
-        d.polygon([(cx + 10, 2), (cx + 16, 8), (cx + 12, 10), (cx + 8, 4)], fill=IRON)
-        draw_shield(img, cx - 14, 20, facing)
+        d.line([(cx + 7, 22), (cx + 12, 4)], fill=WOOD_LT, width=2)
+        d.polygon([(cx + 8, 0), (cx + 20, 6), (cx + 18, 14), (cx + 6, 6)], fill=IRON)
+        draw_shield(img, cx - 14, 18, facing)
     else:
-        d.line([(cx - 7, 22), (cx - 12, 6)], fill=WOOD_LT, width=2)
-        d.polygon([(cx - 10, 2), (cx - 16, 8), (cx - 12, 10), (cx - 8, 4)], fill=IRON)
+        d.line([(cx - 7, 22), (cx - 12, 4)], fill=WOOD_LT, width=2)
+        d.polygon([(cx - 8, 0), (cx - 20, 6), (cx - 18, 14), (cx - 6, 6)], fill=IRON)
 
 
 def draw_druzinik(img, facing) -> None:
-    # elite cavalry — knight base + longer TEAM cloak
     draw_knight(img, facing)
-    cx, cy = 18, 20
+    cx, cy = 27, 18
     if facing in ("down", "up"):
-        outline_rect(img, cx - 8, cy + 4, cx + 8, cy + 12, TEAM_DK)
-        for x in range(cx - 7, cx + 8):
-            px(img, x, cy + 5, TEAM)
+        outline_rect(img, cx - 9, cy + 6, cx + 9, cy + 14, TEAM_DK)
+        for x in range(cx - 8, cx + 9):
+            px(img, x, cy + 7, TEAM)
 
 
 def draw_valecny_vuz(img, facing) -> None:
-    """War wagon — wheeled wooden box with slits + team banner."""
+    """War wagon — obvious wheels + planked wall + gun slits."""
     if facing in ("down", "up"):
-        outline_rect(img, 8, 26, 28, 32, WOOD_DK)
-        for wx in (6, 24):
-            outline_rect(img, wx, 28, wx + 10, 40, BOOT)
-            px(img, wx + 4, 33, IRON_LT)
-            px(img, wx + 5, 34, IRON)
-            px(img, wx + 3, 34, IRON)
-        outline_rect(img, 6, 10, 30, 28, WOOD)
-        for y in range(12, 28):
-            px(img, 7, y, WOOD_DK)
-            px(img, 29, y, WOOD_LT)
-            if y % 3 == 0:
-                for x in range(8, 30):
-                    px(img, x, y, WOOD_DK)
-        outline_rect(img, 8, 6, 28, 12, WOOD_LT)
-        for x in range(10, 28, 3):
-            px(img, x, 8, WOOD_HL)
-        outline_rect(img, 11, 14, 15, 20, (20, 16, 12, 255))
-        outline_rect(img, 21, 14, 25, 20, (20, 16, 12, 255))
-        outline_rect(img, 15, 2, 21, 8, IRON_DK)
-        for x in range(16, 21):
-            px(img, x, 3, IRON_LT)
-        draw_banner_tiny(img, 28, 0)
+        # big wagon body
+        outline_rect(img, 6, 8, 42, 30, WOOD)
+        for y in range(10, 30, 3):
+            for x in range(8, 42):
+                px(img, x, y, WOOD_DK)
+            px(img, 7, y, WOOD_LT)
+        # crenellated top wall
+        for mx in range(8, 42, 6):
+            outline_rect(img, mx, 4, mx + 3, 10, WOOD_LT)
+        # slits
+        outline_rect(img, 12, 14, 18, 22, (16, 12, 10, 255))
+        outline_rect(img, 30, 14, 36, 22, (16, 12, 10, 255))
+        # LARGE wheels
+        for wx in (4, 32):
+            outline_rect(img, wx, 26, wx + 14, 42, BOOT)
+            outline_rect(img, wx + 3, 29, wx + 11, 39, WOOD_DK)
+            px(img, wx + 7, 33, IRON_LT)
+            px(img, wx + 6, 34, IRON)
+            px(img, wx + 8, 34, IRON)
+            px(img, wx + 7, 32, IRON)
+        # barrel
+        outline_rect(img, 20, 0, 28, 8, IRON_DK)
+        for x in range(21, 28):
+            px(img, x, 2, IRON_LT)
+        draw_banner_tiny(img, 40, 0)
     else:
-        outline_rect(img, 4, 12, 32, 30, WOOD)
-        for y in range(14, 30):
-            if y % 3 == 0:
-                for x in range(6, 32):
-                    px(img, x, y, WOOD_DK)
-            px(img, 5, y, WOOD_DK)
-        outline_rect(img, 4, 12, 9, 30, WOOD_LT)
-        outline_rect(img, 12, 16, 26, 24, (20, 16, 12, 255))
-        for wx in (6, 22):
-            outline_rect(img, wx, 28, wx + 10, 40, BOOT)
-            px(img, wx + 4, 33, IRON_LT)
+        outline_rect(img, 2, 10, 46, 30, WOOD)
+        for y in range(12, 30, 3):
+            for x in range(4, 46):
+                px(img, x, y, WOOD_DK)
+        outline_rect(img, 2, 10, 8, 30, WOOD_LT)
+        for mx in range(4, 44, 6):
+            outline_rect(img, mx, 6, mx + 3, 12, WOOD_LT)
+        outline_rect(img, 14, 14, 34, 24, (16, 12, 10, 255))
+        for wx in (4, 30):
+            outline_rect(img, wx, 26, wx + 14, 42, BOOT)
+            px(img, wx + 7, 33, IRON_LT)
         if facing == "right":
-            outline_rect(img, 30, 16, 35, 22, IRON_DK)
-            for x in range(31, 35):
-                px(img, x, 17, IRON_LT)
+            outline_rect(img, 44, 14, 50, 22, IRON_DK)
+            for x in range(45, 50):
+                px(img, x, 16, IRON_LT)
         else:
-            outline_rect(img, 1, 16, 6, 22, IRON_DK)
-        draw_banner_tiny(img, 16, 2)
+            outline_rect(img, 0, 14, 4, 22, IRON_DK)
+        draw_banner_tiny(img, 20, 0)
 
 
 def draw_lancknecht(img, facing) -> None:
+    """Pike + colorful striped landsknecht garb."""
     cx = 18
     draw_legs(img, cx, 32, facing)
-    # striped landsknecht tunic
-    draw_torso(img, cx, 18, 32, facing, TEAM)
-    for y in range(20, 30, 3):
-        for x in range(cx - 5, cx + 6):
-            if (y // 3) % 2 == 0:
-                px(img, x, y, (200, 180, 60, 255))
-    draw_head(img, cx, 8, facing, helm=False)
-    # fancy hat
-    outline_rect(img, cx - 6, 6, cx + 6, 10, (160, 40, 50, 255))
-    px(img, cx + 6, 4, TEAM_LT)
+    # striped colorful tunic (red/yellow/team)
+    outline_rect(img, cx - 7, 14, cx + 7, 32, (160, 40, 50, 255))
+    for y in range(16, 30, 3):
+        col = TEAM if (y // 3) % 2 == 0 else (220, 190, 50, 255)
+        for x in range(cx - 6, cx + 7):
+            px(img, x, y, col)
+            px(img, x, y + 1, col)
+    # puffed sleeves
+    outline_rect(img, cx - 10, 16, cx - 6, 24, (220, 190, 50, 255))
+    outline_rect(img, cx + 6, 16, cx + 10, 24, TEAM)
+    draw_head(img, cx, 4, facing, helm=False)
+    # fancy hat with plume
+    outline_rect(img, cx - 6, 2, cx + 6, 8, (160, 40, 50, 255))
+    for i in range(4):
+        px(img, cx + 6 + i, 2 - i, TEAM_LT)
+        px(img, cx + 6 + i, 3 - i, (220, 190, 50, 255))
     d = ImageDraw.Draw(img)
+    # long pike
     if facing == "right":
-        d.line([(cx + 5, 22), (cx + 16, 4)], fill=WOOD_LT, width=2)
-        outline_rect(img, cx + 14, 2, cx + 17, 6, IRON)
-        draw_shield(img, cx - 14, 20, facing)
+        d.line([(cx + 8, 28), (cx + 16, 0)], fill=WOOD_LT, width=2)
+        outline_rect(img, cx + 14, 0, cx + 17, 4, IRON)
+        draw_shield(img, cx - 14, 18, facing)
     elif facing == "left":
-        d.line([(cx - 5, 22), (cx - 16, 4)], fill=WOOD_LT, width=2)
-        outline_rect(img, cx - 17, 2, cx - 14, 6, IRON)
+        d.line([(cx - 8, 28), (cx - 16, 0)], fill=WOOD_LT, width=2)
+        outline_rect(img, cx - 17, 0, cx - 14, 4, IRON)
     elif facing == "down":
-        d.line([(cx + 6, 20), (cx + 6, 2)], fill=WOOD_LT, width=2)
-        outline_rect(img, cx + 4, 0, cx + 8, 3, IRON)
-        draw_shield(img, cx - 14, 20, facing)
+        d.line([(cx + 8, 28), (cx + 8, 0)], fill=WOOD_LT, width=2)
+        outline_rect(img, cx + 6, 0, cx + 10, 3, IRON)
+        draw_shield(img, cx - 14, 18, facing)
     else:
-        d.line([(cx - 6, 20), (cx - 6, 2)], fill=WOOD_LT, width=2)
-        outline_rect(img, cx - 8, 0, cx - 4, 3, IRON)
+        d.line([(cx - 8, 28), (cx - 8, 0)], fill=WOOD_LT, width=2)
+        outline_rect(img, cx - 10, 0, cx - 6, 3, IRON)
 
 
 def main() -> None:
@@ -697,12 +740,12 @@ def main() -> None:
     gen_lumber_camp()
     gen_blacksmith()
     facing_variants(draw_spearman, "spearman")
-    facing_variants(draw_light_cavalry, "light_cavalry")
-    facing_variants(draw_knight, "knight")
     facing_variants(draw_bradaticar, "bojovnik_bradatice")
-    facing_variants(draw_druzinik, "druzinik")
-    facing_variants(draw_valecny_vuz, "valecny_vuz")
     facing_variants(draw_lancknecht, "lancknecht")
+    facing_variants(draw_light_cavalry, "light_cavalry", cav_canvas)
+    facing_variants(draw_knight, "knight", cav_canvas)
+    facing_variants(draw_druzinik, "druzinik", cav_canvas)
+    facing_variants(draw_valecny_vuz, "valecny_vuz", wagon_canvas)
     print("art pass sprites done")
 
 
