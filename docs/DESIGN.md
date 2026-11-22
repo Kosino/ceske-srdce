@@ -28,8 +28,20 @@ Postup věku: výzkum v Radnici (fronta; během výzkumu Radnice netrénuje). Po
 |---------|--------|----------|
 | 1 Velká Morava | Dům, Pila, Mlýn, Kasárna | Vesničan, Zbrojnoš |
 | 2 Přemyslovci | Střelnice, Kovárna, Stáj | Kopiník, Lučištník, Lehký jezdec |
-| 3 Husitství | *(data-only)* monastery | Rytíř; *(data-only)* monk |
-| 4 Habsburkové | *(data-only)* castle, university | *(data-only)* siege |
+| 3 Husitství | Hrad; *(data-only)* monastery | Rytíř; unikátní jednotky; *(data-only)* monk |
+| 4 Habsburkové | *(data-only)* university | *(data-only)* siege |
+
+**Schváleno 2026-11-22 – Hrad:** 650 K, 120 s, HP 4800, 160×160, věk 3; šípy 8 pierce / 8 dlaždic; +10 populace. Trénuje unikátní jednotku civilizace (35 s). AI od věku 3 staví Hrad při kameni a míchá unikáty do vln.
+
+**Unikátní jednotky (Hrad, 35 s):**
+| Civ | Jednotka | Cena | HP | Útok | Zbroj | Rychlost | Poznámka |
+|-----|----------|------|----|------|-------|----------|----------|
+| Moravané | Bojovník s bradaticí | 60 J + 30 Z | 70 | 9 melee (+8 vs budovy) | 1/1 | 1.0× | Bradatice — typická zbraň velkomoravské pěchoty. |
+| Přemyslovci | Družiník | 70 J + 70 Z | 120 | 11 melee | 2/3 | 1.3× jízda | Panovnická družina Přemyslovců, těžká jízda. |
+| Husité | Válečný vůz | 110 D + 60 Z | 180 | 7 pierce / 5 dlaždic | 0/6 | 0.8× | Okovaný vůz z husitských vozových hradeb. |
+| Habsburkové | Lancknecht | 55 J + 45 Z | 75 | 8 melee (+10 vs jízda) | 1/1 | 1.0× | Žoldnéřská pěchota císařských armád 16. stol. |
+
+Civ bonusy + Kovárna platí i na unikáty (Kalené hroty na válečný vůz).
 
 **Schváleno 2026-11-22 – Stáj:** 175 D, 45 s, HP 1500, 80×80, věk 2, vyžaduje Kasárnu. Lehký jezdec (80 J, 30 s, HP 60, útok 4, zbroj 0/2, 1.6×) / Rytíř věk 3 (60 J+75 Z, 30 s, HP 100, útok 10, zbroj 2/2, 1.35×). Kopiník +15 vs jízda. Přemyslovci +10 % dmg jízdy. Kovářství platí i na jízdu. AI od věku 2 staví Stáj a míchá lehkou jízdu do vln.
 
@@ -46,14 +58,14 @@ Platí na existující i nově vycvičené jednotky. AI po postavení Kovárny z
 ## Civilizace (multiplayer)
 | Civilizace   | Unikátní jednotka          | Hlavní síla          |
 |--------------|--------------------------|---------------------|
-| Moravané    | Velmož knížecí družiny  | Early, dřevo       |
-| Přemyslovci | Svatováclavský rytíř     | Mid, zlato + jízda |
-| Husité      | Husitský bojový vůz      | Mid/Late, pěchota  |
-| Habsburkové | Císařská garda          | Late, těžká pěchota|
+| Moravané    | Bojovník s bradaticí     | Early, dřevo       |
+| Přemyslovci | Družiník                 | Mid, zlato + jízda |
+| Husité      | Válečný vůz              | Mid/Late, pěchota  |
+| Habsburkové | Lancknecht               | Late, těžká pěchota|
 
 ### Civilizace – bonusy (Fáze 2)
 
-Default skirmish: hráč **Moravané**, AI **Husité**. Unikátní jednotky zatím data-only (`CivData`). Id: `habsburkove`.
+Default skirmish: hráč **Moravané**, AI **Husité**. Unikátní jednotky trénuje Hrad (`CivData`). Id: `habsburkove`.
 
 **Schváleno 2026-11-22:**
 
@@ -64,7 +76,7 @@ Default skirmish: hráč **Moravané**, AI **Husité**. Unikátní jednotky zat�
 | Husité | +10 % HP pěchoty; +5 % poškození pěchoty |
 | Habsburkové | +10 % těžba kamene; +15 % HP pěchoty |
 
-Pěchota = zbrojnoš, kopiník, lučištník. Implementace: `CivData` + `GameManager.player_civ` / `enemy_civ`. UI stavby ukazují cenu po `adjust_building_cost`.
+Pěchota = zbrojnoš, kopiník, lučištník, bojovník s bradaticí, lancknecht. Implementace: `CivData` + `GameManager.player_civ` / `enemy_civ`. UI stavby ukazují cenu po `adjust_building_cost`.
 
 ### Formace (Fáze 2)
 
@@ -107,6 +119,10 @@ Těžba za sekundu na vesničana: dřevo 0.40, jídlo z keřů 0.30, farma 0.33,
 | Lučištník | 25 D, 45 Z | 35 s | 30 | 4 pierce | 160 px | 80 px/s | 0/0 |
 | Lehký jezdec | 80 J | 30 s | 60 | 4 melee | melee | 128 px/s (1.6×) | 0/2 |
 | Rytíř *(věk 3)* | 60 J, 75 Z | 30 s | 100 | 10 melee | melee | 108 px/s (1.35×) | 2/2 |
+| Bojovník s bradaticí | 60 J, 30 Z | 35 s | 70 | 9 (+8 vs budovy) | melee | 80 px/s | 1/1 |
+| Družiník | 70 J, 70 Z | 35 s | 120 | 11 melee | melee | 104 px/s (1.3×) | 2/3 |
+| Válečný vůz | 110 D, 60 Z | 35 s | 180 | 7 pierce | 200 px | 64 px/s (0.8×) | 0/6 |
+| Lancknecht | 55 J, 45 Z | 35 s | 75 | 8 (+10 vs jízda) | melee | 80 px/s | 1/1 |
 
 | Budova | Cena | Stavba | HP | Funkce |
 |--------|------|--------|----|--------|
@@ -119,6 +135,7 @@ Těžba za sekundu na vesničana: dřevo 0.40, jídlo z keřů 0.30, farma 0.33,
 | Střelnice | 175 D | 50 s | 1200 | Lučištník |
 | Kovárna *(Schváleno 2026-11-22)* | 150 D | 40 s | 1800 | věk 2 gate; techy viz výše |
 | Stáj | 175 D | 45 s | 1500 | 80×80, věk 2, vyžaduje Kasárnu; Lehký jezdec / Rytíř |
+| Hrad | 650 K | 120 s | 4800 | 160×160, věk 3; šípy 8 pierce / 8 dlaždic; +10 pop; unikátní jednotka |
 
 ### Mapa & doly (Fáze 4)
 Deterministický generátor (seed). U každé radnice (≤12 dlaždic): 1 les (~25 stromů), 6 keřů bobulí, 1 zlatý důl (7 dlaždic × 800), 1 kamenný důl (5 × 350). Zbytek mapy: 6–8 lesů + 2–3 doly (zlato/kámen), zrcadlově férové. Žádné zdroje na cestách/budovách.

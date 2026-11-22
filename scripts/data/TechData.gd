@@ -46,11 +46,11 @@ static func tech_def(tech_id: String) -> Dictionary:
 static func unit_role(unit: Unit) -> String:
 	if unit == null:
 		return ""
-	if unit is Archer or unit.unit_id == "archer":
+	if unit is Archer or unit.unit_id == "archer" or unit.unit_id == "valecny_vuz":
 		return "archer"
 	if unit.is_cavalry:
 		return "cavalry"
 	if unit is Villager:
 		return "villager"
-	# Soldier / Spearman / future infantry.
+	# Soldier / Spearman / unique infantry.
 	return "infantry"

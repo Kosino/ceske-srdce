@@ -32,9 +32,9 @@
 - Gold/stone mines + seeded map + Mining Camp / Pila ✅
 - Blacksmith techs (infantry attack/armor) ✅
 - Stable + cavalry ✅
-- Unique civ units
+- Castle + unique civ units ✅
 - Walls/towers
-- Age 3–4 buildings
+- Age 4 buildings
 - Monk
 
 ## Fáze 5: Polish

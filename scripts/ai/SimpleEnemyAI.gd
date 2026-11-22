@@ -11,11 +11,13 @@ const THINK_INTERVAL := 0.45
 const START_FOOD := 300 # enough for Kovářství + Kroužková zbroj after buildings
 const START_WOOD := 400
 const START_GOLD := 80
+const START_STONE := 700
 
 const HOUSE_SCENE := preload("res://scenes/buildings/House.tscn")
 const BARRACKS_SCENE := preload("res://scenes/buildings/Barracks.tscn")
 const BLACKSMITH_SCENE := preload("res://scenes/buildings/Blacksmith.tscn")
 const STABLE_SCENE := preload("res://scenes/buildings/Stable.tscn")
+const CASTLE_SCENE := preload("res://scenes/buildings/Castle.tscn")
 const VILLAGER_SCENE := preload("res://scenes/units/Villager.tscn")
 const DROPOFF_SCENE := preload("res://scenes/world/DropOff.tscn")
 const RESOURCE_SCENE := preload("res://scenes/world/ResourceNode.tscn")
@@ -26,6 +28,7 @@ const RESOURCE_SCENE := preload("res://scenes/world/ResourceNode.tscn")
 var food: int = START_FOOD
 var wood: int = START_WOOD
 var gold: int = START_GOLD
+var stone: int = START_STONE
 
 var _think_timer: float = 0.0
 var _combat_timer: float = 0.0
@@ -52,7 +55,7 @@ func add_resource(type: String, amount: int) -> void:
 		"gold":
 			gold += amount
 		"stone":
-			pass
+			stone += amount
 
 
 func _bootstrap_base() -> void:
@@ -135,6 +138,12 @@ func _tick_economy() -> void:
 		and wood >= 175
 	):
 		_try_place_building("stable", base_position + Vector2(120, -70))
+	elif (
+		GameManager.current_age >= 3
+		and _count_enemy_buildings("castle") < 1
+		and stone >= 650
+	):
+		_try_place_building("castle", base_position + Vector2(-40, 140))
 	_assign_builders()
 	_try_train()
 	_try_blacksmith_research()
@@ -163,6 +172,11 @@ func _try_place_building(building_id: String, pos: Vector2) -> bool:
 				return false
 			wood -= 175
 			building = STABLE_SCENE.instantiate() as Building
+		"castle":
+			if stone < 650:
+				return false
+			stone -= 650
+			building = CASTLE_SCENE.instantiate() as Building
 		_:
 			return false
 	building.team = 1
@@ -176,7 +190,9 @@ func _try_place_building(building_id: String, pos: Vector2) -> bool:
 		(building as Barracks).spawn_parent = _units_parent
 	elif building is Stable:
 		(building as Stable).spawn_parent = _units_parent
-	print("[AI] placing %s at %s (wood left %d)" % [building_id, str(pos), wood])
+	elif building is Castle:
+		(building as Castle).spawn_parent = _units_parent
+	print("[AI] placing %s at %s (wood left %d stone %d)" % [building_id, str(pos), wood, stone])
 	return true
 
 
@@ -251,6 +267,21 @@ func _try_train() -> void:
 		if stable != null and stable.is_complete and food >= 80 and stable.queue.size() < 2:
 			food -= 80
 			stable.ai_enqueue_unit("light_cavalry")
+	# From age 3: unique unit from Castle.
+	if GameManager.current_age >= 3:
+		var castle := _enemy_castle()
+		if castle != null and castle.is_complete and castle.queue.size() < 2:
+			var uid := castle.unique_unit_id()
+			var def := CivData.unique_unit_def(uid)
+			var cost: Dictionary = def.get("cost", {})
+			var need_f := int(cost.get("food", 0))
+			var need_w := int(cost.get("wood", 0))
+			var need_g := int(cost.get("gold", 0))
+			if food >= need_f and wood >= need_w and gold >= need_g:
+				food -= need_f
+				wood -= need_w
+				gold -= need_g
+				castle.ai_enqueue_unit(uid)
 
 
 func _launch_wave(soldiers: Array) -> void:
@@ -272,7 +303,10 @@ func _launch_wave(soldiers: Array) -> void:
 func _enemy_soldiers() -> Array:
 	var out: Array = []
 	for n in get_tree().get_nodes_in_group("enemy_units"):
-		if n is Soldier or n is Spearman or n is LightCavalry or n is Knight:
+		if (
+			n is Soldier or n is Spearman or n is LightCavalry or n is Knight
+			or n is BojovnikBradatice or n is Druzinik or n is ValecnyVuz or n is Lancknecht
+		):
 			out.append(n)
 	return out
 
@@ -281,6 +315,13 @@ func _enemy_stable() -> Stable:
 	for n in get_tree().get_nodes_in_group("stables"):
 		if n is Stable and (n as Stable).team == 1:
 			return n as Stable
+	return null
+
+
+func _enemy_castle() -> Castle:
+	for n in get_tree().get_nodes_in_group("castles"):
+		if n is Castle and (n as Castle).team == 1:
+			return n as Castle
 	return null
 
 

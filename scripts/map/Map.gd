@@ -56,6 +56,7 @@ func _ready() -> void:
 		await _run_map_mines_smoke()
 		await _run_blacksmith_tech_smoke()
 		await _run_stable_cavalry_smoke()
+		await _run_castle_unique_smoke()
 		print("[TEST] all headless smokes finished")
 		get_tree().quit(0)
 		return
@@ -71,6 +72,8 @@ func _ready() -> void:
 		await prepare_blacksmith_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--stable-shot"):
 		await prepare_stable_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--castle-shot"):
+		await prepare_castle_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--formation-shot"):
 		await prepare_formation_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--ai-shot"):
@@ -78,6 +81,46 @@ func _ready() -> void:
 	else:
 		await _sample_windowed_fps()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 debug.")
+
+
+## Castle + unique unit (feature in action).
+func prepare_castle_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	GameManager.current_age = 3
+	GameManager.player_civ = CivData.MORAVANE
+	GameManager.add_resource("food", 200)
+	GameManager.add_resource("gold", 100)
+	GameManager.add_resource("stone", 700)
+	var castle: Castle = preload("res://scenes/buildings/Castle.tscn").instantiate() as Castle
+	castle.team = 0
+	castle.position = PLAYER_TC_POS + Vector2(220, 20)
+	castle.is_complete = true
+	castle.spawn_parent = units
+	units.add_child(castle)
+	await get_tree().physics_frame
+	var unique: BojovnikBradatice = preload("res://scenes/units/BojovnikBradatice.tscn").instantiate() as BojovnikBradatice
+	unique.team = 0
+	unique.contribute_population = false
+	unique.position = castle.global_position + Vector2(50, 90)
+	units.add_child(unique)
+	var enemy: Soldier = SOLDIER_SCENE.instantiate() as Soldier
+	enemy.team = 1
+	enemy.contribute_population = false
+	enemy.position = unique.global_position + Vector2(110, 10)
+	units.add_child(enemy)
+	await get_tree().physics_frame
+	SelectionManager.select_building(castle)
+	unique.command_attack(enemy)
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	if cam:
+		cam.set_zoom_clamped(1.0)
+		cam.center_at((unique.global_position + castle.global_position) * 0.5)
+	await get_tree().create_timer(0.9).timeout
+	await get_tree().process_frame
+	_save_shot("castle.png", 0)
 
 
 ## Stable + cavalry moving/fighting (feature in action).
@@ -1144,6 +1187,152 @@ func _run_stable_cavalry_smoke() -> void:
 		print("[TEST] FAIL stable cavalry + spearman + civ + age lock")
 
 	for n in [barracks, stable, spear, dummy, cav2]:
+		if is_instance_valid(n):
+			n.queue_free()
+
+
+## Age 3 reachable, Castle arrows, civ-unique train only, building/cavalry bonuses.
+func _run_castle_unique_smoke() -> void:
+	await get_tree().physics_frame
+	# Age 3 research cost from DESIGN (800J+200Z / 160s) + castle unlock.
+	var age3_def: Dictionary = AgeData.AGE_RESEARCH.get(3, {})
+	var age3_cost: Dictionary = age3_def.get("cost", {})
+	var age_ok: bool = (
+		int(age3_cost.get("food", 0)) == 800
+		and int(age3_cost.get("gold", 0)) == 200
+		and float(age3_def.get("time", 0.0)) >= 120.0
+		and AgeData.building_unlock_age("castle") == 3
+	)
+	GameManager.current_age = 3
+	GameManager.player_civ = CivData.MORAVANE
+	GameManager.add_resource("food", 500)
+	GameManager.add_resource("wood", 300)
+	GameManager.add_resource("gold", 400)
+	GameManager.add_resource("stone", 700)
+	GameManager.add_population_cap(20)
+
+	var castle: Castle = preload("res://scenes/buildings/Castle.tscn").instantiate() as Castle
+	castle.team = 0
+	castle.position = PLAYER_TC_POS + Vector2(200, 60)
+	castle.is_complete = true
+	castle.spawn_parent = units
+	units.add_child(castle)
+	await get_tree().physics_frame
+
+	# Castle shoots enemy in range.
+	var foe: Soldier = SOLDIER_SCENE.instantiate() as Soldier
+	foe.team = 1
+	foe.contribute_population = false
+	foe.position = castle.global_position + Vector2(120, 0)
+	units.add_child(foe)
+	var hp_before: float = foe.hp
+	castle._attack_timer = 0.0
+	castle._try_auto_attack()
+	await get_tree().create_timer(0.35).timeout
+	var shot_ok: bool = foe.hp < hp_before
+	print("[TEST] castle_shot hp %.1f -> %.1f ok=%s" % [hp_before, foe.hp, shot_ok])
+
+	# Each civ trains its unique and rejects others.
+	var civ_train_ok: bool = true
+	var spawned: Array = []
+	for civ_id_v in CivData.ALL_CIV_IDS:
+		var civ_id: String = str(civ_id_v)
+		GameManager.player_civ = civ_id
+		GameManager.add_resource("food", 200)
+		GameManager.add_resource("wood", 200)
+		GameManager.add_resource("gold", 200)
+		var mine: String = CivData.unique_unit_id(civ_id)
+		var ok_mine: bool = castle.enqueue_unit(mine)
+		if not ok_mine:
+			civ_train_ok = false
+			print("[TEST] castle civ=%s failed own unique %s" % [civ_id, mine])
+		for other_id_v in CivData.UNIQUE_UNITS.keys():
+			var other_id: String = str(other_id_v)
+			if other_id == mine:
+				continue
+			var food0: int = GameManager.food
+			var blocked: bool = not castle.enqueue_unit(other_id)
+			if not blocked or GameManager.food != food0:
+				civ_train_ok = false
+				print("[TEST] castle civ=%s wrongly accepted %s" % [civ_id, other_id])
+		# Finish one train for later bonus checks.
+		if not castle.queue.is_empty():
+			castle.train_remaining = 0.0
+			castle._complete_training()
+			await get_tree().physics_frame
+	for n in get_tree().get_nodes_in_group("soldiers"):
+		if n is BojovnikBradatice or n is Druzinik or n is ValecnyVuz or n is Lancknecht:
+			if (n as Unit).team == 0:
+				spawned.append(n)
+
+	# Building bonus: Bradaticar +8 vs buildings.
+	GameManager.player_civ = CivData.MORAVANE
+	var axe: BojovnikBradatice = preload("res://scenes/units/BojovnikBradatice.tscn").instantiate() as BojovnikBradatice
+	axe.team = 0
+	axe.contribute_population = false
+	axe.position = PLAYER_TC_POS + Vector2(40, 160)
+	units.add_child(axe)
+	await get_tree().physics_frame
+	var hut: Building = preload("res://scenes/buildings/House.tscn").instantiate() as Building
+	hut.team = 1
+	hut.position = axe.global_position + Vector2(30, 0)
+	hut.is_complete = true
+	units.add_child(hut)
+	await get_tree().physics_frame
+	var hut_hp := hut.hp
+	axe.command_attack(hut)
+	axe._attack_timer = 0.0
+	axe._try_strike()
+	var expect_build := axe.attack_damage + axe.bonus_vs_buildings
+	var build_bonus_ok := is_equal_approx(axe.bonus_vs_buildings, 8.0) and hut.hp <= hut_hp - expect_build + 0.1
+	print("[TEST] bradaticar vs building dealt~%.1f ok=%s" % [expect_build, build_bonus_ok])
+
+	# Cavalry bonus: Lancknecht +10 vs cavalry.
+	GameManager.player_civ = CivData.HABSBURKOVE
+	var lanc: Lancknecht = preload("res://scenes/units/Lancknecht.tscn").instantiate() as Lancknecht
+	lanc.team = 0
+	lanc.contribute_population = false
+	lanc.position = PLAYER_TC_POS + Vector2(80, 200)
+	units.add_child(lanc)
+	await get_tree().physics_frame
+	var cav: LightCavalry = preload("res://scenes/units/LightCavalry.tscn").instantiate() as LightCavalry
+	cav.team = 1
+	cav.contribute_population = false
+	cav.position = lanc.global_position + Vector2(30, 0)
+	units.add_child(cav)
+	await get_tree().physics_frame
+	var cav_hp := cav.hp
+	lanc.command_attack(cav)
+	lanc._attack_timer = 0.0
+	lanc._try_strike()
+	var expect_cav := lanc.attack_damage + lanc.bonus_vs_cavalry - cav.melee_armor
+	var cav_bonus_ok := is_equal_approx(lanc.bonus_vs_cavalry, 10.0) and cav.hp <= cav_hp - maxf(1.0, expect_cav) + 0.1
+	print("[TEST] lancknecht vs cav ok=%s" % cav_bonus_ok)
+
+	# Přemyslovci +10% on Družiník.
+	GameManager.player_civ = CivData.PREMYSLOVCI
+	var dru: Druzinik = preload("res://scenes/units/Druzinik.tscn").instantiate() as Druzinik
+	dru.team = 0
+	dru.contribute_population = false
+	units.add_child(dru)
+	await get_tree().physics_frame
+	var prem_ok := dru.attack_damage >= 11.0 * 1.10 - 0.05
+	print("[TEST] druzinik prem dmg=%.2f ok=%s" % [dru.attack_damage, prem_ok])
+
+	var all_ok := age_ok and shot_ok and civ_train_ok and build_bonus_ok and cav_bonus_ok and prem_ok
+	print(
+		"[TEST] castle age=%s shot=%s civ=%s build=%s cav=%s prem=%s"
+		% [age_ok, shot_ok, civ_train_ok, build_bonus_ok, cav_bonus_ok, prem_ok]
+	)
+	if all_ok:
+		print("[TEST] PASS castle + unique units + bonuses")
+	else:
+		print("[TEST] FAIL castle + unique units + bonuses")
+
+	for n in [castle, foe, axe, hut, lanc, cav, dru]:
+		if is_instance_valid(n):
+			n.queue_free()
+	for n in spawned:
 		if is_instance_valid(n):
 			n.queue_free()
 

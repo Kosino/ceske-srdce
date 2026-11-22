@@ -1,6 +1,6 @@
 extends Object
 class_name AgeData
-## Single unlock / research table for ages. Ages 1–2 fully used; 3–4 data-only.
+## Single unlock / research table for ages. Ages 1–3 content; 4 mostly data-only.
 
 const MAX_AGE := 4
 const BUILDINGS_REQUIRED_TO_ADVANCE := 2
@@ -29,9 +29,9 @@ const BUILDING_UNLOCK_AGE := {
 	"archery_range": 2,
 	"blacksmith": 2,
 	"stable": 2, # requires Barracks (checked in BuildingPlacer)
+	"castle": 3,
 	# Age 3+ placeholders (data-only; no scenes yet):
 	"monastery": 3,
-	"castle": 4,
 	"university": 4,
 }
 
@@ -42,6 +42,10 @@ const UNIT_UNLOCK_AGE := {
 	"archer": 2,
 	"light_cavalry": 2,
 	"knight": 3,
+	"bojovnik_bradatice": 3,
+	"druzinik": 3,
+	"valecny_vuz": 3,
+	"lancknecht": 3,
 	# Age 3+ placeholders (data-only):
 	"monk": 3,
 	"siege": 4,
