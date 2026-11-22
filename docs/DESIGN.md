@@ -28,8 +28,8 @@ Postup věku: výzkum v Radnici (fronta; během výzkumu Radnice netrénuje). Po
 |---------|--------|----------|
 | 1 Velká Morava | Dům, Pila, Mlýn, Kasárna | Vesničan, Zbrojnoš |
 | 2 Přemyslovci | Střelnice, Kovárna, Stáj | Kopiník, Lučištník, Lehký jezdec |
-| 3 Husitství | Hrad; *(data-only)* monastery | Rytíř; unikátní jednotky; *(data-only)* monk |
-| 4 Habsburkové | *(data-only)* university | *(data-only)* siege |
+| 3 Husitství | Hrad, Klášter, Tržiště *(NÁVRH)* | Rytíř; unikátní jednotky; Mnich |
+| 4 Habsburkové | Univerzita | *(data-only)* siege |
 
 **Schváleno 2026-11-22 – Hrad:** 650 K, 120 s, HP 4800, 160×160, věk 3; šípy 8 pierce / 8 dlaždic; +10 populace. Trénuje unikátní jednotku civilizace (35 s). AI od věku 3 staví Hrad při kameni a míchá unikáty do vln.
 
@@ -140,6 +140,13 @@ Těžba za sekundu na vesničana: dřevo 0.40, jídlo z keřů 0.30, farma 0.33,
 | Kamenná zeď *(Schváleno 2026-11-22)* | 5 K / dlaždice | 8 s | 1800 | 40×40, věk 2; drag; blokuje cestu |
 | Brána *(Schváleno 2026-11-22)* | 30 K | 10 s | 1500 | nahrazuje 3 segmenty; vlastní jednotky projdou, nepřátelé ne |
 | Strážní věž *(Schváleno 2026-11-22)* | 125 K + 25 D | 40 s | 1000 | 40×40, věk 2; útok 5 pierce / dosah 7 dlaždic |
+| Klášter *(NÁVRH AoE II-like)* | 175 D | 40 s | 2100 | 80×80, věk 3; trénuje Mnicha |
+| Tržiště *(NÁVRH AoE II-like)* | 175 D | 60 s | 2100 | 80×80, věk 3; obchod (základ) |
+| Univerzita *(NÁVRH AoE II-like)* | 200 D | 60 s | 2100 | 80×80, věk 4 |
+
+| Jednotka | Cena | Čas | HP | Funkce |
+|----------|------|-----|----|--------|
+| Mnich *(NÁVRH AoE II-like)* | 100 Z | 51 s | 30 | věk 3 (Klášter); léčení + konverze; bez klasického útoku; rychlost 56 px/s (0.7×); heal 4 HP/s / dosah 4 dlaždice; konverze ~8 s |
 
 Oprava: vesničan RMB na poškozenou vlastní budovu/zeď — +1 HP/s; plná oprava stojí 25 % stavební ceny (odečítá se průběžně).
 

@@ -16,6 +16,9 @@ const BUILD_BUTTONS := [
 	{"id": "blacksmith", "name": "Kovárna"},
 	{"id": "stable", "name": "Stáj"},
 	{"id": "castle", "name": "Hrad"},
+	{"id": "monastery", "name": "Klášter"},
+	{"id": "market", "name": "Tržiště"},
+	{"id": "university", "name": "Univerzita"},
 ]
 
 @onready var age_label: Label = %AgeLabel
@@ -32,10 +35,14 @@ var _build_buttons: Dictionary = {} # building_id -> Button
 var _tech_buttons: Dictionary = {} # tech_id -> Button
 var _cavalry_buttons: Dictionary = {} # unit_id -> Button
 var _unique_button: Button
+var _monk_button: Button
+var _market_button: Button
 var _build_row: HBoxContainer
 var _tech_row: HBoxContainer
 var _cavalry_row: HBoxContainer
 var _unique_row: HBoxContainer
+var _monk_row: HBoxContainer
+var _market_row: HBoxContainer
 var _research_refresh_accum: float = 0.0
 var _smith_connected: Blacksmith = null
 
@@ -150,6 +157,16 @@ func _refresh_context_ui() -> void:
 		_unique_row.visible = is_castle
 	if is_castle:
 		_refresh_unique_button()
+	var is_monastery := b is Monastery and (b as Monastery).is_complete
+	_ensure_monk_row()
+	if _monk_row:
+		_monk_row.visible = is_monastery
+	if is_monastery:
+		_refresh_monk_button()
+	var is_market := b is Market and (b as Market).is_complete
+	_ensure_market_row()
+	if _market_row:
+		_market_row.visible = is_market
 
 	var show_train := b != null and is_instance_valid(b) and not is_smith
 	if train_row:
@@ -167,8 +184,8 @@ func _refresh_context_ui() -> void:
 		train_spearman.visible = is_barracks
 	if train_archer:
 		train_archer.visible = is_archery
-	# Hide generic train buttons when Stable/Castle selected.
-	if is_stable or is_castle:
+	# Hide generic train buttons when Stable/Castle/Monastery/Market selected.
+	if is_stable or is_castle or is_monastery or is_market:
 		if train_villager:
 			train_villager.visible = false
 		if train_soldier:
@@ -496,3 +513,67 @@ func _on_unique_train_pressed() -> void:
 		return
 	castle.enqueue_unique()
 	_refresh_unique_button()
+
+
+func _ensure_monk_row() -> void:
+	if command_vbox == null:
+		return
+	if command_vbox.has_node("MonkRow"):
+		_monk_row = command_vbox.get_node_or_null("MonkRow") as HBoxContainer
+		_monk_button = _monk_row.get_node_or_null("TrainMonk") as Button if _monk_row else null
+		return
+	_monk_row = HBoxContainer.new()
+	_monk_row.name = "MonkRow"
+	_monk_row.visible = false
+	command_vbox.add_child(_monk_row)
+	_monk_button = Button.new()
+	_monk_button.name = "TrainMonk"
+	_monk_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_monk_button.pressed.connect(_on_monk_train_pressed)
+	_monk_row.add_child(_monk_button)
+	_refresh_monk_button()
+
+
+func _refresh_monk_button() -> void:
+	if _monk_button == null:
+		return
+	_monk_button.text = "Mnich\n100 Z"
+	var unlocked := GameManager.is_unit_unlocked("monk")
+	_monk_button.disabled = not unlocked
+	_monk_button.tooltip_text = "100 Zlato" if unlocked else "Zamčeno do věku Husitství"
+
+
+func _on_monk_train_pressed() -> void:
+	var mon := SelectionManager.selected_building as Monastery
+	if mon == null:
+		NotificationManager.show_message("Vyber Klášter.")
+		return
+	mon.enqueue_monk()
+	_refresh_monk_button()
+
+
+func _ensure_market_row() -> void:
+	if command_vbox == null:
+		return
+	if command_vbox.has_node("MarketRow"):
+		_market_row = command_vbox.get_node_or_null("MarketRow") as HBoxContainer
+		_market_button = _market_row.get_node_or_null("TradeWood") as Button if _market_row else null
+		return
+	_market_row = HBoxContainer.new()
+	_market_row.name = "MarketRow"
+	_market_row.visible = false
+	command_vbox.add_child(_market_row)
+	_market_button = Button.new()
+	_market_button.name = "TradeWood"
+	_market_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_market_button.text = "Prodej dřeva\n100 D → Zlato"
+	_market_button.pressed.connect(_on_market_trade_pressed)
+	_market_row.add_child(_market_button)
+
+
+func _on_market_trade_pressed() -> void:
+	var mkt := SelectionManager.selected_building as Market
+	if mkt == null:
+		NotificationManager.show_message("Vyber Tržiště.")
+		return
+	mkt.trade_wood_for_gold(100)

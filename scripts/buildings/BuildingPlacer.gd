@@ -15,6 +15,9 @@ const CASTLE_SCENE := preload("res://scenes/buildings/Castle.tscn")
 const WALL_SCENE := preload("res://scenes/buildings/WallSegment.tscn")
 const GATE_SCENE := preload("res://scenes/buildings/Gate.tscn")
 const TOWER_SCENE := preload("res://scenes/buildings/WatchTower.tscn")
+const MONASTERY_SCENE := preload("res://scenes/buildings/Monastery.tscn")
+const MARKET_SCENE := preload("res://scenes/buildings/Market.tscn")
+const UNIVERSITY_SCENE := preload("res://scenes/buildings/University.tscn")
 
 const GHOST_TEXTURES := {
 	"house": preload("res://assets/sprites/buildings/house.png"),
@@ -30,6 +33,9 @@ const GHOST_TEXTURES := {
 	"stone_wall": preload("res://assets/sprites/buildings/stone_wall.png"),
 	"gate": preload("res://assets/sprites/buildings/gate.png"),
 	"watch_tower": preload("res://assets/sprites/buildings/watch_tower.png"),
+	"monastery": preload("res://assets/sprites/buildings/monastery.png"),
+	"market": preload("res://assets/sprites/buildings/market.png"),
+	"university": preload("res://assets/sprites/buildings/university.png"),
 }
 
 ## DESIGN costs and base build times (1 villager).
@@ -47,6 +53,9 @@ const COSTS := {
 	"stone_wall": {"stone": 5},
 	"gate": {"stone": 30},
 	"watch_tower": {"stone": 125, "wood": 25},
+	"monastery": {"wood": 175},
+	"market": {"wood": 175},
+	"university": {"wood": 200},
 }
 
 const BUILD_TIMES := {
@@ -63,6 +72,9 @@ const BUILD_TIMES := {
 	"stone_wall": 8.0,
 	"gate": 10.0,
 	"watch_tower": 40.0,
+	"monastery": 40.0,
+	"market": 60.0,
+	"university": 60.0,
 }
 
 const FOOTPRINTS := {
@@ -79,6 +91,9 @@ const FOOTPRINTS := {
 	"stone_wall": Vector2(40, 40),
 	"gate": Vector2(120, 40),
 	"watch_tower": Vector2(40, 40),
+	"monastery": Vector2(80, 80),
+	"market": Vector2(80, 80),
+	"university": Vector2(80, 80),
 }
 
 const WALL_TYPES := ["palisade", "stone_wall"]
@@ -203,6 +218,8 @@ func place_at(building_type: String, world_pos: Vector2) -> Building:
 		(building as Stable).spawn_parent = entities
 	elif building is Castle:
 		(building as Castle).spawn_parent = entities
+	elif building is Monastery:
+		(building as Monastery).spawn_parent = entities
 	var build_t: float = float(BUILD_TIMES.get(building_type, building.build_time))
 	building.start_construction(build_t)
 	_assign_builders(building)
@@ -451,7 +468,9 @@ func _update_wall_preview_label() -> void:
 
 
 func _draw() -> void:
-	if placing_type == "" or not is_wall_type(placing_type):
+	if placing_type == "":
+		return
+	if not is_wall_type(placing_type):
 		return
 	var tex: Texture2D = GHOST_TEXTURES.get(placing_type)
 	var per := GameManager.adjust_building_cost(COSTS[placing_type], 0)
@@ -459,14 +478,14 @@ func _draw() -> void:
 	for i in _wall_preview.size():
 		var t: Vector2i = _wall_preview[i]
 		var pos := WallNav.tile_center(t)
-		var local := to_local(pos)
-		var ok := _can_place_wall_tile(t) and i < afford_n
-		var col := Color(1, 1, 1, 0.55) if ok else Color(1.0, 0.35, 0.35, 0.45)
+		var local2 := to_local(pos)
+		var ok2 := _can_place_wall_tile(t) and i < afford_n
+		var col := Color(1, 1, 1, 0.55) if ok2 else Color(1.0, 0.35, 0.35, 0.45)
 		if tex:
-			draw_texture(tex, local - Vector2(tex.get_width(), tex.get_height()) * 0.5, col)
+			draw_texture(tex, local2 - Vector2(tex.get_width(), tex.get_height()) * 0.5, col)
 		else:
-			var rect := Rect2(local - Vector2(18, 18), Vector2(36, 36))
-			draw_rect(rect, col, true)
+			var r2 := Rect2(local2 - Vector2(18, 18), Vector2(36, 36))
+			draw_rect(r2, col, true)
 
 
 func _max_affordable_tiles(per: Dictionary) -> int:
@@ -545,6 +564,12 @@ func _instantiate_building(building_type: String) -> Building:
 			return TOWER_SCENE.instantiate() as Building
 		"gate":
 			return GATE_SCENE.instantiate() as Building
+		"monastery":
+			return MONASTERY_SCENE.instantiate() as Building
+		"market":
+			return MARKET_SCENE.instantiate() as Building
+		"university":
+			return UNIVERSITY_SCENE.instantiate() as Building
 		_:
 			return null
 

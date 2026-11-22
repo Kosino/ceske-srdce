@@ -34,8 +34,8 @@ const BUILDING_UNLOCK_AGE := {
 	"stone_wall": 2,
 	"watch_tower": 2,
 	"castle": 3,
-	# Age 3+ placeholders (data-only; no scenes yet):
 	"monastery": 3,
+	"market": 3,
 	"university": 4,
 }
 
