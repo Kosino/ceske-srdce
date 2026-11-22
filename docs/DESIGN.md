@@ -31,7 +31,15 @@ Postup věku: výzkum v Radnici (fronta; během výzkumu Radnice netrénuje). Po
 | 3 Husitství | *(data-only)* stable, monastery | *(data-only)* knight, monk |
 | 4 Habsburkové | *(data-only)* castle, university | *(data-only)* siege |
 
-**Schváleno 2026-11-22 – Kovárna:** 150 D, 40 s, HP 1800, footprint 80×80. Zatím jen stavba (gate věk 2→3); žádné techy. Sprite: `assets/sprites/buildings/blacksmith.png` (63×96).
+**Schváleno 2026-11-22 – Kovárna:** 150 D, 40 s, HP 1800, footprint 80×80. Sprite: `assets/sprites/buildings/blacksmith.png` (63×96).
+
+**Kovárna – výzkum (Fáze 4):** fronta 1, jednou za tým. Poškození = max(1, útok − zbroj podle typu); lukostřelci pierce, ostatní melee.
+| Tech | Efekt | Cena | Čas |
+|------|-------|------|-----|
+| Kovářství | +1 melee útok pěchota+jízda | 150 J | 50 s |
+| Kroužková zbroj | pěchota +1 melee / +1 pierce zbroj | 100 J | 40 s |
+| Kalené hroty | +1 útok lukostřelců | 100 J + 50 Z | 40 s |
+Platí na existující i nově vycvičené jednotky. AI po postavení Kovárny zkoumá Kovářství a Kroužkovou zbroj.
 
 ## Civilizace (multiplayer)
 | Civilizace   | Unikátní jednotka          | Hlavní síla          |
@@ -105,7 +113,7 @@ Těžba za sekundu na vesničana: dřevo 0.40, jídlo z keřů 0.30, farma 0.33,
 | Mlýn | 100 D | 35 s | 1000 | drop-off jídlo, farmy |
 | Kasárna | 175 D | 50 s | 1200 | Zbrojnoš, Kopiník |
 | Střelnice | 175 D | 50 s | 1200 | Lučištník |
-| Kovárna *(Schváleno 2026-11-22)* | 150 D | 40 s | 1800 | věk 2 gate; techy později |
+| Kovárna *(Schváleno 2026-11-22)* | 150 D | 40 s | 1800 | věk 2 gate; techy viz výše |
 
 ### Mapa & doly (Fáze 4)
 Deterministický generátor (seed). U každé radnice (≤12 dlaždic): 1 les (~25 stromů), 6 keřů bobulí, 1 zlatý důl (7 dlaždic × 800), 1 kamenný důl (5 × 350). Zbytek mapy: 6–8 lesů + 2–3 doly (zlato/kámen), zrcadlově férové. Žádné zdroje na cestách/budovách.

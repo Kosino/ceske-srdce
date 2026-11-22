@@ -8,12 +8,13 @@ signal wave_launched(count: int)
 const WAVE_MIN_UNITS := 3
 const WAVE_INTERVAL_SEC := 40.0
 const THINK_INTERVAL := 0.45
-const START_FOOD := 220
-const START_WOOD := 220
+const START_FOOD := 300 # enough for Kovářství + Kroužková zbroj after buildings
+const START_WOOD := 400
 const START_GOLD := 80
 
 const HOUSE_SCENE := preload("res://scenes/buildings/House.tscn")
 const BARRACKS_SCENE := preload("res://scenes/buildings/Barracks.tscn")
+const BLACKSMITH_SCENE := preload("res://scenes/buildings/Blacksmith.tscn")
 const VILLAGER_SCENE := preload("res://scenes/units/Villager.tscn")
 const DROPOFF_SCENE := preload("res://scenes/world/DropOff.tscn")
 const RESOURCE_SCENE := preload("res://scenes/world/ResourceNode.tscn")
@@ -124,8 +125,11 @@ func _tick_economy() -> void:
 		_try_place_building("house", base_position + Vector2(-90, 80))
 	elif _count_enemy_buildings("barracks") < 1 and wood >= 175:
 		_try_place_building("barracks", base_position + Vector2(110, 90))
+	elif _count_enemy_buildings("blacksmith") < 1 and wood >= 150:
+		_try_place_building("blacksmith", base_position + Vector2(-100, -80))
 	_assign_builders()
 	_try_train()
+	_try_blacksmith_research()
 
 
 func _try_place_building(building_id: String, pos: Vector2) -> bool:
@@ -141,6 +145,11 @@ func _try_place_building(building_id: String, pos: Vector2) -> bool:
 				return false
 			wood -= 175
 			building = BARRACKS_SCENE.instantiate() as Building
+		"blacksmith":
+			if wood < 150:
+				return false
+			wood -= 150
+			building = BLACKSMITH_SCENE.instantiate() as Building
 		_:
 			return false
 	building.team = 1
@@ -154,6 +163,26 @@ func _try_place_building(building_id: String, pos: Vector2) -> bool:
 		(building as Barracks).spawn_parent = _units_parent
 	print("[AI] placing %s at %s (wood left %d)" % [building_id, str(pos), wood])
 	return true
+
+
+func _try_blacksmith_research() -> void:
+	var smith := _enemy_blacksmith()
+	if smith == null or not smith.is_complete or smith.is_researching():
+		return
+	# After Kovárna: Kovářství then Kroužková zbroj.
+	for tech_id in [TechData.FORGING, TechData.CHAIN_MAIL]:
+		if GameManager.has_tech(1, tech_id):
+			continue
+		if smith.can_enqueue(tech_id):
+			smith.enqueue_tech(tech_id)
+		return
+
+
+func _enemy_blacksmith() -> Blacksmith:
+	for n in get_tree().get_nodes_in_group("blacksmiths"):
+		if n is Blacksmith and (n as Blacksmith).team == 1:
+			return n as Blacksmith
+	return null
 
 
 func _assign_gatherers() -> void:

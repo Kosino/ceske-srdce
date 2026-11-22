@@ -3,6 +3,7 @@ extends Node
 signal resources_changed
 signal population_changed
 signal age_changed
+signal tech_researched(team: int, tech_id: String)
 
 const POPULATION_HARD_CAP := 200
 
@@ -27,6 +28,9 @@ var current_age: int:
 ## Fáze 2 — civilizace (default Moravané vs Husité).
 var player_civ: String = CivData.DEFAULT_PLAYER
 var enemy_civ: String = CivData.DEFAULT_ENEMY
+
+## Per-team researched tech ids (once per game / team).
+var _researched: Dictionary = {0: {}, 1: {}}
 
 
 func civ_for_team(team: int) -> String:
@@ -53,6 +57,59 @@ func apply_civ_unit_bonuses(unit: Unit) -> void:
 	if unit == null:
 		return
 	CivData.apply_unit_bonuses(unit, civ_for_team(unit.team))
+
+
+func has_tech(team: int, tech_id: String) -> bool:
+	var bag: Dictionary = _researched.get(team, {})
+	return bool(bag.get(tech_id, false))
+
+
+func mark_tech_researched(team: int, tech_id: String) -> void:
+	if not _researched.has(team):
+		_researched[team] = {}
+	if has_tech(team, tech_id):
+		return
+	(_researched[team] as Dictionary)[tech_id] = true
+	_apply_tech_to_team_units(team, tech_id)
+	tech_researched.emit(team, tech_id)
+	print("[TECH] team%d researched %s" % [team, tech_id])
+
+
+func apply_researched_techs_to_unit(unit: Unit) -> void:
+	if unit == null:
+		return
+	var bag: Dictionary = _researched.get(unit.team, {})
+	for tech_id in bag.keys():
+		if bag[tech_id]:
+			_apply_tech_to_unit(unit, str(tech_id))
+
+
+func _apply_tech_to_team_units(team: int, tech_id: String) -> void:
+	var tree := get_tree()
+	if tree == null:
+		return
+	var group := "player_units" if team == 0 else "enemy_units"
+	for n in tree.get_nodes_in_group(group):
+		if n is Unit:
+			_apply_tech_to_unit(n as Unit, tech_id)
+
+
+func _apply_tech_to_unit(unit: Unit, tech_id: String) -> void:
+	var def := TechData.tech_def(tech_id)
+	if def.is_empty():
+		return
+	var role := TechData.unit_role(unit)
+	var affects: Array = def.get("affects", [])
+	if role not in affects:
+		return
+	if def.has("melee_attack") and unit.attack_type == "melee":
+		unit.attack_damage += float(def["melee_attack"])
+	if def.has("pierce_attack") and unit.attack_type == "pierce":
+		unit.attack_damage += float(def["pierce_attack"])
+	if def.has("melee_armor"):
+		unit.melee_armor += float(def["melee_armor"])
+	if def.has("pierce_armor"):
+		unit.pierce_armor += float(def["pierce_armor"])
 
 
 func add_resource(type: String, amount: int) -> void:

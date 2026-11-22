@@ -49,8 +49,8 @@ func _impact() -> void:
 		print("[COMBAT] arrow refuse friendly fire")
 		return
 	if intended_target.has_method("take_damage"):
-		intended_target.call("take_damage", damage)
-		print("[COMBAT] arrow hit %s for %.1f" % [intended_target.name, damage])
+		intended_target.call("take_damage", damage, "pierce")
+		print("[COMBAT] arrow hit %s for %.1f (pierce)" % [intended_target.name, damage])
 
 
 func _is_friendly(target: Node2D) -> bool:

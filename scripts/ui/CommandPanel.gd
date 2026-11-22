@@ -23,8 +23,11 @@ const BUILD_BUTTONS := [
 
 var _formation_buttons: Dictionary = {} # kind -> Button
 var _build_buttons: Dictionary = {} # building_id -> Button
+var _tech_buttons: Dictionary = {} # tech_id -> Button
 var _build_row: HBoxContainer
+var _tech_row: HBoxContainer
 var _research_refresh_accum: float = 0.0
+var _smith_connected: Blacksmith = null
 
 
 func _ready() -> void:
@@ -33,8 +36,11 @@ func _ready() -> void:
 	SelectionManager.building_selection_changed.connect(_on_building_changed)
 	SelectionManager.formation_changed.connect(_refresh_formation_buttons)
 	GameManager.age_changed.connect(_refresh_age_ui)
+	GameManager.tech_researched.connect(_on_tech_researched)
+	GameManager.resources_changed.connect(_refresh_tech_buttons)
 	_ensure_formation_row()
 	_ensure_build_row()
+	_ensure_tech_row()
 	_refresh_age_ui()
 	_refresh_formation_buttons(SelectionManager.formation)
 	_refresh_context_ui()
@@ -47,6 +53,10 @@ func _process(delta: float) -> void:
 	_research_refresh_accum = 0.0
 	_refresh_research_button()
 	_refresh_build_costs()
+	_refresh_tech_buttons()
+	# Keep SelectionInfo research timer fresh while smith selected.
+	if SelectionManager.selected_building is Blacksmith:
+		SelectionManager.building_selection_changed.emit(SelectionManager.selected_building)
 
 
 func _on_context_changed(_units: Array) -> void:
@@ -54,7 +64,12 @@ func _on_context_changed(_units: Array) -> void:
 
 
 func _on_building_changed(_building: Node) -> void:
+	_connect_smith_signal(_building as Blacksmith)
 	_refresh_context_ui()
+
+
+func _on_tech_researched(_team: int, _tech_id: String) -> void:
+	_refresh_tech_buttons()
 
 
 func _ensure_formation_row() -> void:
@@ -108,7 +123,13 @@ func _refresh_context_ui() -> void:
 		_refresh_build_costs()
 
 	var b := SelectionManager.selected_building
-	var show_train := b != null and is_instance_valid(b)
+	var is_smith := b is Blacksmith and (b as Blacksmith).is_complete
+	if _tech_row:
+		_tech_row.visible = is_smith
+	if is_smith:
+		_refresh_tech_buttons()
+
+	var show_train := b != null and is_instance_valid(b) and not is_smith
 	if train_row:
 		train_row.visible = show_train
 	if not show_train:
@@ -245,10 +266,89 @@ func _barracks_enqueue(unit_id: String) -> void:
 	barracks.enqueue_unit(unit_id)
 
 
+func _ensure_tech_row() -> void:
+	if command_vbox == null or command_vbox.has_node("TechRow"):
+		_tech_row = command_vbox.get_node_or_null("TechRow") as HBoxContainer
+		return
+	_tech_row = HBoxContainer.new()
+	_tech_row.name = "TechRow"
+	_tech_row.add_theme_constant_override("separation", 4)
+	_tech_row.visible = false
+	command_vbox.add_child(_tech_row)
+	for tech_id in TechData.BLACKSMITH_ORDER:
+		var btn := Button.new()
+		btn.name = "Tech_%s" % tech_id
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.pressed.connect(_on_tech_pressed.bind(tech_id))
+		_tech_row.add_child(btn)
+		_tech_buttons[tech_id] = btn
+	_refresh_tech_buttons()
+
+
+func _refresh_tech_buttons(_a = null, _b = null) -> void:
+	if _tech_row == null:
+		return
+	var smith := SelectionManager.selected_building as Blacksmith
+	for tech_id in TechData.BLACKSMITH_ORDER:
+		var btn: Button = _tech_buttons.get(tech_id)
+		if btn == null:
+			continue
+		var def := TechData.tech_def(tech_id)
+		var cost_txt := CivData.format_cost(def.get("cost", {}))
+		var done := GameManager.has_tech(0, tech_id)
+		btn.text = "%s\n%s" % [TechData.tech_name(tech_id), cost_txt]
+		if done:
+			btn.disabled = true
+			btn.modulate = Color(0.55, 0.55, 0.55)
+			btn.tooltip_text = "Už vyzkoumáno"
+		elif smith == null or not smith.can_enqueue(tech_id):
+			btn.disabled = true
+			btn.modulate = Color(0.65, 0.65, 0.65)
+			if smith and smith.is_researching():
+				btn.tooltip_text = "Fronta plná (1)"
+			else:
+				btn.tooltip_text = "Nedostatek surovin / nelze"
+		else:
+			btn.disabled = false
+			btn.modulate = Color.WHITE
+			btn.tooltip_text = cost_txt
+
+
+func _on_tech_pressed(tech_id: String) -> void:
+	var smith := SelectionManager.selected_building as Blacksmith
+	if smith == null:
+		NotificationManager.show_message("Vyber Kovárnu.")
+		return
+	smith.enqueue_tech(tech_id)
+	_refresh_tech_buttons()
+
+
+func _connect_smith_signal(smith: Blacksmith) -> void:
+	if _smith_connected and is_instance_valid(_smith_connected):
+		if _smith_connected.research_changed.is_connected(_on_smith_research_changed):
+			_smith_connected.research_changed.disconnect(_on_smith_research_changed)
+	_smith_connected = smith
+	if smith and not smith.research_changed.is_connected(_on_smith_research_changed):
+		smith.research_changed.connect(_on_smith_research_changed)
+
+
+func _on_smith_research_changed() -> void:
+	_refresh_tech_buttons()
+	if SelectionManager.selected_building is Blacksmith:
+		SelectionManager.building_selection_changed.emit(SelectionManager.selected_building)
+
+
 ## Test helpers
 func get_build_button(building_id: String) -> Button:
 	return _build_buttons.get(building_id) as Button
 
 
+func get_tech_button(tech_id: String) -> Button:
+	return _tech_buttons.get(tech_id) as Button
+
+
 func is_build_row_visible() -> bool:
 	return _build_row != null and _build_row.visible
+
+func is_tech_row_visible() -> bool:
+	return _tech_row != null and _tech_row.visible

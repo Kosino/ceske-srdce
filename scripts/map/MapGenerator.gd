@@ -93,7 +93,7 @@ func _place_tc_pack(tc: Vector2, mirror_x: bool) -> void:
 func _place_mirrored_forest() -> void:
 	var left := _rand_tile_in_band(8, 34, 8, MAP_TILES - 8)
 	var tries := 0
-	while (not _can_cluster(left, 4) or _near_any_tc(left, 14)) and tries < 40:
+	while (not _can_cluster(left, 4) or _near_any_tc(left, 22)) and tries < 40:
 		left = _rand_tile_in_band(8, 34, 8, MAP_TILES - 8)
 		tries += 1
 	var right := Vector2i(MAP_TILES - 1 - left.x, left.y)
@@ -104,7 +104,7 @@ func _place_mirrored_forest() -> void:
 func _place_mirrored_mine(kind: String) -> void:
 	var left := _rand_tile_in_band(10, 32, 10, MAP_TILES - 10)
 	var tries := 0
-	while (not _can_cluster(left, 3) or _near_any_tc(left, 14)) and tries < 40:
+	while (not _can_cluster(left, 3) or _near_any_tc(left, 22)) and tries < 40:
 		left = _rand_tile_in_band(10, 32, 10, MAP_TILES - 10)
 		tries += 1
 	var right := Vector2i(MAP_TILES - 1 - left.x, left.y)
@@ -115,21 +115,59 @@ func _place_mirrored_mine(kind: String) -> void:
 
 
 func _place_forest_at(center: Vector2i, count: int) -> void:
+	## Organic blob via seeded per-tile noise + gaps (not a filled ring/grid).
+	var scored: Array[Dictionary] = []
+	var max_r := 6
+	for dx in range(-max_r, max_r + 1):
+		for dy in range(-max_r, max_r + 1):
+			var t := center + Vector2i(dx, dy)
+			if not _in_bounds(t) or _is_blocked(t):
+				continue
+			var dist := sqrt(float(dx * dx + dy * dy))
+			var falloff := 1.0 - dist / float(max_r + 1)
+			if falloff <= 0.08:
+				continue
+			var n := _tile_noise(t)
+			# Gaps: reject noisy interior cells for irregular silhouette.
+			if n > 0.28 + 0.62 * falloff:
+				continue
+			if n < 0.12 and falloff < 0.85:
+				continue
+			var score := falloff * 2.0 + (1.0 - n)
+			scored.append({"t": t, "score": score})
+	scored.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a["score"]) > float(b["score"])
+	)
 	var placed := 0
+	for e in scored:
+		if placed >= count:
+			break
+		var t: Vector2i = e["t"]
+		if _is_blocked(t):
+			continue
+		_spawn_resource("wood", t, TREE_AMOUNT)
+		placed += 1
+	# Guarantee count with nearest free tiles (still skips blocked = paths/buildings).
 	var radius := 0
-	while placed < count and radius < 8:
+	while placed < count and radius <= max_r + 2:
 		for dx in range(-radius, radius + 1):
 			for dy in range(-radius, radius + 1):
 				if placed >= count:
 					return
 				if absi(dx) != radius and absi(dy) != radius and radius > 0:
 					continue
-				var t := center + Vector2i(dx, dy)
-				if not _in_bounds(t) or _is_blocked(t):
+				var t2 := center + Vector2i(dx, dy)
+				if not _in_bounds(t2) or _is_blocked(t2):
 					continue
-				_spawn_resource("wood", t, TREE_AMOUNT)
+				_spawn_resource("wood", t2, TREE_AMOUNT)
 				placed += 1
 		radius += 1
+
+
+func _tile_noise(tile: Vector2i) -> float:
+	var h := int(seed_value) ^ (tile.x * 73856093) ^ (tile.y * 19349663)
+	h = (h * 1103515245 + 12345) & 0x7fffffff
+	return float(h % 10000) / 10000.0
 
 
 func _place_berries_at(center: Vector2i, count: int) -> void:
