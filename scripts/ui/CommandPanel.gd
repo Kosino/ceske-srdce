@@ -1,7 +1,7 @@
 extends PanelContainer
 class_name CommandPanel
+## Bottom-left command strip (AoE-like HUD). Selection text lives in SelectionInfo.
 
-@onready var summary_label: Label = %CommandSummary
 @onready var age_label: Label = %AgeLabel
 @onready var research_button: Button = %ResearchAgeButton
 @onready var command_vbox: VBoxContainer = $CommandMargin/CommandVBox
@@ -11,11 +11,10 @@ var _research_refresh_accum: float = 0.0
 
 
 func _ready() -> void:
-	SelectionManager.selection_changed.connect(_on_selection_changed)
+	add_to_group("hud_command_panel")
 	SelectionManager.formation_changed.connect(_refresh_formation_buttons)
 	GameManager.age_changed.connect(_refresh_age_ui)
 	_ensure_formation_row()
-	_on_selection_changed(SelectionManager.selected_units)
 	_refresh_age_ui()
 	_refresh_formation_buttons(SelectionManager.formation)
 
@@ -36,7 +35,6 @@ func _ensure_formation_row() -> void:
 	var row := HBoxContainer.new()
 	row.name = "FormationRow"
 	row.add_theme_constant_override("separation", 6)
-	# Insert after StopButton if present.
 	var stop_i := command_vbox.get_node_or_null("StopButton")
 	var insert_at := stop_i.get_index() + 1 if stop_i else command_vbox.get_child_count()
 	command_vbox.add_child(row)
@@ -64,52 +62,15 @@ func _refresh_formation_buttons(_kind: String = "") -> void:
 		btn.modulate = Color(0.75, 1.0, 0.75) if kind == current else Color.WHITE
 
 
-func _on_selection_changed(units: Array) -> void:
-	if units.is_empty():
-		summary_label.text = "Výběr: nic\nLMB výběr / box, RMB pohyb/útok"
-		return
-	var counts := {"soldier": 0, "spearman": 0, "archer": 0, "villager": 0, "other": 0}
-	for u in units:
-		if u is Soldier:
-			counts["soldier"] += 1
-		elif u is Spearman:
-			counts["spearman"] += 1
-		elif u is Archer:
-			counts["archer"] += 1
-		elif u is Villager:
-			counts["villager"] += 1
-		else:
-			counts["other"] += 1
-	var parts: PackedStringArray = []
-	if counts["soldier"] > 0:
-		parts.append("%d zbrojnoš" % counts["soldier"])
-	if counts["spearman"] > 0:
-		parts.append("%d kopiník" % counts["spearman"])
-	if counts["archer"] > 0:
-		parts.append("%d lučištník" % counts["archer"])
-	if counts["villager"] > 0:
-		parts.append("%d vesničan" % counts["villager"])
-	if counts["other"] > 0:
-		parts.append("%d jiní" % counts["other"])
-	summary_label.text = "Výběr: %s\nFormace: %s" % [
-		", ".join(parts), FormationData.display_name(SelectionManager.formation)
-	]
-
-
 func _refresh_age_ui() -> void:
 	if age_label:
-		age_label.text = "Věk: %s (%d) · %s" % [
-			GameManager.get_age_name(), GameManager.current_age, GameManager.get_civ_name(0)
-		]
+		age_label.text = "Věk: %s (%d)" % [GameManager.get_age_name(), GameManager.current_age]
 	_refresh_research_button()
 
 
 func _refresh_research_button() -> void:
-	# Keep label in sync even if age was set without going through _refresh_age_ui.
 	if age_label:
-		age_label.text = "Věk: %s (%d) · %s" % [
-			GameManager.get_age_name(), GameManager.current_age, GameManager.get_civ_name(0)
-		]
+		age_label.text = "Věk: %s (%d)" % [GameManager.get_age_name(), GameManager.current_age]
 	if research_button == null:
 		return
 	if GameManager.current_age >= AgeData.MAX_AGE:

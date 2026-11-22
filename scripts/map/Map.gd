@@ -43,13 +43,31 @@ func _ready() -> void:
 		await _run_civ_bonus_smoke()
 		await _run_formation_smoke()
 		await _run_ai_economy_smoke()
+		await _run_hud_layout_smoke()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--hud-shot"):
+		await prepare_hud_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--formation-shot"):
 		await prepare_formation_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--ai-shot"):
 		await prepare_ai_screenshot()
 	else:
 		await _sample_windowed_fps()
-	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 stavění/trénink.")
+	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 debug.")
+
+
+## Windowed screenshot of AoE-like HUD (resources / command / selection / minimap).
+func prepare_hud_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	var cam := get_node_or_null("Camera2D") as Camera2D
+	if cam:
+		cam.position = Vector2(900, 700)
+		cam.zoom = Vector2(1.0, 1.0)
+	await get_tree().create_timer(1.2).timeout
+	await get_tree().process_frame
+	_save_shot("hud.png", 0)
 
 
 ## Windowed screenshot: 5 soldiers in Řada PERPENDICULAR to east march; hide DebugPanel.
@@ -734,6 +752,26 @@ func _run_formation_smoke() -> void:
 		print("[TEST] PASS formation spacing + shared speed + perpendicular")
 	else:
 		print("[TEST] FAIL formation spacing + shared speed + perpendicular")
+
+
+## HUD: resource bar / command / selection / minimap exist; DebugPanel starts hidden.
+func _run_hud_layout_smoke() -> void:
+	await get_tree().physics_frame
+	var ui := get_node_or_null("UI")
+	var res := ui.get_node_or_null("ResourceBar") if ui else null
+	var cmd := ui.get_node_or_null("CommandPanel") if ui else null
+	var sel := ui.get_node_or_null("SelectionInfo") if ui else null
+	var mini := ui.get_node_or_null("Minimap") if ui else null
+	var debug := get_node_or_null("DebugPanel")
+	var nodes_ok: bool = res != null and cmd != null and sel != null and mini != null
+	var debug_ok: bool = debug != null and not debug.visible
+	print("[TEST] hud nodes res=%s cmd=%s sel=%s mini=%s debug_hidden=%s" % [
+		res != null, cmd != null, sel != null, mini != null, debug_ok
+	])
+	if nodes_ok and debug_ok:
+		print("[TEST] PASS HUD layout + DebugPanel hidden")
+	else:
+		print("[TEST] FAIL HUD layout + DebugPanel hidden")
 
 
 ## AI economy: places ≥1 building and launches a wave within timeout (Husité).
