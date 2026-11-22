@@ -54,6 +54,11 @@ func _ready() -> void:
 func begin_place(building_type: String) -> void:
 	if building_type not in COSTS:
 		return
+	if not GameManager.is_building_unlocked(building_type):
+		NotificationManager.show_message(
+			"Zamčeno do věku %s." % AgeData.age_name(AgeData.building_unlock_age(building_type))
+		)
+		return
 	placing_type = building_type
 	_configure_ghost(FOOTPRINTS[building_type])
 	_ghost.visible = true
@@ -67,6 +72,11 @@ func cancel() -> void:
 
 func place_at(building_type: String, world_pos: Vector2) -> Building:
 	if building_type not in COSTS:
+		return null
+	if not GameManager.is_building_unlocked(building_type):
+		NotificationManager.show_message(
+			"Zamčeno do věku %s." % AgeData.age_name(AgeData.building_unlock_age(building_type))
+		)
 		return null
 	if not _can_place(building_type, world_pos):
 		return null
