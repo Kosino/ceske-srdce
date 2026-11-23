@@ -12,6 +12,11 @@ GameManager="*res://autoload/GameManager.gd"
 SelectionManager="*res://autoload/SelectionManager.gd"
 NotificationManager="*res://autoload/NotificationManager.gd"
 BalanceSim="*res://autoload/BalanceSim.gd"
+AudioManager="*res://autoload/AudioManager.gd"
+
+[audio]
+
+buses/default_bus_layout="res://default_bus_layout.tres"
 
 [rendering]
 

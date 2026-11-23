@@ -84,10 +84,12 @@ func _end_match(won: bool) -> void:
 	var secs := match_elapsed_sec()
 	if won:
 		print("[VICTORY] player wins after %.1fs" % secs)
+		AudioManager.play_sfx("victory")
 		if not BalanceSim.active:
 			NotificationManager.show_message("Vítězství!")
 	else:
 		print("[DEFEAT] player loses after %.1fs" % secs)
+		AudioManager.play_sfx("defeat")
 		if not BalanceSim.active:
 			NotificationManager.show_message("Porážka!")
 	if BalanceSim.active:

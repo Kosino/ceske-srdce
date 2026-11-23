@@ -67,6 +67,7 @@ func _ready() -> void:
 		await _run_castle_unique_smoke()
 		await _run_walls_towers_smoke()
 		await _run_age34_monk_smoke()
+		await _run_audio_manager_smoke()
 		await _run_balance_harness_smoke()
 		print("[TEST] all headless smokes finished")
 		get_tree().quit(0)
@@ -2570,6 +2571,26 @@ func _run_balance_sim_game() -> void:
 	BalanceSim.finish_game(winner_team, sim_t, timed_out)
 	Engine.time_scale = 1.0
 	get_tree().paused = false
+
+
+## AudioManager loads; every shipped SFX path exists; headless stays silent.
+func _run_audio_manager_smoke() -> void:
+	await get_tree().physics_frame
+	var am := AudioManager
+	var autoload_ok := am != null
+	var check: Dictionary = am.verify_paths() if am else {"ok": false, "missing": PackedStringArray(["no AudioManager"]), "enabled": true}
+	var silent_ok := bool(check.get("enabled", true)) == false
+	var paths_ok := bool(check.get("ok", false))
+	var expected := AudioManager.SFX_PATHS.size() if am else 0
+	var missing: PackedStringArray = check.get("missing", PackedStringArray())
+	print(
+		"[TEST] audio autoload=%s silent=%s paths=%s expected=%d missing=%s"
+		% [autoload_ok, silent_ok, paths_ok, expected, ", ".join(missing)]
+	)
+	if autoload_ok and silent_ok and paths_ok and expected >= 12:
+		print("[TEST] PASS audio manager (paths + headless silent)")
+	else:
+		print("[TEST] FAIL audio manager (paths + headless silent)")
 
 
 ## Harness smoke: civ pairs + report writer (no full suite).

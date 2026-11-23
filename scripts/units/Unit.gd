@@ -279,6 +279,10 @@ func _try_strike() -> void:
 			damage *= 5.0
 	if attack_target.has_method("take_damage"):
 		attack_target.call("take_damage", damage, attack_type)
+		if attack_type == "pierce":
+			AudioManager.play_sfx("bow_shot")
+		else:
+			AudioManager.play_sfx("melee_hit")
 		print("[COMBAT] team%d hit %s for %.1f (%s)" % [team, attack_target.name, damage, attack_type])
 	if not is_instance_valid(attack_target):
 		attack_target = null
@@ -326,6 +330,8 @@ func take_damage(amount: float, dmg_type: String = "melee") -> void:
 	var dealt := maxf(1.0, amount - armor)
 	hp -= dealt
 	queue_redraw()
+	if team == 0:
+		AudioManager.play_under_attack()
 	if hp <= 0.0:
 		die()
 

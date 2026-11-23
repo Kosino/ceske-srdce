@@ -32,6 +32,7 @@ func select_single(unit: Node) -> void:
 	clear_selection(false)
 	if unit and is_instance_valid(unit):
 		_add(unit)
+		AudioManager.play_sfx("select")
 	selection_changed.emit(selected_units)
 
 
@@ -42,6 +43,8 @@ func select_multiple(units: Array) -> void:
 	for u in units:
 		if u and is_instance_valid(u):
 			_add(u)
+	if not selected_units.is_empty():
+		AudioManager.play_sfx("select")
 	selection_changed.emit(selected_units)
 
 
@@ -53,6 +56,7 @@ func select_building(building: Node) -> void:
 		selected_building = building
 		if building is Building:
 			(building as Building).set_ui_selected(true)
+		AudioManager.play_sfx("select")
 	building_selection_changed.emit(selected_building)
 	selection_changed.emit(selected_units)
 
@@ -129,6 +133,7 @@ func issue_move(world_pos: Vector2) -> void:
 			movers.append(u as Unit)
 	if movers.is_empty():
 		return
+	AudioManager.play_sfx("command")
 	if movers.size() == 1:
 		movers[0].command_move(world_pos)
 		return
@@ -153,39 +158,59 @@ func issue_move(world_pos: Vector2) -> void:
 
 
 func issue_attack(target: Node2D) -> void:
+	var any := false
 	for u in selected_units:
 		if is_instance_valid(u) and u.has_method("command_attack"):
 			u.command_attack(target)
+			any = true
+	if any:
+		AudioManager.play_sfx("command")
 
 
 func issue_gather(resource: ResourceNode) -> void:
 	if resource == null or not is_instance_valid(resource) or resource.is_depleted():
 		return
+	var any := false
 	for u in selected_units:
 		if is_instance_valid(u) and u is Villager:
 			(u as Villager).assign_gather(resource)
+			any = true
+	if any:
+		AudioManager.play_sfx("command")
 
 
 func issue_build(building: Building) -> void:
 	if building == null or not is_instance_valid(building) or building.is_complete:
 		return
+	var any := false
 	for u in selected_units:
 		if is_instance_valid(u) and u is Villager:
 			(u as Villager).assign_build(building)
+			any = true
+	if any:
+		AudioManager.play_sfx("command")
 
 
 func issue_repair(building: Building) -> void:
 	if building == null or not is_instance_valid(building) or not building.needs_repair():
 		return
+	var any := false
 	for u in selected_units:
 		if is_instance_valid(u) and u is Villager:
 			(u as Villager).assign_repair(building)
+			any = true
+	if any:
+		AudioManager.play_sfx("command")
 
 
 func issue_stop() -> void:
+	var any := false
 	for u in selected_units:
 		if is_instance_valid(u) and u.has_method("command_stop"):
 			u.command_stop()
+			any = true
+	if any:
+		AudioManager.play_sfx("command")
 
 
 func notify_unit_removed(unit: Node) -> void:
