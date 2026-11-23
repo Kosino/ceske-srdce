@@ -129,6 +129,7 @@ func _finish_construction() -> void:
 	queue_redraw()
 	_on_construction_finished()
 	construction_finished.emit(self)
+	AudioManager.play_sfx("building_complete")
 	print("[BUILD] completed %s" % display_name)
 	NotificationManager.show_message("Dokončeno: %s" % display_name)
 
@@ -233,6 +234,8 @@ func _draw() -> void:
 func take_damage(amount: float, _dmg_type: String = "melee") -> void:
 	hp -= amount
 	queue_redraw()
+	if team == 0:
+		AudioManager.play_under_attack()
 	if hp <= 0.0:
 		die()
 
@@ -297,5 +300,6 @@ func apply_repair(amount: float) -> float:
 
 func die() -> void:
 	destroyed.emit(self)
+	AudioManager.play_sfx("building_destroyed")
 	print("[COMBAT] building destroyed team=%d id=%s" % [team, building_id])
 	queue_free()

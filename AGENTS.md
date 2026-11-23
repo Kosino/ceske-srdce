@@ -10,6 +10,7 @@ Godot **4.7** RTS (GDScript). Main scene: `res://scenes/ui/MainMenu.tscn`.
 | `SelectionManager` | `res://autoload/SelectionManager.gd` |
 | `NotificationManager` | `res://autoload/NotificationManager.gd` |
 | `BalanceSim` | `res://autoload/BalanceSim.gd` (no-op unless `--sim` / `--sim-smoke`) |
+| `AudioManager` | `res://autoload/AudioManager.gd` (SFX/Music buses; silent under headless/`--sim`) |
 
 ## Headless commands
 
@@ -39,6 +40,7 @@ User args after `--` are read by `BalanceSim` / Map shot helpers (`--ai-shot`, `
 - **Do not bend smoke tests** to make a change pass. Fix the game or escalate.
 - After **2 failed** fix attempts on the same smoke/CI failure, **escalate** (ask the user / coordinator) instead of endless retries.
 - **Sprites** come only from the original art pipeline / imported assets. **No procedural sprite generation.**
+- **Audio** is ready **CC0** clips only (Kenney packs); see `assets/audio/LICENSES.md`. **No procedural synthesis.**
 - Design contract (outside this repo — mention only, do not invent a local copy): `/workspace/handoffs/contracts/principal-cs-designer.md`.
 
 ## Balance sim notes

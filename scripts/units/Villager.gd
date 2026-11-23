@@ -315,6 +315,11 @@ func _harvest(delta: float) -> void:
 	var room := carry_capacity - carried_amount
 	var taken := target_resource.harvest(mini(chunk, room))
 	carried_amount += taken
+	if taken > 0:
+		if carried_type == "wood":
+			AudioManager.play_sfx("wood_chop")
+		elif carried_type == "gold" or carried_type == "stone":
+			AudioManager.play_sfx("mining")
 	_refresh_carry_label()
 
 	if carried_amount >= carry_capacity or not is_instance_valid(target_resource):

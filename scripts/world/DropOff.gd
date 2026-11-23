@@ -185,6 +185,7 @@ func _complete_age_research() -> void:
 	queue_changed.emit()
 	if GameManager.current_age < target:
 		GameManager.advance_age()
+		AudioManager.play_sfx("age_advance")
 	NotificationManager.show_message("Nový věk: %s" % GameManager.get_age_name())
 
 
@@ -225,11 +226,14 @@ func _draw() -> void:
 func take_damage(amount: float, _dmg_type: String = "melee") -> void:
 	hp -= amount
 	queue_redraw()
+	if team == 0:
+		AudioManager.play_under_attack()
 	if hp <= 0.0:
 		die()
 
 
 func die() -> void:
 	destroyed.emit(self)
+	AudioManager.play_sfx("building_destroyed")
 	print("[COMBAT] radnice destroyed team=%d" % team)
 	queue_free()

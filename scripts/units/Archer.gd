@@ -36,4 +36,5 @@ func _try_strike() -> void:
 		parent = get_tree().current_scene
 	parent.add_child(proj)
 	proj.setup(global_position, attack_target.global_position, attack_damage, team, attack_target)
+	AudioManager.play_sfx("bow_shot")
 	print("[COMBAT] archer loosed arrow at %s" % attack_target.name)
