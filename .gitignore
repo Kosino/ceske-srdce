@@ -1,8 +1,10 @@
 # Godot 4
 .godot/
 *.translation
-export_presets.cfg
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Local Windows export artifacts (do not commit builds)
+/build/
