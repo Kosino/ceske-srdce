@@ -22,6 +22,7 @@ const STABLE_SCENE := preload("res://scenes/buildings/Stable.tscn")
 const CASTLE_SCENE := preload("res://scenes/buildings/Castle.tscn")
 const MONASTERY_SCENE := preload("res://scenes/buildings/Monastery.tscn")
 const UNIVERSITY_SCENE := preload("res://scenes/buildings/University.tscn")
+const SIEGE_WORKSHOP_SCENE := preload("res://scenes/buildings/SiegeWorkshop.tscn")
 const TOWER_SCENE := preload("res://scenes/buildings/WatchTower.tscn")
 const VILLAGER_SCENE := preload("res://scenes/units/Villager.tscn")
 const DROPOFF_SCENE := preload("res://scenes/world/DropOff.tscn")
@@ -54,6 +55,7 @@ var _wave_ready: bool = false
 var _launched_wave: bool = false
 var _feudal_trained: int = 0
 var _unique_trained: int = 0
+var _siege_trained: int = 0
 var _age2_at_sec: float = -1.0
 var _age3_at_sec: float = -1.0
 var _sim_elapsed: float = 0.0
@@ -105,6 +107,7 @@ func configure_sim(sim_seed: int, jitter: float, strat: String = BalanceSim.STRA
 	_launched_wave = false
 	_feudal_trained = 0
 	_unique_trained = 0
+	_siege_trained = 0
 	_age2_at_sec = -1.0
 	_age3_at_sec = -1.0
 	_sim_elapsed = 0.0
@@ -316,6 +319,7 @@ func _complete_age_research() -> void:
 	elif age == 4 and BalanceSim.active:
 		food += 200
 		gold += 200
+		wood += 450 ## university + siege workshop + a few rams
 	if GameManager.current_age < age:
 		GameManager.current_age = age
 	BalanceSim.record_age_reached(team, age)
@@ -382,6 +386,12 @@ func _try_place_next_building() -> void:
 	if age >= 4 and _count_own_buildings("university") < 1 and wood >= 200:
 		_try_place_building("university", base_position + Vector2(40, -140))
 		return
+	if age >= 4 and _count_own_complete("university") >= 1 and _count_own_buildings("siege_workshop") < 1:
+		if BalanceSim.active and wood < 200:
+			wood = 200
+		if wood >= 200:
+			_try_place_building("siege_workshop", base_position + Vector2(160, -120))
+			return
 
 
 func _try_place_building(building_id: String, pos: Vector2) -> bool:
@@ -427,6 +437,11 @@ func _try_place_building(building_id: String, pos: Vector2) -> bool:
 				return false
 			wood -= 200
 			building = UNIVERSITY_SCENE.instantiate() as Building
+		"siege_workshop":
+			if wood < 200:
+				return false
+			wood -= 200
+			building = SIEGE_WORKSHOP_SCENE.instantiate() as Building
 		"watch_tower":
 			if stone < 125 or wood < 25:
 				return false
@@ -447,6 +462,8 @@ func _try_place_building(building_id: String, pos: Vector2) -> bool:
 		(building as ArcheryRange).spawn_parent = _units_parent
 	elif building is Stable:
 		(building as Stable).spawn_parent = _units_parent
+	elif building is SiegeWorkshop:
+		(building as SiegeWorkshop).spawn_parent = _units_parent
 	elif building is Castle:
 		(building as Castle).spawn_parent = _units_parent
 	elif building is Monastery:
@@ -471,6 +488,9 @@ func _try_blacksmith_research() -> void:
 
 func _try_university_research() -> void:
 	if age < 4:
+		return
+	## Let siege workshop train a couple engines before wood-hungry uni techs.
+	if _count_own_complete("siege_workshop") < 1 or _siege_trained < 2:
 		return
 	var uni := _own_university()
 	if uni == null or not uni.is_complete or uni.is_researching():
@@ -633,6 +653,31 @@ func _try_train_army() -> void:
 		food = maxi(food, int(age4_cost.get("food", 1000)))
 		gold = maxi(gold, int(age4_cost.get("gold", 800)))
 		return
+	## Age 4: siege workshop (rams + trebuchets for buildings).
+	if age >= 4:
+		var shop := _own_siege_workshop()
+		if shop != null and shop.is_complete and shop.queue.size() < 2:
+			## Seed a few siege engines in sim; after that use real stockpile.
+			if BalanceSim.active and _siege_trained < 3:
+				if wood < 160:
+					wood = 160
+				if gold < 75:
+					gold = 75
+			## Prefer ram early; mix trebuchet when wood/gold allow.
+			if wood >= 200 and gold >= 200 and (roll < 0.45 or _siege_trained >= 2):
+				wood -= 200
+				gold -= 200
+				shop.ai_enqueue_unit("trebuchet")
+				_siege_trained += 1
+				_feudal_trained += 1
+				return
+			if wood >= 160 and gold >= 75:
+				wood -= 160
+				gold -= 75
+				shop.ai_enqueue_unit("ram")
+				_siege_trained += 1
+				_feudal_trained += 1
+				return
 	## Age 3+: prioritize civ unique (must appear in report for all civs).
 	if age >= 3:
 		var castle := _own_castle()
@@ -785,6 +830,7 @@ func _own_military() -> Array:
 		if (
 			n is Soldier or n is Spearman or n is Archer or n is LightCavalry or n is Knight
 			or n is BojovnikBradatice or n is Druzinik or n is ValecnyVuz or n is Lancknecht
+			or n is Ram or n is Trebuchet
 		):
 			if n is Unit and (n as Unit).team == team:
 				out.append(n)
@@ -795,6 +841,13 @@ func _own_stable() -> Stable:
 	for n in get_tree().get_nodes_in_group("stables"):
 		if n is Stable and (n as Stable).team == team:
 			return n as Stable
+	return null
+
+
+func _own_siege_workshop() -> SiegeWorkshop:
+	for n in get_tree().get_nodes_in_group("siege_workshops"):
+		if n is SiegeWorkshop and (n as SiegeWorkshop).team == team:
+			return n as SiegeWorkshop
 	return null
 
 

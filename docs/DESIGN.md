@@ -29,7 +29,7 @@ Postup věku: výzkum v Radnici (fronta; během výzkumu Radnice netrénuje). Po
 | 1 Velká Morava | Dům, Pila, Mlýn, Kasárna | Vesničan, Zbrojnoš |
 | 2 Přemyslovci | Střelnice, Kovárna, Stáj | Kopiník, Lučištník, Lehký jezdec |
 | 3 Husitství | Hrad, Klášter, Tržiště *(NÁVRH)* | Rytíř; unikátní jednotky; Mnich |
-| 4 Habsburkové | Univerzita *(NÁVRH techs)* | *(data-only)* siege |
+| 4 Habsburkové | Univerzita *(NÁVRH techs)*; Obléhací dílna | Beranidlo, Trebuchet |
 
 **Schváleno 2026-11-22 – Hrad:** 650 K, 120 s, HP 4800, 160×160, věk 3; šípy 8 pierce / 8 dlaždic; +10 populace. Trénuje unikátní jednotku civilizace (35 s). AI od věku 3 staví Hrad při kameni a míchá unikáty do vln.
 
@@ -131,6 +131,8 @@ Těžba za sekundu na vesničana: dřevo 0.40, jídlo z keřů 0.30, farma 0.33,
 | Družiník | 70 J, 70 Z | 35 s | 120 | 11 melee | melee | 104 px/s (1.3×) | 2/3 |
 | Válečný vůz | 110 D, 60 Z | 35 s | 180 | 7 pierce | 200 px | 64 px/s (0.8×) | 0/6 |
 | Lancknecht | 55 J, 45 Z | 35 s | 75 | 8 (+6 vs jízda) | melee | 80 px/s | 1/1 |
+| Beranidlo *(věk 4)* | 160 D, 75 Z | 36 s | 175 | 2 (+125 vs budovy) | melee (jen stavby) | 40 px/s | 0/7 |
+| Trebuchet *(věk 4)* | 200 D, 200 Z | 50 s | 150 | 40 pierce (jen stavby) | 160–640 px | packed 48 / unpacked 0 | 2/8 |
 
 | Budova | Cena | Stavba | HP | Funkce |
 |--------|------|--------|----|--------|
@@ -151,10 +153,17 @@ Těžba za sekundu na vesničana: dřevo 0.40, jídlo z keřů 0.30, farma 0.33,
 | Klášter *(NÁVRH AoE II-like)* | 175 D | 40 s | 2100 | 80×80, věk 3; trénuje Mnicha |
 | Tržiště *(NÁVRH AoE II-like)* | 175 D | 60 s | 2100 | 80×80, věk 3; obchod (základ) |
 | Univerzita *(NÁVRH AoE II-like)* | 200 D | 60 s | 2100 | 80×80, věk 4; techy Zednictví / Balistika / Strojní věž |
+| Obléhací dílna *(Schváleno T-13)* | 200 D | 60 s | 2100 | 80×80, věk 4; vyžaduje Univerzitu; Beranidlo + Trebuchet |
 
 | Jednotka | Cena | Čas | HP | Funkce |
 |----------|------|-----|----|--------|
 | Mnich *(NÁVRH AoE II-like)* | 100 Z | 51 s | 30 | věk 3 (Klášter); léčení + konverze; bez klasického útoku; rychlost 56 px/s (0.7×); heal 4 HP/s / dosah 4 dlaždice; konverze ~8 s |
+| Beranidlo *(Schváleno T-13)* | 160 D, 75 Z | 36 s | 175 | věk 4 (Obléhací dílna); jen budovy/zdi; útok 2 + **125 vs budovy**; zbroj 0/7; 40 px/s (0.5×) |
+| Trebuchet *(Schváleno T-13)* | 200 D, 200 Z | 50 s | 150 | věk 4; jen budovy; pack/unpack 8 s; dosah 16 dlaždic / min 4; útok 40 pierce; zbroj 2/8; packed 48 px/s, unpacked 0 |
+
+#### Rationale (AoE II + historie)
+- **Beranidlo:** AoE II Battering Ram — pomalá „krabice“ s vysokou pierce zbrojí a obřím bonusem vs zdi/budovy; útok jen na stavby (žádný duel s pěchotou). Historicky berany u husitských/císařských obléhání (Žižkovo období — lámání bran a palisád).
+- **Trebuchet:** AoE II Trebuchet — dlouhý dostřel, minimum range, musí se rozložit; střílí jen stavby. Pozdně středověké / raně novověké obléhací stroje (pákové prakové stroje) jako předloha „imperial“ věku Habsburků.
 
 Oprava: vesničan RMB na poškozenou vlastní budovu/zeď — +1 HP/s; plná oprava stojí 25 % stavební ceny (odečítá se průběžně).
 

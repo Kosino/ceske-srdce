@@ -33,11 +33,12 @@
 - Blacksmith techs (infantry attack/armor) ✅
 - Stable + cavalry ✅
 - Castle + unique civ units ✅
-- Walls/towers
-- Age 4 buildings
-- Monk
+- Walls/towers ✅
+- Age 4 buildings (Univerzita + Obléhací dílna) ✅
+- Monk ✅
+- Age-4 siege (Beranidlo + Trebuchet) ✅
 
 ## Fáze 5: Polish
-- Sounds
-- Balance via AI vs AI headless sim (`--sim` → `docs/balance/report.md`) ✅ step 1
-- Windows export
+- Sounds ✅
+- Balance via AI vs AI headless sim (`--sim` → `docs/balance/report.md`) ✅
+- Windows export ✅

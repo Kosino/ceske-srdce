@@ -22,6 +22,9 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	super._process(delta)
+	if not is_complete:
+		return
 	if researching_tech == "":
 		return
 	research_remaining -= delta
