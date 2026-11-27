@@ -1,0 +1,7 @@
+﻿Battle Sound Effects
+Author: artisticdude (submitted by Ogrebane)
+Source: https://opengameart.org/content/battle-sound-effects
+License: Creative Commons Zero, CC0 1.0 (also dual-listed CC-BY/GPL on the page; CC0 applies)
+http://creativecommons.org/publicdomain/zero/1.0/
+
+Includes Bow.wav used as bow_shot.
