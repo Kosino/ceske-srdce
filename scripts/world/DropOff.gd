@@ -42,8 +42,7 @@ func _ready() -> void:
 		add_to_group("enemy_town_hall")
 		add_to_group("enemy_buildings")
 		building_name = "Nepřátelská radnice"
-		if has_node("Visual"):
-			$Visual.modulate = Color(0.75, 0.45, 0.45, 1.0)
+	_apply_team_visual()
 	if has_node("Label"):
 		$Label.text = building_name
 
@@ -56,6 +55,14 @@ func _anchor_visual() -> void:
 	visual.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	# Virtual footprint 80×80 — bottom of sprite on footprint bottom.
 	visual.offset = Vector2(0.0, 40.0 - float(visual.texture.get_height()) * 0.5)
+
+
+func _apply_team_visual() -> void:
+	var visual := get_node_or_null("Visual") as Sprite2D
+	if visual == null:
+		return
+	visual.modulate = Color.WHITE
+	TeamColors.apply(visual, team)
 
 
 func accepts(resource_type: String) -> bool:

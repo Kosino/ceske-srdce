@@ -15,10 +15,3 @@ func _ready() -> void:
 	super._ready()
 	configure_facing_sprites("soldier")
 	add_to_group("soldiers")
-	_apply_team_visual()
-
-
-func _apply_team_visual() -> void:
-	if _visual == null:
-		return
-	_visual.modulate = Color(1, 1, 1, 1) if team == 0 else Color(1.0, 0.55, 0.55, 1.0)

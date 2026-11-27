@@ -145,6 +145,7 @@ func _show_construction_visual() -> void:
 		return
 	_visual.texture = CONSTRUCTION_TEX
 	_anchor_sprite(_visual, CONSTRUCTION_TEX)
+	_apply_team_visual()
 
 
 func _show_final_visual() -> void:
@@ -154,6 +155,16 @@ func _show_final_visual() -> void:
 	if _final_texture:
 		_visual.texture = _final_texture
 	_anchor_sprite(_visual, _visual.texture)
+	_apply_team_visual()
+
+
+func _apply_team_visual() -> void:
+	if _visual == null:
+		_visual = get_node_or_null("Visual") as Sprite2D
+	if _visual == null:
+		return
+	_visual.modulate = Color.WHITE
+	TeamColors.apply(_visual, team)
 
 
 func _anchor_sprite(sprite: Sprite2D, tex: Texture2D) -> void:

@@ -91,10 +91,6 @@ func is_transitioning() -> bool:
 	return _pack_timer > 0.0
 
 
-func _team_tint() -> Color:
-	return Color(1, 1, 1, 1) if team == 0 else Color(1.0, 0.55, 0.55, 1.0)
-
-
 func _apply_facing_texture() -> void:
 	super._apply_facing_texture()
 	_apply_pack_visual()
@@ -104,13 +100,13 @@ func _apply_facing_texture() -> void:
 func _apply_pack_visual() -> void:
 	if _visual == null:
 		return
-	var tint := _team_tint()
+	TeamColors.apply(_visual, team)
 	if packed:
-		_visual.modulate = tint
+		_visual.modulate = Color.WHITE
 		_anchor_sprite_to_feet()
 	else:
 		## Slight warm lift so deployed state reads without a second sheet.
-		_visual.modulate = tint * Color(1.1, 1.02, 0.9, 1.0)
+		_visual.modulate = Color(1.1, 1.02, 0.9, 1.0)
 		_anchor_sprite_to_feet()
 		_visual.offset.y -= 4.0
 

@@ -73,8 +73,25 @@ Finished age-4 siege art from the original PR #10 pipeline (magenta key → defr
 
 Import source branch: `art/siege-v1` (`art_import/sprites_siege.tar.gz` sha256 `16661f7b…fc5779`). Screenshot: `docs/screenshots/siege.png`.
 
+## T-18 team recolour (palette swap)
+
+AoE II-style team colour via `assets/shaders/team_recolour.gdshader` + `TeamColors` (`scripts/data/TeamColors.gd`):
+
+- PNGs keep the shared 32-colour palette. Only the baked **team blue** `(40, 86, 160)` is swapped.
+- Player → `TeamColors.PLAYER` (same blue); AI → `TeamColors.AI` (red `188, 42, 36`). Constants live in one place for more teams later.
+- Applied on unit/building/`DropOff` visuals; whole-sprite modulate tint removed. Minimap unit/building dots use the same blue/red.
+- Screenshot: `docs/screenshots/t18_team_colours.png`.
+
+### Art debt (no team pixels yet — do not hand-paint)
+
+Sprites without distinguishable `(40, 86, 160)` team indices (shader is a no-op on them until artists add cloth/banner/shield team blue):
+
+- **Units:** villager, soldier, spearman, archer, monk, light_cavalry, bojovnik_bradatice, druzinik, lancknecht, valecny_vuz, ram, trebuchet
+- **Buildings:** town_center, house, lumber_camp, mill, barracks, archery_range, blacksmith, stable, castle, monastery, university, siege_workshop, walls/gates/towers, construction_site
+- **Has team blue today:** knight (shield), market (awning/banner)
+
 ## What this pack does not include
 
 - Walk-cycle frames (only one pose per facing).
-- Dedicated enemy-team recolours (enemy units/buildings use a light modulate tint).
 - Dedicated trebuchet unpacked / firing frames (T-23 uses packed art + subtle deploy cue).
+- Full team-blue coverage on every unit/building (see art debt above).

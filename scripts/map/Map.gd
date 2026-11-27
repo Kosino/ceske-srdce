@@ -69,6 +69,7 @@ func _ready() -> void:
 		await _run_age34_monk_smoke()
 		await _run_age4_siege_smoke()
 		await _run_audio_manager_smoke()
+		await _run_team_recolour_smoke()
 		await _run_balance_harness_smoke()
 		print("[TEST] all headless smokes finished")
 		get_tree().quit(0)
@@ -99,6 +100,8 @@ func _ready() -> void:
 		await prepare_university_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--siege-shot"):
 		await prepare_siege_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--team-shot"):
+		await prepare_team_colours_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--formation-shot"):
 		await prepare_formation_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--ai-shot"):
@@ -106,6 +109,69 @@ func _ready() -> void:
 	else:
 		await _sample_windowed_fps()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 debug.")
+
+
+## Player (blue) vs AI (red) side-by-side — T-18 team recolour.
+func prepare_team_colours_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	for n in get_tree().get_nodes_in_group("player_town_hall"):
+		if n is Node2D:
+			(n as Node2D).visible = false
+			(n as Node2D).position = Vector2(-4000, -4000)
+	for n in get_tree().get_nodes_in_group("enemy_town_hall"):
+		if n is Node2D:
+			(n as Node2D).visible = false
+			(n as Node2D).position = Vector2(-4000, -4000)
+	GameManager.current_age = 3
+	var origin := Vector2(900, 700)
+	var market_p: Building = preload("res://scenes/buildings/Market.tscn").instantiate() as Building
+	market_p.team = 0
+	market_p.is_complete = true
+	market_p.position = origin
+	units.add_child(market_p)
+	var market_e: Building = preload("res://scenes/buildings/Market.tscn").instantiate() as Building
+	market_e.team = 1
+	market_e.is_complete = true
+	market_e.position = origin + Vector2(280, 0)
+	units.add_child(market_e)
+	var kn_p: Knight = preload("res://scenes/units/Knight.tscn").instantiate() as Knight
+	kn_p.team = 0
+	kn_p.contribute_population = false
+	kn_p.position = origin + Vector2(40, 90)
+	units.add_child(kn_p)
+	var kn_e: Knight = preload("res://scenes/units/Knight.tscn").instantiate() as Knight
+	kn_e.team = 1
+	kn_e.contribute_population = false
+	kn_e.position = origin + Vector2(320, 90)
+	units.add_child(kn_e)
+	var sol_p: Soldier = SOLDIER_SCENE.instantiate() as Soldier
+	sol_p.team = 0
+	sol_p.contribute_population = false
+	sol_p.position = origin + Vector2(100, 100)
+	units.add_child(sol_p)
+	var sol_e: Soldier = SOLDIER_SCENE.instantiate() as Soldier
+	sol_e.team = 1
+	sol_e.contribute_population = false
+	sol_e.position = origin + Vector2(380, 100)
+	units.add_child(sol_e)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	if kn_p:
+		kn_p._facing = "right"
+		kn_p._apply_facing_texture()
+	if kn_e:
+		kn_e._facing = "left"
+		kn_e._apply_facing_texture()
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	if cam:
+		cam.set_zoom_clamped(1.2)
+		cam.center_at(origin + Vector2(140, 40))
+	await get_tree().create_timer(0.4).timeout
+	await get_tree().process_frame
+	_save_shot("t18_team_colours.png", 0)
 
 
 ## Castle + stable + walls + cavalry (sprites v2).
@@ -2912,6 +2978,79 @@ func _run_balance_sim_game() -> void:
 	BalanceSim.finish_game(winner_team, sim_t, timed_out)
 	Engine.time_scale = 1.0
 	get_tree().paused = false
+
+
+## T-18: team palette-swap shader assigned; player vs AI team_color differs.
+func _run_team_recolour_smoke() -> void:
+	await get_tree().physics_frame
+	var kn_p: Knight = preload("res://scenes/units/Knight.tscn").instantiate() as Knight
+	kn_p.team = 0
+	kn_p.contribute_population = false
+	kn_p.position = PLAYER_TC_POS + Vector2(120, 80)
+	units.add_child(kn_p)
+	var kn_e: Knight = preload("res://scenes/units/Knight.tscn").instantiate() as Knight
+	kn_e.team = 1
+	kn_e.contribute_population = false
+	kn_e.position = PLAYER_TC_POS + Vector2(180, 80)
+	units.add_child(kn_e)
+	var mkt_p: Building = preload("res://scenes/buildings/Market.tscn").instantiate() as Building
+	mkt_p.team = 0
+	mkt_p.is_complete = true
+	mkt_p.position = PLAYER_TC_POS + Vector2(240, 40)
+	units.add_child(mkt_p)
+	var mkt_e: Building = preload("res://scenes/buildings/Market.tscn").instantiate() as Building
+	mkt_e.team = 1
+	mkt_e.is_complete = true
+	mkt_e.position = PLAYER_TC_POS + Vector2(340, 40)
+	units.add_child(mkt_e)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var shader_ok := false
+	var param_diff := false
+	var mats_ok := false
+	if kn_p._visual and kn_e._visual:
+		var mp := kn_p._visual.material as ShaderMaterial
+		var me := kn_e._visual.material as ShaderMaterial
+		mats_ok = mp != null and me != null
+		if mats_ok:
+			shader_ok = mp.shader != null and me.shader != null
+			var cp: Color = mp.get_shader_parameter("team_color")
+			var ce: Color = me.get_shader_parameter("team_color")
+			param_diff = not cp.is_equal_approx(ce)
+			## Player blue vs AI red constants.
+			shader_ok = (
+				shader_ok
+				and cp.is_equal_approx(TeamColors.PLAYER)
+				and ce.is_equal_approx(TeamColors.AI)
+			)
+	var build_ok := false
+	if mkt_p._visual and mkt_e._visual:
+		var bp := mkt_p._visual.material as ShaderMaterial
+		var be := mkt_e._visual.material as ShaderMaterial
+		build_ok = (
+			bp != null
+			and be != null
+			and not (bp.get_shader_parameter("team_color") as Color).is_equal_approx(
+				be.get_shader_parameter("team_color") as Color
+			)
+		)
+	var minimap_ok := (
+		not TeamColors.minimap_unit(0).is_equal_approx(TeamColors.minimap_unit(1))
+		and not TeamColors.minimap_build(0).is_equal_approx(TeamColors.minimap_build(1))
+	)
+	var all_ok := mats_ok and shader_ok and param_diff and build_ok and minimap_ok
+	print(
+		"[TEST] team_recolour mats=%s shader=%s param_diff=%s build=%s minimap=%s"
+		% [mats_ok, shader_ok, param_diff, build_ok, minimap_ok]
+	)
+	if all_ok:
+		print("[TEST] PASS team recolour (shader + player/AI params)")
+	else:
+		print("[TEST] FAIL team recolour (shader + player/AI params)")
+	for n in [kn_p, kn_e, mkt_p, mkt_e]:
+		if n != null and is_instance_valid(n):
+			n.queue_free()
+	await get_tree().physics_frame
 
 
 ## AudioManager loads; every shipped SFX path exists; headless stays silent.

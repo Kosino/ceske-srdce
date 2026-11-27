@@ -23,5 +23,3 @@ func _ready() -> void:
 	configure_facing_sprites("light_cavalry")
 	add_to_group("soldiers")
 	add_to_group("cavalry")
-	if _visual:
-		_visual.modulate = Color(1, 1, 1, 1) if team == 0 else Color(1.0, 0.55, 0.55, 1.0)
