@@ -21,4 +21,5 @@ func _ready() -> void:
 	add_to_group("soldiers")
 	add_to_group("siege")
 	if _visual:
-		_visual.modulate = Color(0.85, 0.75, 0.55, 1.0) if team == 0 else Color(1.0, 0.55, 0.45, 1.0)
+		## Finished siege art — team tint only (no placeholder brown wash).
+		_visual.modulate = Color(1, 1, 1, 1) if team == 0 else Color(1.0, 0.55, 0.55, 1.0)

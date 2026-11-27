@@ -38,8 +38,7 @@ func _ready() -> void:
 	configure_facing_sprites("trebuchet")
 	add_to_group("soldiers")
 	add_to_group("siege")
-	if _visual:
-		_visual.modulate = Color(0.7, 0.8, 0.95, 1.0) if team == 0 else Color(1.0, 0.5, 0.55, 1.0)
+	_apply_pack_visual()
 
 
 func _pack_duration() -> float:
@@ -62,6 +61,7 @@ func _tick_pack_timer(delta: float) -> void:
 		packed = true
 		can_attack = false
 		speed = PACKED_SPEED
+		_apply_pack_visual()
 		print("[SIEGE] trebuchet packed team=%d" % team)
 		## After pack: resume pending move, or retreat/approach for attack.
 		if _pending_move != Vector2.INF:
@@ -77,6 +77,7 @@ func _tick_pack_timer(delta: float) -> void:
 		can_attack = true
 		speed = 0.0
 		stop_movement()
+		_apply_pack_visual()
 		print("[SIEGE] trebuchet unpacked team=%d" % team)
 		if is_instance_valid(_pending_attack):
 			var t := _pending_attack
@@ -88,6 +89,30 @@ func _tick_pack_timer(delta: float) -> void:
 
 func is_transitioning() -> bool:
 	return _pack_timer > 0.0
+
+
+func _team_tint() -> Color:
+	return Color(1, 1, 1, 1) if team == 0 else Color(1.0, 0.55, 0.55, 1.0)
+
+
+func _apply_facing_texture() -> void:
+	super._apply_facing_texture()
+	_apply_pack_visual()
+
+
+## Packed art only — unpack uses the same frame with a subtle stance change (no new sprite).
+func _apply_pack_visual() -> void:
+	if _visual == null:
+		return
+	var tint := _team_tint()
+	if packed:
+		_visual.modulate = tint
+		_anchor_sprite_to_feet()
+	else:
+		## Slight warm lift so deployed state reads without a second sheet.
+		_visual.modulate = tint * Color(1.1, 1.02, 0.9, 1.0)
+		_anchor_sprite_to_feet()
+		_visual.offset.y -= 4.0
 
 
 func request_unpack() -> void:
