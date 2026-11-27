@@ -18,6 +18,7 @@ const TOWER_SCENE := preload("res://scenes/buildings/WatchTower.tscn")
 const MONASTERY_SCENE := preload("res://scenes/buildings/Monastery.tscn")
 const MARKET_SCENE := preload("res://scenes/buildings/Market.tscn")
 const UNIVERSITY_SCENE := preload("res://scenes/buildings/University.tscn")
+const SIEGE_WORKSHOP_SCENE := preload("res://scenes/buildings/SiegeWorkshop.tscn")
 
 const GHOST_TEXTURES := {
 	"house": preload("res://assets/sprites/buildings/house.png"),
@@ -36,6 +37,7 @@ const GHOST_TEXTURES := {
 	"monastery": preload("res://assets/sprites/buildings/monastery.png"),
 	"market": preload("res://assets/sprites/buildings/market.png"),
 	"university": preload("res://assets/sprites/buildings/university.png"),
+	"siege_workshop": preload("res://assets/sprites/buildings/siege_workshop.png"),
 }
 
 ## DESIGN costs and base build times (1 villager).
@@ -56,6 +58,7 @@ const COSTS := {
 	"monastery": {"wood": 175},
 	"market": {"wood": 175},
 	"university": {"wood": 200},
+	"siege_workshop": {"wood": 200},
 }
 
 const BUILD_TIMES := {
@@ -75,6 +78,7 @@ const BUILD_TIMES := {
 	"monastery": 40.0,
 	"market": 60.0,
 	"university": 60.0,
+	"siege_workshop": 60.0,
 }
 
 const FOOTPRINTS := {
@@ -94,6 +98,7 @@ const FOOTPRINTS := {
 	"monastery": Vector2(80, 80),
 	"market": Vector2(80, 80),
 	"university": Vector2(80, 80),
+	"siege_workshop": Vector2(80, 80),
 }
 
 const WALL_TYPES := ["palisade", "stone_wall"]
@@ -101,6 +106,7 @@ const WALL_TYPES := ["palisade", "stone_wall"]
 ## Extra prerequisites beyond age unlock.
 const REQUIRES_BUILDING := {
 	"stable": "barracks",
+	"siege_workshop": "university",
 }
 
 @export var map_size: Vector2 = Vector2(3000, 3000)
@@ -149,7 +155,7 @@ func begin_place(building_type: String) -> void:
 		)
 		return
 	if not _prereq_met(building_type):
-		NotificationManager.show_message("Nejdřív postav Kasárnu.")
+		NotificationManager.show_message(_prereq_message(building_type))
 		return
 	placing_type = building_type
 	_wall_drag = false
@@ -186,7 +192,7 @@ func place_at(building_type: String, world_pos: Vector2) -> Building:
 		)
 		return null
 	if not _prereq_met(building_type):
-		NotificationManager.show_message("Nejdřív postav Kasárnu.")
+		NotificationManager.show_message(_prereq_message(building_type))
 		return null
 	var pos := world_pos
 	if building_type == "watch_tower":
@@ -216,6 +222,8 @@ func place_at(building_type: String, world_pos: Vector2) -> Building:
 		(building as ArcheryRange).spawn_parent = entities
 	elif building is Stable:
 		(building as Stable).spawn_parent = entities
+	elif building is SiegeWorkshop:
+		(building as SiegeWorkshop).spawn_parent = entities
 	elif building is Castle:
 		(building as Castle).spawn_parent = entities
 	elif building is Monastery:
@@ -570,8 +578,18 @@ func _instantiate_building(building_type: String) -> Building:
 			return MARKET_SCENE.instantiate() as Building
 		"university":
 			return UNIVERSITY_SCENE.instantiate() as Building
+		"siege_workshop":
+			return SIEGE_WORKSHOP_SCENE.instantiate() as Building
 		_:
 			return null
+
+
+func _prereq_message(building_type: String) -> String:
+	match str(REQUIRES_BUILDING.get(building_type, "")):
+		"university":
+			return "Nejdřív postav Univerzitu."
+		_:
+			return "Nejdřív postav Kasárnu."
 
 
 func _prereq_met(building_type: String) -> bool:
@@ -586,6 +604,10 @@ func _prereq_met(building_type: String) -> bool:
 			return true
 	if need == "barracks":
 		for n in tree.get_nodes_in_group("barracks"):
+			if n is Building and (n as Building).team == 0 and (n as Building).is_complete:
+				return true
+	if need == "university":
+		for n in tree.get_nodes_in_group("universities"):
 			if n is Building and (n as Building).team == 0 and (n as Building).is_complete:
 				return true
 	return false

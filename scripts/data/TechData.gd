@@ -95,5 +95,9 @@ static func unit_role(unit: Unit) -> String:
 		return "cavalry"
 	if unit is Villager:
 		return "villager"
+	if unit is Monk or unit.unit_id == "monk":
+		return "monk"
+	if unit is Ram or unit is Trebuchet or unit.unit_id == "ram" or unit.unit_id == "trebuchet":
+		return "siege"
 	# Soldier / Spearman / unique infantry.
 	return "infantry"

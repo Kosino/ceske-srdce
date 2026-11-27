@@ -19,6 +19,7 @@ const BUILD_BUTTONS := [
 	{"id": "monastery", "name": "Klášter"},
 	{"id": "market", "name": "Tržiště"},
 	{"id": "university", "name": "Univerzita"},
+	{"id": "siege_workshop", "name": "Obléhací dílna"},
 ]
 
 @onready var age_label: Label = %AgeLabel
@@ -35,6 +36,7 @@ var _build_buttons: Dictionary = {} # building_id -> Button
 var _tech_buttons: Dictionary = {} # tech_id -> Button
 var _uni_tech_buttons: Dictionary = {} # tech_id -> Button
 var _cavalry_buttons: Dictionary = {} # unit_id -> Button
+var _siege_buttons: Dictionary = {} # unit_id -> Button
 var _unique_button: Button
 var _monk_button: Button
 var _market_button: Button
@@ -42,6 +44,7 @@ var _build_row: HBoxContainer
 var _tech_row: HBoxContainer
 var _uni_tech_row: HBoxContainer
 var _cavalry_row: HBoxContainer
+var _siege_row: HBoxContainer
 var _unique_row: HBoxContainer
 var _monk_row: HBoxContainer
 var _market_row: HBoxContainer
@@ -154,6 +157,7 @@ func _refresh_context_ui() -> void:
 	var is_smith := b is Blacksmith and (b as Blacksmith).is_complete
 	var is_university := b is University and (b as University).is_complete
 	var is_stable := b is Stable and (b as Stable).is_complete
+	var is_siege := b is SiegeWorkshop and (b as SiegeWorkshop).is_complete
 	var is_castle := b is Castle and (b as Castle).is_complete
 	if _tech_row:
 		_tech_row.visible = is_smith
@@ -169,6 +173,11 @@ func _refresh_context_ui() -> void:
 		_cavalry_row.visible = is_stable
 	if is_stable:
 		_refresh_cavalry_buttons()
+	_ensure_siege_row()
+	if _siege_row:
+		_siege_row.visible = is_siege
+	if is_siege:
+		_refresh_siege_buttons()
 	_ensure_unique_row()
 	if _unique_row:
 		_unique_row.visible = is_castle
@@ -201,8 +210,8 @@ func _refresh_context_ui() -> void:
 		train_spearman.visible = is_barracks
 	if train_archer:
 		train_archer.visible = is_archery
-	# Hide generic train buttons when Stable/Castle/Monastery/Market selected.
-	if is_stable or is_castle or is_monastery or is_market:
+	# Hide generic train buttons when Stable/Siege/Castle/Monastery/Market selected.
+	if is_stable or is_siege or is_castle or is_monastery or is_market:
 		if train_villager:
 			train_villager.visible = false
 		if train_soldier:
@@ -225,15 +234,18 @@ func _refresh_build_costs() -> void:
 		btn.text = "%s\n%s" % [def["name"], cost_txt]
 		var unlocked := GameManager.is_building_unlocked(bid)
 		var prereq_ok := true
-		if bid == "stable":
+		if bid == "stable" or bid == "siege_workshop":
 			var placer := get_tree().get_first_node_in_group("building_placer") as BuildingPlacer
-			prereq_ok = placer != null and placer._prereq_met("stable")
+			prereq_ok = placer != null and placer._prereq_met(bid)
 		btn.disabled = not unlocked or not prereq_ok
 		if not unlocked:
 			var need_age := AgeData.building_unlock_age(bid)
 			btn.tooltip_text = "Zamčeno do věku %s (%d)" % [AgeData.age_name(need_age), need_age]
 		elif not prereq_ok:
-			btn.tooltip_text = "Vyžaduje dokončenou Kasárnu"
+			btn.tooltip_text = (
+				"Vyžaduje dokončenou Univerzitu" if bid == "siege_workshop"
+				else "Vyžaduje dokončenou Kasárnu"
+			)
 		else:
 			btn.tooltip_text = "Cena (civ): %s" % cost_txt
 
@@ -568,6 +580,66 @@ func _on_cavalry_train_pressed(unit_id: String) -> void:
 		return
 	stable.enqueue_unit(unit_id)
 	_refresh_cavalry_buttons()
+
+
+func _ensure_siege_row() -> void:
+	if command_vbox == null:
+		return
+	if command_vbox.has_node("SiegeRow"):
+		_siege_row = command_vbox.get_node_or_null("SiegeRow") as HBoxContainer
+		return
+	_siege_row = HBoxContainer.new()
+	_siege_row.name = "SiegeRow"
+	_siege_row.add_theme_constant_override("separation", 4)
+	_siege_row.visible = false
+	command_vbox.add_child(_siege_row)
+	for unit_id in ["ram", "trebuchet"]:
+		var btn := Button.new()
+		btn.name = "Train_%s" % unit_id
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.pressed.connect(_on_siege_train_pressed.bind(unit_id))
+		_siege_row.add_child(btn)
+		_siege_buttons[unit_id] = btn
+	_refresh_siege_buttons()
+
+
+func _refresh_siege_buttons() -> void:
+	if _siege_row == null:
+		return
+	for unit_id in ["ram", "trebuchet"]:
+		var btn: Button = _siege_buttons.get(unit_id)
+		if btn == null:
+			continue
+		var def: Dictionary = SiegeWorkshop.UNIT_DEFS.get(unit_id, {})
+		var cost_txt := CivData.format_cost(def.get("cost", {}))
+		btn.text = "%s\n%s" % [
+			"Beranidlo" if unit_id == "ram" else "Trebuchet",
+			cost_txt,
+		]
+		var unlocked := GameManager.is_unit_unlocked(unit_id)
+		btn.disabled = not unlocked
+		btn.modulate = Color.WHITE if unlocked else Color(0.6, 0.6, 0.6)
+		if unlocked:
+			btn.tooltip_text = cost_txt
+		else:
+			var need := AgeData.unit_unlock_age(unit_id)
+			btn.tooltip_text = "Zamčeno do věku %s (%d)" % [AgeData.age_name(need), need]
+
+
+func _on_siege_train_pressed(unit_id: String) -> void:
+	var shop := SelectionManager.selected_building as SiegeWorkshop
+	if shop == null:
+		NotificationManager.show_message("Vyber Obléhací dílnu.")
+		return
+	if not GameManager.is_unit_unlocked(unit_id):
+		var need := AgeData.unit_unlock_age(unit_id)
+		NotificationManager.show_message(
+			"Zamčeno do věku %s (%d)." % [AgeData.age_name(need), need]
+		)
+		_refresh_siege_buttons()
+		return
+	shop.enqueue_unit(unit_id)
+	_refresh_siege_buttons()
 
 
 func _ensure_unique_row() -> void:

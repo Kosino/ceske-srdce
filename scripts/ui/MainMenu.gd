@@ -45,7 +45,8 @@ func _ready() -> void:
 	for flag in [
 		"--hud-shot", "--victory-shot", "--formation-shot", "--ai-shot",
 		"--camera-shot", "--mines-shot", "--blacksmith-shot", "--stable-shot", "--castle-shot",
-		"--art-shot", "--walls-shot", "--art-v2-shot", "--monk-shot", "--university-shot"
+		"--art-shot", "--walls-shot", "--art-v2-shot", "--monk-shot", "--university-shot",
+		"--siege-shot"
 	]:
 		if args.has(flag):
 			get_tree().change_scene_to_file(MAP_SCENE)

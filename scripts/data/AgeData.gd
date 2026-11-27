@@ -37,6 +37,7 @@ const BUILDING_UNLOCK_AGE := {
 	"monastery": 3,
 	"market": 3,
 	"university": 4,
+	"siege_workshop": 4, # requires University (BuildingPlacer)
 }
 
 const UNIT_UNLOCK_AGE := {
@@ -50,9 +51,9 @@ const UNIT_UNLOCK_AGE := {
 	"druzinik": 3,
 	"valecny_vuz": 3,
 	"lancknecht": 3,
-	# Age 3+ placeholders (data-only):
 	"monk": 3,
-	"siege": 4,
+	"ram": 4,
+	"trebuchet": 4,
 }
 
 

@@ -18,6 +18,10 @@ signal died(unit: Unit)
 @export var attack_type: String = "melee"
 @export var melee_armor: float = 0.0
 @export var pierce_armor: float = 0.0
+## Siege: only Building / DropOff / WallSegment / Gate / WatchTower.
+@export var buildings_only: bool = false
+## Trebuchet-style minimum range (0 = none).
+@export var min_attack_range: float = 0.0
 ## Sight / LOS in pixels (6 tiles = 240 for light cavalry).
 @export var sight_range: float = 200.0
 ## When false, population was already reserved (e.g. production queue).
@@ -208,18 +212,36 @@ func is_friendly_target(target: Node2D) -> bool:
 	return false
 
 
+func is_structure_target(target: Node2D) -> bool:
+	if target == null or not is_instance_valid(target):
+		return false
+	return (
+		target is Building
+		or target is DropOff
+		or target is WallSegment
+		or target is Gate
+		or target.is_in_group("player_town_hall")
+		or target.is_in_group("enemy_town_hall")
+		or target.is_in_group("walls")
+		or target.is_in_group("gates")
+	)
+
+
 func command_attack(target: Node2D) -> void:
 	if not can_attack or target == null or not is_instance_valid(target):
 		return
 	if is_friendly_target(target):
 		print("[COMBAT] refuse friendly fire team=%d -> %s" % [team, target.name])
 		return
+	if buildings_only and not is_structure_target(target):
+		print("[COMBAT] siege refuse non-building %s" % target.name)
+		return
 	attack_target = target
 	_move_speed_cap = -1.0
 	_wall_waypoints.clear()
 	_move_goal = target.global_position
 	if navigation_agent:
-		navigation_agent.max_speed = speed
+		navigation_agent.max_speed = effective_move_speed()
 		navigation_agent.target_position = target.global_position
 
 
@@ -246,8 +268,22 @@ func _physics_process(delta: float) -> void:
 
 
 func _chase_and_attack() -> void:
+	var dist := global_position.distance_to(attack_target.global_position)
 	var reach := attack_range + _target_radius(attack_target)
-	if global_position.distance_to(attack_target.global_position) <= reach:
+	if min_attack_range > 0.0 and dist < min_attack_range:
+		## Too close for siege artillery — back off.
+		var away := global_position - attack_target.global_position
+		if away.length_squared() < 0.01:
+			away = Vector2.RIGHT
+		var retreat := global_position + away.normalized() * (min_attack_range - dist + 24.0)
+		_move_goal = retreat
+		_wall_waypoints.clear()
+		if navigation_agent:
+			navigation_agent.max_speed = effective_move_speed()
+			navigation_agent.target_position = retreat
+		_steer_toward_target()
+		return
+	if dist <= reach:
 		stop_movement()
 		_try_strike()
 	else:
@@ -265,6 +301,14 @@ func _try_strike() -> void:
 		print("[COMBAT] refuse strike friendly %s" % attack_target.name)
 		attack_target = null
 		return
+	if buildings_only and not is_structure_target(attack_target):
+		print("[COMBAT] siege refuse strike non-building %s" % attack_target.name)
+		attack_target = null
+		return
+	if min_attack_range > 0.0:
+		var dist := global_position.distance_to(attack_target.global_position)
+		if dist < min_attack_range:
+			return
 	_attack_timer = attack_cooldown
 	var damage := attack_damage
 	if attack_target is Unit and (attack_target as Unit).is_cavalry:

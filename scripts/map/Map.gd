@@ -67,6 +67,7 @@ func _ready() -> void:
 		await _run_castle_unique_smoke()
 		await _run_walls_towers_smoke()
 		await _run_age34_monk_smoke()
+		await _run_age4_siege_smoke()
 		await _run_audio_manager_smoke()
 		await _run_balance_harness_smoke()
 		print("[TEST] all headless smokes finished")
@@ -96,6 +97,8 @@ func _ready() -> void:
 		await prepare_monk_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--university-shot"):
 		await prepare_university_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--siege-shot"):
+		await prepare_siege_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--formation-shot"):
 		await prepare_formation_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--ai-shot"):
@@ -329,6 +332,54 @@ func prepare_monk_screenshot() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	_save_shot("monk.png", 0)
+
+
+## Obléhací dílna + Beranidlo + Trebuchet (age-4 siege).
+func prepare_siege_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	for n in get_tree().get_nodes_in_group("player_town_hall"):
+		if n is Node2D:
+			(n as Node2D).visible = false
+			(n as Node2D).position = Vector2(-4000, -4000)
+	GameManager.current_age = 4
+	GameManager.wood = 800
+	GameManager.gold = 500
+	var origin := Vector2(1020, 700)
+	var uni: University = preload("res://scenes/buildings/University.tscn").instantiate() as University
+	uni.team = 0
+	uni.is_complete = true
+	uni.position = origin + Vector2(-140, 0)
+	units.add_child(uni)
+	var shop: SiegeWorkshop = preload("res://scenes/buildings/SiegeWorkshop.tscn").instantiate() as SiegeWorkshop
+	shop.team = 0
+	shop.is_complete = true
+	shop.spawn_parent = units
+	shop.position = origin
+	units.add_child(shop)
+	var ram: Ram = preload("res://scenes/units/Ram.tscn").instantiate() as Ram
+	ram.team = 0
+	ram.contribute_population = false
+	ram.position = origin + Vector2(70, 70)
+	units.add_child(ram)
+	var treb: Trebuchet = preload("res://scenes/units/Trebuchet.tscn").instantiate() as Trebuchet
+	treb.team = 0
+	treb.contribute_population = false
+	treb.position = origin + Vector2(130, 40)
+	units.add_child(treb)
+	await get_tree().physics_frame
+	treb.request_unpack()
+	await get_tree().create_timer(0.5).timeout
+	SelectionManager.select_building(shop)
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	if cam:
+		cam.set_zoom_clamped(1.15)
+		cam.center_at(origin + Vector2(40, 30))
+	await get_tree().create_timer(0.5).timeout
+	await get_tree().process_frame
+	_save_shot("siege.png", 0)
 
 
 ## Univerzita selected with research buttons visible.
@@ -2471,6 +2522,296 @@ func _run_age34_monk_smoke() -> void:
 	for n in [monastery, market, university, monk, ally, foe, hut, tower, archer]:
 		if n != null and is_instance_valid(n):
 			n.queue_free()
+	await get_tree().physics_frame
+
+
+## Age-4 siege: Obléhací dílna requires University; Ram/Trebuchet buildings-only; unpack.
+func _run_age4_siege_smoke() -> void:
+	await get_tree().physics_frame
+	GameManager._researched = {0: {}, 1: {}}
+	GameManager.player_civ = CivData.DEFAULT_PLAYER
+	GameManager.current_age = 4
+	GameManager.food = 400
+	GameManager.wood = 800
+	GameManager.gold = 500
+	GameManager.stone = 100
+	GameManager.add_population_cap(20)
+
+	var design_ok: bool = (
+		int(BuildingPlacer.COSTS["siege_workshop"].get("wood", 0)) == 200
+		and float(BuildingPlacer.BUILD_TIMES["siege_workshop"]) == 60.0
+		and AgeData.building_unlock_age("siege_workshop") == 4
+		and AgeData.unit_unlock_age("ram") == 4
+		and AgeData.unit_unlock_age("trebuchet") == 4
+		and int(SiegeWorkshop.UNIT_DEFS["ram"]["cost"].get("wood", 0)) == 160
+		and int(SiegeWorkshop.UNIT_DEFS["ram"]["cost"].get("gold", 0)) == 75
+		and int(SiegeWorkshop.UNIT_DEFS["trebuchet"]["cost"].get("wood", 0)) == 200
+		and int(SiegeWorkshop.UNIT_DEFS["trebuchet"]["cost"].get("gold", 0)) == 200
+	)
+
+	# Prereq: workshop blocked without university.
+	var wood0 := GameManager.wood
+	var blocked := building_placer.place_at("siege_workshop", PLAYER_TC_POS + Vector2(200, 160))
+	var prereq_ok: bool = blocked == null and GameManager.wood == wood0 and not building_placer._prereq_met("siege_workshop")
+
+	var uni: University = building_placer.place_at("university", PLAYER_TC_POS + Vector2(260, 140)) as University
+	var uni_ok: bool = uni != null
+	if uni:
+		uni.is_complete = true
+		uni.build_progress = 1.0
+		uni.hp = uni.max_hp
+		uni._show_final_visual()
+	await get_tree().physics_frame
+
+	var shop: SiegeWorkshop = building_placer.place_at(
+		"siege_workshop", PLAYER_TC_POS + Vector2(380, 140)
+	) as SiegeWorkshop
+	var shop_ok: bool = shop != null and building_placer._prereq_met("siege_workshop")
+	if shop:
+		shop.is_complete = true
+		shop.build_progress = 1.0
+		shop.hp = shop.max_hp
+		shop._show_final_visual()
+		shop.spawn_parent = units
+	await get_tree().physics_frame
+
+	# Train ram + trebuchet.
+	var wood_r0 := GameManager.wood
+	var gold_r0 := GameManager.gold
+	var ram_q := shop != null and shop.enqueue_unit("ram")
+	var ram_spend: bool = ram_q and GameManager.wood == wood_r0 - 160 and GameManager.gold == gold_r0 - 75
+	if shop and not shop.queue.is_empty():
+		shop.train_remaining = 0.0
+		shop._complete_training()
+	await get_tree().physics_frame
+	var ram: Ram = null
+	for n in get_tree().get_nodes_in_group("siege"):
+		if n is Ram and (n as Ram).team == 0:
+			ram = n as Ram
+			break
+	var ram_ok: bool = (
+		ram != null
+		and ram.buildings_only
+		and is_equal_approx(ram.bonus_vs_buildings, 125.0)
+		and is_equal_approx(ram.pierce_armor, 7.0)
+		and is_equal_approx(ram.speed, 40.0)
+	)
+
+	var wood_t0 := GameManager.wood
+	var gold_t0 := GameManager.gold
+	var treb_q := shop != null and shop.enqueue_unit("trebuchet")
+	var treb_spend: bool = treb_q and GameManager.wood == wood_t0 - 200 and GameManager.gold == gold_t0 - 200
+	if shop and not shop.queue.is_empty():
+		shop.train_remaining = 0.0
+		shop._complete_training()
+	await get_tree().physics_frame
+	var treb: Trebuchet = null
+	for n in get_tree().get_nodes_in_group("siege"):
+		if n is Trebuchet and (n as Trebuchet).team == 0:
+			treb = n as Trebuchet
+			break
+	var treb_stats: bool = (
+		treb != null
+		and treb.buildings_only
+		and treb.packed
+		and not treb.can_attack
+		and is_equal_approx(treb.attack_range, 640.0)
+		and is_equal_approx(treb.min_attack_range, 160.0)
+		and is_equal_approx(treb.attack_damage, 40.0)
+	)
+
+	# Buildings-only: refuse soldier, accept house.
+	var foe: Soldier = SOLDIER_SCENE.instantiate() as Soldier
+	foe.team = 1
+	foe.contribute_population = false
+	foe.position = (ram.global_position if ram else PLAYER_TC_POS) + Vector2(50, 0)
+	units.add_child(foe)
+	await get_tree().physics_frame
+	var hut: Building = preload("res://scenes/buildings/House.tscn").instantiate() as Building
+	hut.team = 1
+	hut.is_complete = true
+	hut.position = (ram.global_position if ram else PLAYER_TC_POS) + Vector2(80, 40)
+	units.add_child(hut)
+	await get_tree().physics_frame
+
+	var ram_refuse := false
+	var ram_hit := false
+	if ram:
+		ram.command_attack(foe)
+		ram_refuse = ram.attack_target == null
+		ram.global_position = hut.global_position + Vector2(30, 0)
+		ram.command_attack(hut)
+		ram_hit = ram.attack_target == hut
+		if ram_hit:
+			var hp0 := hut.hp
+			ram._try_strike()
+			ram_hit = hut.hp < hp0 - 50.0 ## 2 + 125 vs building
+	print("[TEST] ram buildings_only refuse=%s hit=%s" % [ram_refuse, ram_hit])
+
+	# Trebuchet unpack then attack building; refuse unit.
+	# Hit must come from Unit._chase_and_attack after unpack — never hand-call _try_strike.
+	var unpack_ok := false
+	var treb_refuse := false
+	var treb_hit := false
+	if treb:
+		treb.global_position = hut.global_position + Vector2(200, 0) ## inside 160–640
+		treb.command_attack(foe)
+		treb_refuse = treb.attack_target == null and treb._pending_attack == null
+		var hut_hp_before_treb := hut.hp
+		treb.command_attack(hut)
+		var pending := (
+			treb._pending_attack == hut
+			or treb.is_transitioning()
+			or treb._approach_target == hut
+		)
+		## Unpack (~0.35s headless) then natural strike (short attack_cd).
+		for _u in 90:
+			await get_tree().physics_frame
+			if not is_instance_valid(treb) or not is_instance_valid(hut):
+				break
+			if (not treb.packed) and treb.can_attack:
+				unpack_ok = pending
+			if unpack_ok and hut.hp < hut_hp_before_treb - 20.0:
+				treb_hit = treb.attack_target == hut or treb._pending_attack == null
+				break
+		if unpack_ok and not treb_hit:
+			## Still waiting on cooldown/frames — give a bit more.
+			for _u2 in 60:
+				await get_tree().physics_frame
+				if is_instance_valid(hut) and hut.hp < hut_hp_before_treb - 20.0:
+					treb_hit = true
+					break
+	print("[TEST] treb unpack=%s refuse=%s hit=%s" % [unpack_ok, treb_refuse, treb_hit])
+
+	# Long-range approach: ~20 tiles away → pathfind around a wall → unpack → natural hit.
+	var approach_ok := false
+	var barrier_walls: Array = []
+	if treb and hut and is_instance_valid(hut):
+		## Stop ram so it doesn't finish the hut mid-approach.
+		if ram and is_instance_valid(ram):
+			ram.command_stop()
+			ram.global_position = hut.global_position + Vector2(-200, -200)
+		hut.hp = hut.max_hp
+		if not treb.packed:
+			treb.request_pack()
+			await get_tree().create_timer(0.55).timeout
+		## Fresh packed state — clear any leftover approach/pending.
+		treb.packed = true
+		treb.can_attack = false
+		treb.speed = Trebuchet.PACKED_SPEED
+		treb._pack_timer = 0.0
+		treb._approach_target = null
+		treb._pending_attack = null
+		treb._pending_move = Vector2.INF
+		treb.attack_target = null
+		treb.stop_movement()
+		var far := hut.global_position + Vector2(20.0 * 40.0, 0.0) ## 800 px ≈ 20 tiles
+		treb.global_position = far
+		if treb.navigation_agent:
+			treb.navigation_agent.target_position = far
+		## Short vertical palisade between treb and hut — must path around (no walk-through).
+		GameManager.wood += 40
+		var mid := hut.global_position + Vector2(10.0 * 40.0, 0.0)
+		var barrier_tiles: Array[Vector2i] = []
+		for dy in range(-2, 3):
+			barrier_tiles.append(WallNav.world_to_tile(mid + Vector2(0.0, float(dy) * 40.0)))
+		barrier_walls = building_placer.place_wall_line("palisade", barrier_tiles)
+		for s in barrier_walls:
+			if s is WallSegment:
+				(s as WallSegment).is_complete = true
+				(s as WallSegment).build_progress = 1.0
+				(s as WallSegment).hp = (s as WallSegment).max_hp
+				(s as WallSegment)._show_final_visual()
+				(s as WallSegment)._ensure_blocker()
+		await get_tree().physics_frame
+		await get_tree().physics_frame
+		var start_pos := treb.global_position
+		var start_dist := treb.global_position.distance_to(hut.global_position)
+		var hut_hp_far := hut.hp
+		treb.command_attack(hut)
+		await get_tree().physics_frame
+		## Must start approach while still packed (not unpack at 800px).
+		var dist0 := treb.global_position.distance_to(hut.global_position)
+		var started_approach := (
+			treb.packed
+			and dist0 > Trebuchet.RANGE_MAX
+			and (
+				treb._approach_target == hut
+				or treb._pending_attack == hut
+			)
+		)
+		## Nav around wall at 48px/s — allow enough frames for path + unpack + natural fire.
+		var walked := false
+		var unpacked_in_range := false
+		var hit_far := false
+		var min_dist := start_dist
+		var max_lateral := 0.0
+		for _i in 900:
+			await get_tree().physics_frame
+			if not is_instance_valid(treb) or not is_instance_valid(hut):
+				break
+			var d := treb.global_position.distance_to(hut.global_position)
+			min_dist = minf(min_dist, d)
+			## Path around wall shows as lateral (Y) travel, not a straight X slide.
+			max_lateral = maxf(max_lateral, absf(treb.global_position.y - start_pos.y))
+			if d < start_dist - 40.0 or max_lateral > 30.0:
+				walked = true
+			if (not treb.packed) and treb.can_attack and d <= Trebuchet.RANGE_MAX + 24.0:
+				unpacked_in_range = true
+			## Natural fire only — no _try_strike() from the smoke.
+			if unpacked_in_range and hut.hp < hut_hp_far - 20.0:
+				hit_far = true
+				break
+		approach_ok = started_approach and walked and unpacked_in_range and hit_far
+		print(
+			"[TEST] treb approach start=%s walk=%s unpack_rng=%s hit=%s min_d=%.0f lat=%.0f ok=%s"
+			% [started_approach, walked, unpacked_in_range, hit_far, min_dist, max_lateral, approach_ok]
+		)
+	else:
+		print("[TEST] treb approach skipped")
+
+	var art_ok: bool = true
+	if shop:
+		var vis := shop.get_node_or_null("Visual") as Sprite2D
+		if vis == null or vis.texture == null:
+			art_ok = false
+	if ram == null or ram.get_node_or_null("Visual") == null:
+		art_ok = false
+	elif (ram.get_node("Visual") as Sprite2D).texture == null:
+		art_ok = false
+	if treb == null or treb.get_node_or_null("Visual") == null:
+		art_ok = false
+	elif (treb.get_node("Visual") as Sprite2D).texture == null:
+		art_ok = false
+
+	var all_ok: bool = (
+		design_ok and prereq_ok and uni_ok and shop_ok
+		and ram_spend and ram_ok and ram_refuse and ram_hit
+		and treb_spend and treb_stats and unpack_ok and treb_refuse and treb_hit
+		and approach_ok and art_ok
+	)
+	print(
+		"[TEST] siege design=%s prereq=%s uni=%s shop=%s ram=%s/%s treb=%s/%s unpack=%s approach=%s art=%s"
+		% [
+			design_ok, prereq_ok, uni_ok, shop_ok,
+			ram_ok and ram_spend and ram_refuse and ram_hit,
+			ram != null,
+			treb_stats and treb_spend and treb_refuse and treb_hit,
+			treb != null,
+			unpack_ok, approach_ok, art_ok
+		]
+	)
+	if all_ok:
+		print("[TEST] PASS age-4 siege workshop + ram/trebuchet")
+	else:
+		print("[TEST] FAIL age-4 siege workshop + ram/trebuchet")
+
+	for n in [uni, shop, ram, treb, foe, hut]:
+		if n != null and is_instance_valid(n):
+			n.queue_free()
+	for s in barrier_walls:
+		if s != null and is_instance_valid(s):
+			s.queue_free()
 	await get_tree().physics_frame
 
 

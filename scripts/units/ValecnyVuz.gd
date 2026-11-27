@@ -1,6 +1,6 @@
 extends Unit
 class_name ValecnyVuz
-## Husité unique — Válečný vůz. 110D+60Z, HP 180, atk 7 pierce / 5 dlaždic, zbroj 0/6, 0.8×.
+## Husité unique — Válečný vůz. 110D+60Z, HP 165, atk 7 pierce / 5 dlaždic, zbroj 0/6, 0.8×.
 
 
 const VILLAGER_SPEED := 80.0
@@ -10,7 +10,7 @@ const PROJECTILE_SCENE := preload("res://scenes/combat/Projectile.tscn")
 func _ready() -> void:
 	unit_id = "valecny_vuz"
 	speed = VILLAGER_SPEED * 0.8
-	max_hp = 180.0
+	max_hp = 165.0
 	attack_damage = 7.0
 	melee_armor = 0.0
 	pierce_armor = 6.0

@@ -1,0 +1,20 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/buildings/SiegeWorkshop.gd" id="1_sw"]
+[ext_resource type="Texture2D" path="res://assets/sprites/buildings/siege_workshop.png" id="2_tex"]
+
+[node name="SiegeWorkshop" type="Node2D"]
+script = ExtResource("1_sw")
+
+[node name="Visual" type="Sprite2D" parent="."]
+texture_filter = 1
+texture = ExtResource("2_tex")
+centered = true
+
+[node name="Label" type="Label" parent="."]
+offset_left = -56.0
+offset_top = 42.0
+offset_right = 56.0
+offset_bottom = 62.0
+horizontal_alignment = 1
+text = "Obléhací dílna"

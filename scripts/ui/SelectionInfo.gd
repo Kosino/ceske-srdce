@@ -54,6 +54,8 @@ func _refresh(_units: Array = []) -> void:
 			line2 = (b as Monastery).get_queue_summary()
 		elif b is Stable:
 			line2 = (b as Stable).get_queue_summary()
+		elif b is SiegeWorkshop:
+			line2 = (b as SiegeWorkshop).get_queue_summary()
 		elif b is Castle:
 			line2 = (b as Castle).get_queue_summary()
 		label.text = "Výběr: %s\n%s" % [name, line2]
