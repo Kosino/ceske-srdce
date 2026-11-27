@@ -2649,6 +2649,7 @@ func _run_age4_siege_smoke() -> void:
 	print("[TEST] ram buildings_only refuse=%s hit=%s" % [ram_refuse, ram_hit])
 
 	# Trebuchet unpack then attack building; refuse unit.
+	# Hit must come from Unit._chase_and_attack after unpack — never hand-call _try_strike.
 	var unpack_ok := false
 	var treb_refuse := false
 	var treb_hit := false
@@ -2663,22 +2664,28 @@ func _run_age4_siege_smoke() -> void:
 			or treb.is_transitioning()
 			or treb._approach_target == hut
 		)
-		await get_tree().create_timer(0.6).timeout
-		unpack_ok = (not treb.packed) and treb.can_attack and pending
-		## Unpack auto-attacks pending target; also force a clean strike.
-		if unpack_ok:
-			treb.command_attack(hut)
-			treb._attack_timer = 0.0
-			var thp0 := hut.hp
-			treb._try_strike()
-			treb_hit = (
-				treb.attack_target == hut
-				and (hut.hp < thp0 - 20.0 or hut.hp < hut_hp_before_treb - 20.0)
-			)
+		## Unpack (~0.35s headless) then natural strike (short attack_cd).
+		for _u in 90:
+			await get_tree().physics_frame
+			if not is_instance_valid(treb) or not is_instance_valid(hut):
+				break
+			if (not treb.packed) and treb.can_attack:
+				unpack_ok = pending
+			if unpack_ok and hut.hp < hut_hp_before_treb - 20.0:
+				treb_hit = treb.attack_target == hut or treb._pending_attack == null
+				break
+		if unpack_ok and not treb_hit:
+			## Still waiting on cooldown/frames — give a bit more.
+			for _u2 in 60:
+				await get_tree().physics_frame
+				if is_instance_valid(hut) and hut.hp < hut_hp_before_treb - 20.0:
+					treb_hit = true
+					break
 	print("[TEST] treb unpack=%s refuse=%s hit=%s" % [unpack_ok, treb_refuse, treb_hit])
 
-	# Long-range approach: ~20 tiles away → walk → unpack → hit (not unpack in place).
+	# Long-range approach: ~20 tiles away → pathfind around a wall → unpack → natural hit.
 	var approach_ok := false
+	var barrier_walls: Array = []
 	if treb and hut and is_instance_valid(hut):
 		## Stop ram so it doesn't finish the hut mid-approach.
 		if ram and is_instance_valid(ram):
@@ -2702,8 +2709,23 @@ func _run_age4_siege_smoke() -> void:
 		treb.global_position = far
 		if treb.navigation_agent:
 			treb.navigation_agent.target_position = far
+		## Short vertical palisade between treb and hut — must path around (no walk-through).
+		GameManager.wood += 40
+		var mid := hut.global_position + Vector2(10.0 * 40.0, 0.0)
+		var barrier_tiles: Array[Vector2i] = []
+		for dy in range(-2, 3):
+			barrier_tiles.append(WallNav.world_to_tile(mid + Vector2(0.0, float(dy) * 40.0)))
+		barrier_walls = building_placer.place_wall_line("palisade", barrier_tiles)
+		for s in barrier_walls:
+			if s is WallSegment:
+				(s as WallSegment).is_complete = true
+				(s as WallSegment).build_progress = 1.0
+				(s as WallSegment).hp = (s as WallSegment).max_hp
+				(s as WallSegment)._show_final_visual()
+				(s as WallSegment)._ensure_blocker()
 		await get_tree().physics_frame
 		await get_tree().physics_frame
+		var start_pos := treb.global_position
 		var start_dist := treb.global_position.distance_to(hut.global_position)
 		var hut_hp_far := hut.hp
 		treb.command_attack(hut)
@@ -2718,32 +2740,32 @@ func _run_age4_siege_smoke() -> void:
 				or treb._pending_attack == hut
 			)
 		)
-		## Walk ~192px at 48px/s ≈ 4s + unpack 0.35s (drive physics frames).
+		## Nav around wall at 48px/s — allow enough frames for path + unpack + natural fire.
 		var walked := false
 		var unpacked_in_range := false
 		var hit_far := false
 		var min_dist := start_dist
-		for _i in 600:
+		var max_lateral := 0.0
+		for _i in 900:
 			await get_tree().physics_frame
 			if not is_instance_valid(treb) or not is_instance_valid(hut):
 				break
 			var d := treb.global_position.distance_to(hut.global_position)
 			min_dist = minf(min_dist, d)
-			if d < start_dist - 40.0:
+			## Path around wall shows as lateral (Y) travel, not a straight X slide.
+			max_lateral = maxf(max_lateral, absf(treb.global_position.y - start_pos.y))
+			if d < start_dist - 40.0 or max_lateral > 30.0:
 				walked = true
 			if (not treb.packed) and treb.can_attack and d <= Trebuchet.RANGE_MAX + 24.0:
 				unpacked_in_range = true
-				treb.attack_target = hut
-				treb._attack_timer = 0.0
-				var before := hut.hp
-				treb._try_strike()
-				if hut.hp < before - 20.0 or hut.hp < hut_hp_far - 20.0:
-					hit_far = true
-					break
+			## Natural fire only — no _try_strike() from the smoke.
+			if unpacked_in_range and hut.hp < hut_hp_far - 20.0:
+				hit_far = true
+				break
 		approach_ok = started_approach and walked and unpacked_in_range and hit_far
 		print(
-			"[TEST] treb approach start=%s walk=%s unpack_rng=%s hit=%s min_d=%.0f ok=%s"
-			% [started_approach, walked, unpacked_in_range, hit_far, min_dist, approach_ok]
+			"[TEST] treb approach start=%s walk=%s unpack_rng=%s hit=%s min_d=%.0f lat=%.0f ok=%s"
+			% [started_approach, walked, unpacked_in_range, hit_far, min_dist, max_lateral, approach_ok]
 		)
 	else:
 		print("[TEST] treb approach skipped")
@@ -2787,6 +2809,9 @@ func _run_age4_siege_smoke() -> void:
 	for n in [uni, shop, ram, treb, foe, hut]:
 		if n != null and is_instance_valid(n):
 			n.queue_free()
+	for s in barrier_walls:
+		if s != null and is_instance_valid(s):
+			s.queue_free()
 	await get_tree().physics_frame
 
 

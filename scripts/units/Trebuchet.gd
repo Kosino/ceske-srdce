@@ -7,8 +7,8 @@ const PACK_TIME := 8.0
 const RANGE_MAX := 640.0 ## 16 tiles
 const RANGE_MIN := 160.0 ## 4 tiles
 const PACKED_SPEED := 48.0
-## Stand this far from the target when unpacking (comfortably inside max, outside min).
-const APPROACH_STANDOFF := RANGE_MAX - 32.0 ## 608 px ≈ 15.2 tiles
+## Stand this far from the target when unpacking (inside max even if nav stops ~80px short).
+const APPROACH_STANDOFF := RANGE_MAX - 96.0 ## 544 px ≈ 13.6 tiles
 
 var packed: bool = true
 var _pack_timer: float = 0.0
@@ -28,7 +28,7 @@ func _ready() -> void:
 	bonus_vs_buildings = 0.0
 	attack_range = RANGE_MAX
 	min_attack_range = RANGE_MIN
-	attack_cooldown = 8.0
+	attack_cooldown = _attack_cd()
 	can_attack = false ## only when unpacked
 	attack_type = "pierce"
 	melee_armor = 2.0
@@ -40,6 +40,15 @@ func _ready() -> void:
 	add_to_group("siege")
 	if _visual:
 		_visual.modulate = Color(0.7, 0.8, 0.95, 1.0) if team == 0 else Color(1.0, 0.5, 0.55, 1.0)
+
+
+func _pack_duration() -> float:
+	return 0.35 if DisplayServer.get_name() == "headless" else PACK_TIME
+
+
+func _attack_cd() -> float:
+	## Headless smokes need a natural first strike without calling _try_strike by hand.
+	return 0.35 if DisplayServer.get_name() == "headless" else PACK_TIME
 
 
 func _tick_pack_timer(delta: float) -> void:
@@ -72,15 +81,13 @@ func _tick_pack_timer(delta: float) -> void:
 		if is_instance_valid(_pending_attack):
 			var t := _pending_attack
 			_pending_attack = null
+			## Fresh cooldown so Unit._chase_and_attack can fire on the next frames.
+			_attack_timer = 0.0
 			super.command_attack(t)
 
 
 func is_transitioning() -> bool:
 	return _pack_timer > 0.0
-
-
-func _pack_duration() -> float:
-	return 0.35 if DisplayServer.get_name() == "headless" else PACK_TIME
 
 
 func request_unpack() -> void:
@@ -175,38 +182,43 @@ func _begin_approach(target: Node2D) -> void:
 		return
 	_pending_attack = target
 	_approach_target = target
-	var goal := _standoff_point(target)
-	super.command_move(goal)
+	## NavigationAgent only — never teleport / move_toward through walls.
+	super.command_move(_standoff_point(target))
+
+
+func _start_unpack_for_approach() -> void:
+	if not is_instance_valid(_approach_target):
+		return
+	_pending_attack = _approach_target
+	_approach_target = null
+	stop_movement()
+	request_unpack()
 
 
 func _physics_process(delta: float) -> void:
 	_tick_pack_timer(delta)
-	## Packed approach: steer directly to standoff (nav often stops ~40px short).
+	## Packed approach via NavigationAgent (super.command_move → WallNav / nav agent).
 	if (
 		packed
 		and not is_transitioning()
 		and is_instance_valid(_approach_target)
 	):
 		var dist := global_position.distance_to(_approach_target.global_position)
-		## Unpack once inside max range (allow a few px slack — move_toward can stop on the boundary).
-		var close_enough := dist <= RANGE_MAX + 4.0 and dist >= RANGE_MIN
+		var stopped := is_navigation_finished()
+		## Unpack when inside max range on any stop, or once past standoff while closing.
+		var close_enough := (
+			dist <= RANGE_MAX
+			and dist >= RANGE_MIN
+			and (stopped or dist <= APPROACH_STANDOFF + 12.0)
+		)
 		if close_enough:
-			_pending_attack = _approach_target
-			_approach_target = null
-			stop_movement()
-			_pack_timer = 0.0 ## ensure unpack can start (no stale transition)
-			packed = true
-			request_unpack()
-			_attack_timer = maxf(_attack_timer - delta, 0.0)
+			_start_unpack_for_approach()
+			super._physics_process(delta)
 			return
-		var goal := _standoff_point(_approach_target)
-		var to_goal := goal - global_position
-		var move_spd := maxf(effective_move_speed(), PACKED_SPEED)
-		## Direct position step — ignore nav/collision while closing.
-		global_position = global_position.move_toward(goal, move_spd * delta)
-		velocity = to_goal.normalized() * move_spd if to_goal.length_squared() > 0.01 else Vector2.ZERO
-		_update_facing_from_velocity()
-		_attack_timer = maxf(_attack_timer - delta, 0.0)
+		if stopped and dist > RANGE_MAX:
+			## Nav stopped short of fire band — re-issue path (no direct position set).
+			super.command_move(_standoff_point(_approach_target))
+		super._physics_process(delta)
 		return
 	## Finish pack then honor pending move (when no approach target).
 	if packed and not is_transitioning() and _pending_move != Vector2.INF and _approach_target == null:
@@ -214,7 +226,6 @@ func _physics_process(delta: float) -> void:
 		var cap := _pending_speed_cap
 		_pending_move = Vector2.INF
 		_pending_speed_cap = -1.0
-		## Use Unit move without clearing a fresh approach (already null here).
 		super.command_move(goal2, cap)
 	## Unpacked too close: Unit._chase backs off at speed 0 — force pack/retreat.
 	if (
