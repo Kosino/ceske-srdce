@@ -29,6 +29,9 @@ Production PNGs live under `assets/sprites/{buildings,units,resources,terrain,fx
 | `assets/sprites/resources/stone_mine.png` | 40×27 | stone | ResourceNode | |
 | `assets/sprites/fx/arrow.png` | 24×4 | tip faces right | Projectile | rotated by aim |
 | `assets/sprites/terrain/grass_1.png` / `grass_2.png` / `dirt.png` | 40×40 | TileMapLayer | Map.gd | random grass + dirt near Radnice |
+| `assets/sprites/buildings/siege_workshop.png` | 120×90 | footprint 80×80 | Obléhací dílna / SiegeWorkshop | wired (T-23) |
+| `assets/sprites/units/ram_{down,left,right,up}.png` | 48×45 | collision ~20×20 | Beranidlo / Ram | facing from velocity |
+| `assets/sprites/units/trebuchet_{down,left,right,up}.png` | 56×64 | collision ~22×22 | Trebuchet | packed look; unpack = offset/modulate |
 
 ## Integration (done)
 
@@ -60,8 +63,18 @@ Units: collision 16×16, selection radius 14
 - terrain tiles: hand-authored 40×40 wrap-safe grass (two variants) and dirt, using the shared leaf / dirt palette colours. Generated squares were used only as colour reference; they were not tileable.
 - Source sheets were generated as 'pixel-art look' JPEGs on magenta, then keyed with a tolerant pink threshold, defringed, cropped, and nearest-neighbour scaled to the footprint width (or 40 px body height for units).
 - A shared 32-colour palette is applied with no dithering. Vegetation, skin, metal, gold, and target red/blue are anchored so they are not swallowed by the brown building colours.
+## T-23 siege sprites (siege-v1)
+
+Finished age-4 siege art from the original PR #10 pipeline (magenta key → defringe → crop → NN scale → shared 32-colour palette). No procedural script drawing.
+
+- **siege_workshop** 120×90 — timber workshop on stone base, shingle roof, open bay; bottom-centred; feet/anchor via `Building._anchor_sprite` (`offset.y = footprint.y/2 - h/2`).
+- **ram** 48×45 ×4 facings — low closed gabled shed with iron-capped ram head; `_left` / `_right` mirrored from sheet; feet-centred via `Unit._anchor_sprite_to_feet`.
+- **trebuchet** 56×64 ×4 facings — packed/transport look (arm raised) for all states. Unpacked uses the same frames with a subtle warm modulate + 4 px lift (no separate unpacked sheet yet).
+
+Import source branch: `art/siege-v1` (`art_import/sprites_siege.tar.gz` sha256 `16661f7b…fc5779`). Screenshot: `docs/screenshots/siege.png`.
+
 ## What this pack does not include
 
 - Walk-cycle frames (only one pose per facing).
 - Dedicated enemy-team recolours (enemy units/buildings use a light modulate tint).
-- Farm plots, walls, or later-age buildings.
+- Dedicated trebuchet unpacked / firing frames (T-23 uses packed art + subtle deploy cue).
