@@ -2658,7 +2658,11 @@ func _run_age4_siege_smoke() -> void:
 		treb_refuse = treb.attack_target == null and treb._pending_attack == null
 		var hut_hp_before_treb := hut.hp
 		treb.command_attack(hut)
-		var pending := treb._pending_attack == hut or treb.is_transitioning()
+		var pending := (
+			treb._pending_attack == hut
+			or treb.is_transitioning()
+			or treb._approach_target == hut
+		)
 		await get_tree().create_timer(0.6).timeout
 		unpack_ok = (not treb.packed) and treb.can_attack and pending
 		## Unpack auto-attacks pending target; also force a clean strike.
@@ -2672,6 +2676,77 @@ func _run_age4_siege_smoke() -> void:
 				and (hut.hp < thp0 - 20.0 or hut.hp < hut_hp_before_treb - 20.0)
 			)
 	print("[TEST] treb unpack=%s refuse=%s hit=%s" % [unpack_ok, treb_refuse, treb_hit])
+
+	# Long-range approach: ~20 tiles away → walk → unpack → hit (not unpack in place).
+	var approach_ok := false
+	if treb and hut and is_instance_valid(hut):
+		## Stop ram so it doesn't finish the hut mid-approach.
+		if ram and is_instance_valid(ram):
+			ram.command_stop()
+			ram.global_position = hut.global_position + Vector2(-200, -200)
+		hut.hp = hut.max_hp
+		if not treb.packed:
+			treb.request_pack()
+			await get_tree().create_timer(0.55).timeout
+		## Fresh packed state — clear any leftover approach/pending.
+		treb.packed = true
+		treb.can_attack = false
+		treb.speed = Trebuchet.PACKED_SPEED
+		treb._pack_timer = 0.0
+		treb._approach_target = null
+		treb._pending_attack = null
+		treb._pending_move = Vector2.INF
+		treb.attack_target = null
+		treb.stop_movement()
+		var far := hut.global_position + Vector2(20.0 * 40.0, 0.0) ## 800 px ≈ 20 tiles
+		treb.global_position = far
+		if treb.navigation_agent:
+			treb.navigation_agent.target_position = far
+		await get_tree().physics_frame
+		await get_tree().physics_frame
+		var start_dist := treb.global_position.distance_to(hut.global_position)
+		var hut_hp_far := hut.hp
+		treb.command_attack(hut)
+		await get_tree().physics_frame
+		## Must start approach while still packed (not unpack at 800px).
+		var dist0 := treb.global_position.distance_to(hut.global_position)
+		var started_approach := (
+			treb.packed
+			and dist0 > Trebuchet.RANGE_MAX
+			and (
+				treb._approach_target == hut
+				or treb._pending_attack == hut
+			)
+		)
+		## Walk ~192px at 48px/s ≈ 4s + unpack 0.35s (drive physics frames).
+		var walked := false
+		var unpacked_in_range := false
+		var hit_far := false
+		var min_dist := start_dist
+		for _i in 600:
+			await get_tree().physics_frame
+			if not is_instance_valid(treb) or not is_instance_valid(hut):
+				break
+			var d := treb.global_position.distance_to(hut.global_position)
+			min_dist = minf(min_dist, d)
+			if d < start_dist - 40.0:
+				walked = true
+			if (not treb.packed) and treb.can_attack and d <= Trebuchet.RANGE_MAX + 24.0:
+				unpacked_in_range = true
+				treb.attack_target = hut
+				treb._attack_timer = 0.0
+				var before := hut.hp
+				treb._try_strike()
+				if hut.hp < before - 20.0 or hut.hp < hut_hp_far - 20.0:
+					hit_far = true
+					break
+		approach_ok = started_approach and walked and unpacked_in_range and hit_far
+		print(
+			"[TEST] treb approach start=%s walk=%s unpack_rng=%s hit=%s min_d=%.0f ok=%s"
+			% [started_approach, walked, unpacked_in_range, hit_far, min_dist, approach_ok]
+		)
+	else:
+		print("[TEST] treb approach skipped")
 
 	var art_ok: bool = true
 	if shop:
@@ -2691,17 +2766,17 @@ func _run_age4_siege_smoke() -> void:
 		design_ok and prereq_ok and uni_ok and shop_ok
 		and ram_spend and ram_ok and ram_refuse and ram_hit
 		and treb_spend and treb_stats and unpack_ok and treb_refuse and treb_hit
-		and art_ok
+		and approach_ok and art_ok
 	)
 	print(
-		"[TEST] siege design=%s prereq=%s uni=%s shop=%s ram=%s/%s treb=%s/%s unpack=%s art=%s"
+		"[TEST] siege design=%s prereq=%s uni=%s shop=%s ram=%s/%s treb=%s/%s unpack=%s approach=%s art=%s"
 		% [
 			design_ok, prereq_ok, uni_ok, shop_ok,
 			ram_ok and ram_spend and ram_refuse and ram_hit,
 			ram != null,
 			treb_stats and treb_spend and treb_refuse and treb_hit,
 			treb != null,
-			unpack_ok, art_ok
+			unpack_ok, approach_ok, art_ok
 		]
 	)
 	if all_ok:

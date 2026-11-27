@@ -478,6 +478,9 @@ func _try_blacksmith_research() -> void:
 	var smith := _own_blacksmith()
 	if smith == null or not smith.is_complete or smith.is_researching():
 		return
+	## Don't burn the age-up bank (super._process now finishes the smith under AI).
+	if food - _food_reserve_for_age() < 150 or gold - _gold_reserve_for_age() < 50:
+		return
 	for tech_id in TechData.BLACKSMITH_ORDER:
 		if GameManager.has_tech(team, tech_id):
 			continue
