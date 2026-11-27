@@ -14,11 +14,11 @@ const SFX_PATHS := {
 	"mining": "res://assets/audio/sfx/mining.ogg",
 	"building_complete": "res://assets/audio/sfx/building_complete.ogg",
 	"melee_hit": "res://assets/audio/sfx/melee_hit.ogg",
-	"bow_shot": "res://assets/audio/sfx/bow_shot.ogg",
+	"bow_shot": "res://assets/audio/sfx/bow_shot.wav",
 	"building_destroyed": "res://assets/audio/sfx/building_destroyed.ogg",
 	"age_advance": "res://assets/audio/sfx/age_advance.ogg",
 	"under_attack": "res://assets/audio/sfx/under_attack.ogg",
-	"victory": "res://assets/audio/sfx/victory.wav",
+	"victory": "res://assets/audio/sfx/victory.ogg",
 	"defeat": "res://assets/audio/sfx/defeat.ogg",
 }
 
