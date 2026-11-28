@@ -355,14 +355,16 @@ func _tick_economy() -> void:
 func _planned_stone_need() -> int:
 	var need := 0
 	var tower_target := 0
-	if not BalanceSim.active and age >= 2:
+	## Standard: don't pull stone gatherers until the first wave is out.
+	var std_defenses := not BalanceSim.active and age >= 2 and _waves_launched >= 1
+	if std_defenses:
 		tower_target = STANDARD_TOWER_TARGET
 	elif BalanceSim.active and strategy == BalanceSim.STRAT_RUSH and age >= 2:
 		tower_target = 2
 	var towers_have := _count_own_buildings("watch_tower")
 	if towers_have < tower_target:
 		need += (tower_target - towers_have) * 125
-	if not BalanceSim.active and age >= 2:
+	if std_defenses:
 		var walls_have := _count_own_buildings("stone_wall")
 		if walls_have < STANDARD_WALL_TARGET:
 			need += (STANDARD_WALL_TARGET - walls_have) * 5
@@ -508,10 +510,10 @@ func _need_house() -> bool:
 func _farm_target() -> int:
 	if BalanceSim.active:
 		return 0 if strategy == BalanceSim.STRAT_RUSH else mini(2 + age, 4)
-	## Standard: 2 farms until first wave (save wood for reseed); then grow.
-	if _waves_launched < 1:
-		return 2
-	return clampi(2 + (age - 1) * 2, 2, 8)
+	## Standard: after mill, keep ≥4 farms so food eco doesn't starve.
+	if _count_own_complete("mill") < 1:
+		return 0
+	return clampi(maxi(4, 2 + (age - 1) * 2), 4, 8)
 
 
 func _wood_reserve() -> int:
@@ -567,8 +569,9 @@ func _try_place_next_building() -> void:
 		_try_place_building("house", base_position + Vector2(-90, 120))
 		return
 	## Towers near base (Standard + BalanceSim rush) — spend stone instead of hoarding.
+	## Standard: after first wave so builders/wood stay on eco→army fill.
 	var want_towers := false
-	if not BalanceSim.active and age >= 2:
+	if not BalanceSim.active and age >= 2 and _waves_launched >= 1:
 		want_towers = true
 	elif BalanceSim.active and strategy == BalanceSim.STRAT_RUSH and age >= 2:
 		want_towers = true
@@ -599,6 +602,9 @@ func _try_place_next_building() -> void:
 ## Standard: stone walls at TC (spend starting stone; no gather until need exceeds stockpile).
 func _try_place_stone_defenses() -> void:
 	if BalanceSim.active or age < 2 or _units_parent == null:
+		return
+	## After first wave — walls must not starve army training / food eco.
+	if _waves_launched < 1:
 		return
 	## Always finish towers before walls so stone spend hits <300 (towers+walls).
 	if _count_own_buildings("watch_tower") < STANDARD_TOWER_TARGET:
@@ -644,19 +650,19 @@ func _try_place_stone_defenses() -> void:
 
 
 func _tc_wall_tiles(base_tile: Vector2i) -> Array[Vector2i]:
-	## Rings around TC (west gap at r=3 for army egress); denser outer rings for stone spend.
+	## Rings N/E/S only — permanent west corridor so villagers can reach resources.
 	var out: Array[Vector2i] = []
 	var seen := {}
 	for r in [3, 4, 5, 6]:
 		for i in range(-r, r + 1):
-			var candidates: Array[Vector2i] = [
-				Vector2i(base_tile.x + i, base_tile.y - r), ## north
-				Vector2i(base_tile.x + r, base_tile.y + i), ## east
-				Vector2i(base_tile.x + i, base_tile.y + r), ## south
-			]
-			## Outer rings close west too (stone spend); leave r=3 west open.
-			if r >= 4:
-				candidates.append(Vector2i(base_tile.x - r, base_tile.y + i))
+			## 3-tile-wide west gap: skip westernmost columns on N/S runs.
+			var skip_west_ns: bool = i <= (-r + 1)
+			var candidates: Array[Vector2i] = []
+			if not skip_west_ns:
+				candidates.append(Vector2i(base_tile.x + i, base_tile.y - r)) ## north
+				candidates.append(Vector2i(base_tile.x + i, base_tile.y + r)) ## south
+			candidates.append(Vector2i(base_tile.x + r, base_tile.y + i)) ## east (full)
+			## Never place west ring — egress for gatherers + army.
 			for t in candidates:
 				var key := "%d:%d" % [t.x, t.y]
 				if seen.has(key):
@@ -671,6 +677,18 @@ func _own_wall_on_tile(tile: Vector2i) -> bool:
 		if n is WallSegment and (n as WallSegment).team == team and (n as WallSegment).tile == tile:
 			return true
 	return false
+
+
+## Smoke / nav: path from TC through west gap to a nearby resource (or west point).
+func walls_not_sealing() -> bool:
+	var from := base_position
+	var to := base_position + Vector2(-320, 0)
+	var res := _nearest_resource_of_type(base_position, "wood")
+	if res == null:
+		res = _nearest_resource(base_position)
+	if res != null:
+		to = res.global_position
+	return WallNav.path_exists(from, to, team, get_tree())
 
 
 func _try_place_building(building_id: String, pos: Vector2) -> bool:
@@ -1605,9 +1623,10 @@ func print_ai_summary() -> void:
 func standard_smoke_ok() -> bool:
 	return (
 		_count_villagers() >= 12
-		and _count_farms() >= 1
+		and _count_farms() >= 4
 		and age >= 2
 		and _waves_launched >= 1
 		and _first_wave_count >= WAVE_FIRST_MIN_STANDARD
 		and stone < 300
+		and walls_not_sealing()
 	)

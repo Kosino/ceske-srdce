@@ -43,13 +43,13 @@ func _ready() -> void:
 		return
 	# Feature screenshots that need the map.
 	for flag in [
-		"--hud-shot", "--victory-shot", "--formation-shot", "--ai-shot",
+		"--hud-shot", "--victory-shot", "--formation-shot", "--ai-shot", "--t31-shot",
 		"--camera-shot", "--mines-shot", "--blacksmith-shot", "--stable-shot", "--castle-shot",
 		"--art-shot", "--walls-shot", "--art-v2-shot", "--monk-shot", "--university-shot",
 		"--siege-shot", "--farms-shot", "--reseed-shot", "--build-bar-shot", "--controls-shot",
-		"--team-shot", "--walk-shot", "--walk-v2-shot", "--team-read-shot", "--fog-shot",
-		"--fog-polish-shot", "--fog-snapshot-shot", "--command-panel-shot", "--garrison-shot",
-		"--t36-ui-shot", "--dock-shot"
+		"--team-shot", "--walk-shot", "--walk-v2-shot", "--cav-walk-shot", "--team-read-shot",
+		"--fog-shot", "--fog-polish-shot", "--fog-snapshot-shot", "--command-panel-shot",
+		"--garrison-shot", "--t36-ui-shot", "--dock-shot",
 	]:
 		if args.has(flag):
 			get_tree().change_scene_to_file(MAP_SCENE)
