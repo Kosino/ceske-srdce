@@ -61,8 +61,7 @@ func _apply_team_visual() -> void:
 	var visual := get_node_or_null("Visual") as Sprite2D
 	if visual == null:
 		return
-	visual.modulate = Color.WHITE
-	TeamColors.apply(visual, team)
+	TeamColors.apply(visual, team, true)
 
 
 func accepts(resource_type: String) -> bool:

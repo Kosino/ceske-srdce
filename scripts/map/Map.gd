@@ -162,14 +162,21 @@ func prepare_team_colours_screenshot() -> void:
 	if kn_p:
 		kn_p._facing = "right"
 		kn_p._apply_facing_texture()
+		kn_p._apply_team_visual()
 	if kn_e:
 		kn_e._facing = "left"
 		kn_e._apply_facing_texture()
+		kn_e._apply_team_visual()
+	if sol_p:
+		sol_p._apply_team_visual()
+	if sol_e:
+		sol_e._apply_team_visual()
 	var cam := get_node_or_null("Camera2D") as RTSCamera
 	if cam:
-		cam.set_zoom_clamped(1.2)
-		cam.center_at(origin + Vector2(140, 40))
-	await get_tree().create_timer(0.4).timeout
+		cam.set_zoom_clamped(1.35)
+		cam.center_at(origin + Vector2(160, 55))
+	await get_tree().create_timer(0.5).timeout
+	await get_tree().process_frame
 	await get_tree().process_frame
 	_save_shot("t18_team_colours.png", 0)
 
@@ -2980,7 +2987,8 @@ func _run_balance_sim_game() -> void:
 	get_tree().paused = false
 
 
-## T-18: team palette-swap shader assigned; player vs AI team_color differs.
+## T-18: team palette-swap shader assigned; player vs AI team_color differs;
+## art-debt units keep soft AI tint; team-blue units use WHITE + shader.
 func _run_team_recolour_smoke() -> void:
 	await get_tree().physics_frame
 	var kn_p: Knight = preload("res://scenes/units/Knight.tscn").instantiate() as Knight
@@ -2993,6 +3001,11 @@ func _run_team_recolour_smoke() -> void:
 	kn_e.contribute_population = false
 	kn_e.position = PLAYER_TC_POS + Vector2(180, 80)
 	units.add_child(kn_e)
+	var sol_e: Soldier = SOLDIER_SCENE.instantiate() as Soldier
+	sol_e.team = 1
+	sol_e.contribute_population = false
+	sol_e.position = PLAYER_TC_POS + Vector2(200, 100)
+	units.add_child(sol_e)
 	var mkt_p: Building = preload("res://scenes/buildings/Market.tscn").instantiate() as Building
 	mkt_p.team = 0
 	mkt_p.is_complete = true
@@ -3008,6 +3021,7 @@ func _run_team_recolour_smoke() -> void:
 	var shader_ok := false
 	var param_diff := false
 	var mats_ok := false
+	var knight_ai_ok := false
 	if kn_p._visual and kn_e._visual:
 		var mp := kn_p._visual.material as ShaderMaterial
 		var me := kn_e._visual.material as ShaderMaterial
@@ -3023,6 +3037,19 @@ func _run_team_recolour_smoke() -> void:
 				and cp.is_equal_approx(TeamColors.PLAYER)
 				and ce.is_equal_approx(TeamColors.AI)
 			)
+			## Enemy Knight (has team-blue) → shader team_color = AI, modulate WHITE.
+			knight_ai_ok = (
+				ce.is_equal_approx(TeamColors.AI)
+				and kn_e._visual.modulate.is_equal_approx(Color.WHITE)
+			)
+	## Enemy Soldier (no team-blue) → soft AI tint, not WHITE.
+	var soldier_tint_ok := false
+	if sol_e._visual:
+		soldier_tint_ok = not sol_e._visual.modulate.is_equal_approx(Color.WHITE)
+		soldier_tint_ok = (
+			soldier_tint_ok
+			and sol_e._visual.modulate.is_equal_approx(TeamColors.AI_TINT_UNIT)
+		)
 	var build_ok := false
 	if mkt_p._visual and mkt_e._visual:
 		var bp := mkt_p._visual.material as ShaderMaterial
@@ -3033,21 +3060,30 @@ func _run_team_recolour_smoke() -> void:
 			and not (bp.get_shader_parameter("team_color") as Color).is_equal_approx(
 				be.get_shader_parameter("team_color") as Color
 			)
+			and mkt_e._visual.modulate.is_equal_approx(Color.WHITE)
 		)
 	var minimap_ok := (
 		not TeamColors.minimap_unit(0).is_equal_approx(TeamColors.minimap_unit(1))
 		and not TeamColors.minimap_build(0).is_equal_approx(TeamColors.minimap_build(1))
 	)
-	var all_ok := mats_ok and shader_ok and param_diff and build_ok and minimap_ok
+	var all_ok := (
+		mats_ok
+		and shader_ok
+		and param_diff
+		and build_ok
+		and minimap_ok
+		and knight_ai_ok
+		and soldier_tint_ok
+	)
 	print(
-		"[TEST] team_recolour mats=%s shader=%s param_diff=%s build=%s minimap=%s"
-		% [mats_ok, shader_ok, param_diff, build_ok, minimap_ok]
+		"[TEST] team_recolour mats=%s shader=%s param_diff=%s build=%s minimap=%s knight_ai=%s soldier_tint=%s"
+		% [mats_ok, shader_ok, param_diff, build_ok, minimap_ok, knight_ai_ok, soldier_tint_ok]
 	)
 	if all_ok:
 		print("[TEST] PASS team recolour (shader + player/AI params)")
 	else:
 		print("[TEST] FAIL team recolour (shader + player/AI params)")
-	for n in [kn_p, kn_e, mkt_p, mkt_e]:
+	for n in [kn_p, kn_e, sol_e, mkt_p, mkt_e]:
 		if n != null and is_instance_valid(n):
 			n.queue_free()
 	await get_tree().physics_frame

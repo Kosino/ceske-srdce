@@ -79,12 +79,12 @@ AoE II-style team colour via `assets/shaders/team_recolour.gdshader` + `TeamColo
 
 - PNGs keep the shared 32-colour palette. Only the baked **team blue** `(40, 86, 160)` is swapped.
 - Player → `TeamColors.PLAYER` (same blue); AI → `TeamColors.AI` (red `188, 42, 36`). Constants live in one place for more teams later.
-- Applied on unit/building/`DropOff` visuals; whole-sprite modulate tint removed. Minimap unit/building dots use the same blue/red.
+- Applied on unit/building/`DropOff` visuals. Sprites **with** team-blue use the palette-swap shader and modulate WHITE. Sprites **without** team-blue (detected at texture load, cached) keep the previous soft AI tint for the AI team — units `Color(1.0, 0.55, 0.55)`, buildings/`DropOff` `Color(0.75, 0.45, 0.45)` — so enemies stay readable until artists paint team indices. Minimap unit/building dots use the same blue/red.
 - Screenshot: `docs/screenshots/t18_team_colours.png`.
 
 ### Art debt (no team pixels yet — do not hand-paint)
 
-Sprites without distinguishable `(40, 86, 160)` team indices (shader is a no-op on them until artists add cloth/banner/shield team blue):
+Sprites without distinguishable `(40, 86, 160)` team indices (shader is a no-op on them; tint fallback applies for AI until artists add cloth/banner/shield team blue):
 
 - **Units:** villager, soldier, spearman, archer, monk, light_cavalry, bojovnik_bradatice, druzinik, lancknecht, valecny_vuz, ram, trebuchet
 - **Buildings:** town_center, house, lumber_camp, mill, barracks, archery_range, blacksmith, stable, castle, monastery, university, siege_workshop, walls/gates/towers, construction_site

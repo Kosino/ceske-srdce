@@ -102,11 +102,11 @@ func _apply_pack_visual() -> void:
 		return
 	TeamColors.apply(_visual, team)
 	if packed:
-		_visual.modulate = Color.WHITE
 		_anchor_sprite_to_feet()
 	else:
-		## Slight warm lift so deployed state reads without a second sheet.
-		_visual.modulate = Color(1.1, 1.02, 0.9, 1.0)
+		## Slight warm lift on top of team modulate so deployed state reads without a second sheet.
+		var m := _visual.modulate
+		_visual.modulate = Color(m.r * 1.1, m.g * 1.02, m.b * 0.9, 1.0)
 		_anchor_sprite_to_feet()
 		_visual.offset.y -= 4.0
 

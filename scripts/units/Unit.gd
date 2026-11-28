@@ -89,7 +89,6 @@ func _apply_team_visual() -> void:
 		_visual = get_node_or_null("Visual") as Sprite2D
 	if _visual == null:
 		return
-	_visual.modulate = Color.WHITE
 	TeamColors.apply(_visual, team)
 
 
