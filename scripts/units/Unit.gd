@@ -135,6 +135,37 @@ func _apply_team_visual() -> void:
 	TeamColors.apply(_visual, team)
 
 
+func _idle_texture_height() -> float:
+	if _facing_textures.has(_facing) and _facing_textures[_facing] != null:
+		return float((_facing_textures[_facing] as Texture2D).get_height())
+	return 0.0
+
+
+func _walk_cell_height() -> float:
+	if _walk_sheet == null:
+		return 0.0
+	return float(_walk_sheet.get_height()) / float(WALK_DIRS.size())
+
+
+## Scale walk cells so on-screen height matches the idle facing sprite (feet stay on origin).
+func _walk_size_scale() -> float:
+	var idle_h := _idle_texture_height()
+	var cell_h := _walk_cell_height()
+	if idle_h <= 0.0 or cell_h <= 0.0:
+		return 1.0
+	return idle_h / cell_h
+
+
+func visual_draw_height() -> float:
+	## Texture cell height × |scale.y| — used by size-parity smoke.
+	if _visual == null or _visual.texture == null:
+		return 0.0
+	var tex_h := float(_visual.texture.get_height())
+	if _visual.vframes > 1:
+		tex_h /= float(_visual.vframes)
+	return tex_h * absf(_visual.scale.y)
+
+
 func _apply_facing_texture() -> void:
 	## Idle facing texture. Does not touch modulate/material (T-18).
 	if _visual == null or not _facing_textures.has(_facing):
@@ -144,6 +175,7 @@ func _apply_facing_texture() -> void:
 	_visual.vframes = 1
 	_visual.frame = 0
 	_visual.texture = _facing_textures[_facing]
+	_visual.scale = Vector2.ONE
 	_anchor_sprite_to_feet()
 
 
@@ -159,11 +191,14 @@ func _apply_walk_frame() -> void:
 	if row < 0:
 		row = 0
 	_visual.frame = row * WALK_FRAME_COUNT + clampi(_walk_frame, 0, WALK_FRAME_COUNT - 1)
+	var s := _walk_size_scale()
+	_visual.scale = Vector2(s, s)
 	_anchor_sprite_to_feet()
 
 
 func _anchor_sprite_to_feet() -> void:
 	## Bottom of sprite at unit origin (no fixed offset.y=8).
+	## Offset is in local (pre-scale) space so feet stay put when walk scale ≠ 1.
 	if _visual == null or _visual.texture == null:
 		return
 	_visual.centered = true
@@ -211,11 +246,8 @@ func _update_walk_animation(delta: float) -> void:
 
 func _hp_bar_y() -> float:
 	if _visual and _visual.texture:
-		# Feet at origin; bar above sprite top.
-		var tex_h := float(_visual.texture.get_height())
-		if _visual.vframes > 1:
-			tex_h /= float(_visual.vframes)
-		return -tex_h - 6.0
+		# Feet at origin; bar above sprite top (account for walk size scale).
+		return -visual_draw_height() - 6.0
 	return -28.0
 
 

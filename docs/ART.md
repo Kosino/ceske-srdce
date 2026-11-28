@@ -151,8 +151,32 @@ No `gen_*` procedural drawing. Screenshot: `docs/screenshots/t27_walk_v2.png`.
 - Archer is ~**2 px slimmer** than idle (19 vs 21 px in down row; front frames 38 px tall); bow string dotted
   (same as idle); a couple of stray red pixels on the bow in down/up frame 2; side frames 0 and 3 are both wide strides.
 
+## T-34 cavalry walk + rally flag
+
+Same PR #10 / walk-v2 pipeline (GenerateImage on magenta/hot-pink → key → defringe →
+crop → NN scale → shared 32-colour palette). No `gen_*` procedural drawing.
+`Unit.gd` auto-loads `res://assets/sprites/units/{unit_key}_walk.png` for keys
+`light_cavalry` and `knight`. Rally marker uses a Sprite2D in `RallyPointController`
+(`assets/sprites/fx/rally_flag.png`) instead of the drawn polygon placeholder.
+
+| File | Size | Notes |
+|---|---|---|
+| `assets/sprites/units/light_cavalry_walk.png` | 216×268 | 4×4 cells **54×67** (= idle canvas); no team-blue |
+| `assets/sprites/units/knight_walk.png` | 216×300 | 4×4 cells **54×75** (= idle canvas); team-blue on barding/shield |
+| `assets/sprites/fx/rally_flag.png` | 19×30 | wooden stake + red banner |
+
+`Unit.gd` also scales walk cells so draw height matches the idle facing texture (covers
+spearman 40-cell vs 45 idle, etc.). Smoke: `PASS walk/idle size parity`.
+Screenshot: `docs/screenshots/t34_cav_walk.png` (cavalry + villager + TC, default zoom).
+
+### Art debt (cavalry walk)
+
+- Side rows are true profiles; front/back are front-3/4 generations (same contract as walk-v2).
+- Knight walk keeps team-blue for T-18; light cavalry has none (modulate / underfoot marker).
+- NN downscale from larger generated frames softens some horse-leg detail vs idle.
+
 ## What this pack does not include
 
-- Walk-cycle sheets for units beyond villager, soldier, archer, and spearman (others idle-only).
+- Walk-cycle sheets for units beyond villager, soldier, archer, spearman, light cavalry, and knight.
 - Dedicated trebuchet unpacked / firing frames (T-23 uses packed art + subtle deploy cue).
 - Full team-blue coverage on every unit/building (see art debt above).
