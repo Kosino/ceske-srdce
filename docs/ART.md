@@ -137,17 +137,26 @@ no gameplay logic changes for this import.
 | File | Size | Notes |
 |---|---|---|
 | `assets/sprites/units/archer_walk.png` | 128×160 | walk-v2 (PR #10 pipeline) |
-| `assets/sprites/units/spearman_walk.png` | 128×160 | walk-v2 (PR #10 pipeline) |
+| `assets/sprites/units/spearman_walk.png` | 112×184 | T-37 reimport — cells **28×46** (= idle canvas height) |
 
 Import source branch: `art/walk-v2` @ `6571e66`
 (`art_import/sprites_walk_v2.tar.gz` sha256 `94d986afd7adaf570e1b8d4a45bf27f0764d121fde7c55188d9fd42f4cb2dfbf`).
 No `gen_*` procedural drawing. Screenshot: `docs/screenshots/t27_walk_v2.png`.
 
+### T-37 spearman walk spear orientation
+
+Regenerated `spearman_walk.png` via the same PR #10 pipeline (GenerateImage on
+magenta/hot-pink → key → defringe → crop → NN scale to idle canvas → shared 32-colour
+palette). No procedural drawing or warping in Python. Spear is **vertical** in every
+walk frame (matches idle). Cell **28×46** matches idle height (down/up 45, left/right 46);
+`Unit.gd` walk size scale keeps draw height = idle. Smoke: `PASS walk/idle size parity`.
+Screenshot: `docs/screenshots/t37_spearman.png` (spearman walking beside villager + TC,
+default zoom).
+
 ### Art debt (walk-v2)
 
-- Spearman spear is **diagonal** (tip ≈ helmet height) while idle holds it **vertical** above the head
-  (idle is 45 px tall, over the 40 px cell) — silhouette changes when he starts walking; body size now matches idle.
-- Spearman faces quantize to warm yellow/orange; helmet darker than idle's light grey.
+- ~~Spearman spear is diagonal while idle holds it vertical~~ **fixed in T-37**.
+- Spearman faces may still quantize warmer than idle; helmet can read slightly darker grey.
 - Archer is ~**2 px slimmer** than idle (19 vs 21 px in down row; front frames 38 px tall); bow string dotted
   (same as idle); a couple of stray red pixels on the bow in down/up frame 2; side frames 0 and 3 are both wide strides.
 
@@ -165,8 +174,8 @@ crop → NN scale → shared 32-colour palette). No `gen_*` procedural drawing.
 | `assets/sprites/units/knight_walk.png` | 216×300 | 4×4 cells **54×75** (= idle canvas); team-blue on barding/shield |
 | `assets/sprites/fx/rally_flag.png` | 19×30 | wooden stake + red banner |
 
-`Unit.gd` also scales walk cells so draw height matches the idle facing texture (covers
-spearman 40-cell vs 45 idle, etc.). Smoke: `PASS walk/idle size parity`.
+`Unit.gd` also scales walk cells so draw height matches the idle facing texture.
+Smoke: `PASS walk/idle size parity`.
 Screenshot: `docs/screenshots/t34_cav_walk.png` (cavalry + villager + TC, default zoom).
 
 ### Art debt (cavalry walk)
