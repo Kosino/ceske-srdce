@@ -410,7 +410,7 @@ func prepare_monk_screenshot() -> void:
 	_save_shot("monk.png", 0)
 
 
-## T-19: Mlýn + farm plots (empty / sown / ripe) nearby.
+## T-19: Mlýn + farm with villager farming (ripe field).
 func prepare_farms_screenshot() -> void:
 	DisplayServer.window_set_size(Vector2i(1280, 720))
 	var debug := get_node_or_null("DebugPanel")
@@ -428,21 +428,26 @@ func prepare_farms_screenshot() -> void:
 	mill.is_complete = true
 	mill.position = origin
 	units.add_child(mill)
-	var offsets := [Vector2(-100, 70), Vector2(0, 90), Vector2(100, 70)]
-	var states := ["empty", "sown", "ripe"]
-	for i in range(3):
-		var farm: Farm = preload("res://scenes/buildings/Farm.tscn").instantiate() as Farm
-		farm.team = 0
-		farm.is_complete = true
-		farm.farm_state = states[i]
-		farm.position = origin + offsets[i]
-		units.add_child(farm)
-		farm.set_farm_state(states[i])
-	SelectionManager.select_building(mill)
+	var farm: Farm = preload("res://scenes/buildings/Farm.tscn").instantiate() as Farm
+	farm.team = 0
+	farm.is_complete = true
+	farm.amount_remaining = Farm.STOCKPILE
+	farm.farm_state = "ripe"
+	farm.position = origin + Vector2(20, 95)
+	units.add_child(farm)
+	farm.set_farm_state("ripe")
+	var villager: Villager = preload("res://scenes/units/Villager.tscn").instantiate() as Villager
+	villager.team = 0
+	villager.contribute_population = false
+	villager.position = farm.position + Vector2(-18, 10)
+	units.add_child(villager)
+	villager.assign_gather(farm, mill)
+	await get_tree().create_timer(0.35).timeout
+	SelectionManager.select_single(villager)
 	var cam := get_node_or_null("Camera2D") as RTSCamera
 	if cam:
-		cam.set_zoom_clamped(1.2)
-		cam.center_at(origin + Vector2(0, 50))
+		cam.set_zoom_clamped(1.25)
+		cam.center_at(origin + Vector2(10, 60))
 	await get_tree().create_timer(0.5).timeout
 	await get_tree().process_frame
 	_save_shot("t19_farms.png", 0)
@@ -2929,7 +2934,7 @@ func _run_age4_siege_smoke() -> void:
 	await get_tree().physics_frame
 
 
-## T-19 farm plots: sprite loads + Farm uses it; requires Mill; placeable.
+## T-19 farm plots: sprite + Mill prereq + gather food + deplete → empty.
 func _run_farm_plots_smoke() -> void:
 	await get_tree().physics_frame
 	GameManager.current_age = 1
@@ -2954,6 +2959,8 @@ func _run_farm_plots_smoke() -> void:
 		and AgeData.building_unlock_age("farm") == 1
 		and BuildingPlacer.FOOTPRINTS["farm"] == Vector2(80, 80)
 		and str(BuildingPlacer.REQUIRES_BUILDING.get("farm", "")) == "mill"
+		and is_equal_approx(Villager.FARM_HARVEST_RATE, 0.33)
+		and Farm.STOCKPILE == 175
 	)
 
 	# Blocked without mill.
@@ -2968,51 +2975,85 @@ func _run_farm_plots_smoke() -> void:
 		mill.build_progress = 1.0
 		mill.hp = mill.max_hp
 		mill._show_final_visual()
+		mill._on_construction_finished()
 	await get_tree().physics_frame
 
-	var farm: Farm = building_placer.place_at("farm", PLAYER_TC_POS + Vector2(360, 200)) as Farm
+	var farm: Farm = building_placer.place_at("farm", PLAYER_TC_POS + Vector2(340, 200)) as Farm
 	var place_ok: bool = farm != null and building_placer._prereq_met("farm")
 	if farm:
 		farm.is_complete = true
 		farm.build_progress = 1.0
 		farm.hp = farm.max_hp
-		farm.set_farm_state("ripe")
+		farm._on_construction_finished()
 		farm._show_final_visual()
 	await get_tree().physics_frame
 
+	var sown_ok: bool = farm != null and farm.farm_state == "sown" and farm.amount_remaining == Farm.STOCKPILE
 	var uses_sprite: bool = false
 	if farm:
 		var vis := farm.get_node_or_null("Visual") as Sprite2D
-		uses_sprite = (
-			vis != null
-			and vis.texture != null
-			and vis.texture.get_width() == 80
-			and (
-				vis.texture == Farm.TEX_RIPE
-				or vis.texture == Farm.TEX_DEFAULT
-				or vis.texture.resource_path.ends_with("farm.png")
-				or vis.texture.resource_path.ends_with("farm_ripe.png")
-			)
-		)
-		# Cycle states — sprites swap.
-		farm.set_farm_state("empty")
-		var empty_ok: bool = vis.texture == Farm.TEX_EMPTY
-		farm.set_farm_state("sown")
-		var sown_ok: bool = vis.texture == Farm.TEX_SOWN
-		farm.set_farm_state("ripe")
-		var ripe_ok: bool = vis.texture == Farm.TEX_RIPE
-		uses_sprite = uses_sprite and empty_ok and sown_ok and ripe_ok
+		uses_sprite = vis != null and vis.texture == Farm.TEX_SOWN
 
-	var all_ok: bool = sprites_ok and design_ok and prereq_ok and mill_ok and place_ok and uses_sprite
+	# Gather: villager on farm deposits food at mill → player food rises.
+	var villager: Villager = null
+	for n in get_tree().get_nodes_in_group("villagers"):
+		if n is Villager and (n as Villager).team == 0:
+			villager = n as Villager
+			break
+	var food0 := GameManager.food
+	var gather_ok := false
+	var one_farmer_ok := false
+	if farm and villager and mill:
+		farm.amount_remaining = 12
+		farm.farm_state = "sown"
+		farm._apply_farm_sprite()
+		villager.carry_capacity = 1
+		villager.global_position = farm.global_position + Vector2(8, 8)
+		if villager.navigation_agent:
+			villager.navigation_agent.target_position = villager.global_position
+		await get_tree().physics_frame
+		villager.assign_gather(farm, mill)
+		one_farmer_ok = farm.has_farmer()
+		var v2: Villager = VILLAGER_SCENE.instantiate() as Villager
+		v2.team = 0
+		v2.contribute_population = false
+		v2.global_position = farm.global_position + Vector2(-20, 0)
+		units.add_child(v2)
+		v2.assign_gather(farm, mill)
+		one_farmer_ok = one_farmer_ok and v2.target_resource != farm
+		v2.queue_free()
+		# 0.33/s × carry 1 ≈ ~3s to first deposit; allow headless slack.
+		for _i in 900:
+			await get_tree().physics_frame
+			if GameManager.food > food0:
+				gather_ok = true
+				break
+		# Force deplete remainder and confirm empty state.
+		if is_instance_valid(farm) and not farm.is_depleted():
+			farm.harvest(farm.amount_remaining)
+		var empty_ok: bool = farm.is_depleted() and farm.farm_state == "empty"
+		uses_sprite = uses_sprite and empty_ok
+	else:
+		one_farmer_ok = false
+
+	var all_ok: bool = (
+		sprites_ok and design_ok and prereq_ok and mill_ok and place_ok
+		and sown_ok and uses_sprite and gather_ok and one_farmer_ok
+	)
 	print(
-		"[TEST] farm sprites=%s design=%s prereq=%s mill=%s place=%s uses=%s"
-		% [sprites_ok, design_ok, prereq_ok, mill_ok, place_ok, uses_sprite]
+		"[TEST] farm sprites=%s design=%s prereq=%s mill=%s place=%s sown=%s gather=%s one=%s empty=%s"
+		% [
+			sprites_ok, design_ok, prereq_ok, mill_ok, place_ok, sown_ok,
+			gather_ok, one_farmer_ok, uses_sprite
+		]
 	)
 	if all_ok:
-		print("[TEST] PASS farm plots sprite loads and Farm uses it")
+		print("[TEST] PASS farm plots gather food and deplete to empty")
 	else:
-		print("[TEST] FAIL farm plots sprite loads and Farm uses it")
+		print("[TEST] FAIL farm plots gather food and deplete to empty")
 
+	if villager != null and is_instance_valid(villager):
+		villager.command_stop()
 	for n in [mill, farm]:
 		if n != null and is_instance_valid(n):
 			n.queue_free()

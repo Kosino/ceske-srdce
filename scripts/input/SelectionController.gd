@@ -163,6 +163,11 @@ func _issue_right_click_command() -> void:
 		SelectionManager.issue_gather(resource)
 		NotificationManager.show_message("Sklizeň: %s" % resource.resource_type)
 		return
+	var farm := _find_farm_at(world_pos)
+	if farm:
+		SelectionManager.issue_gather(farm)
+		NotificationManager.show_message("Sklizeň: farma")
+		return
 	var site := _find_unfinished_building_at(world_pos)
 	if site:
 		SelectionManager.issue_build(site)
@@ -212,6 +217,23 @@ func _find_resource_at(world_pos: Vector2) -> ResourceNode:
 		if d < best_dist + res.gather_radius:
 			best_dist = d
 			best = res
+	return best
+
+
+func _find_farm_at(world_pos: Vector2) -> Farm:
+	var best: Farm = null
+	var best_dist := 48.0
+	for node in get_tree().get_nodes_in_group("farms"):
+		if not (node is Farm):
+			continue
+		var farm := node as Farm
+		if farm.team != 0 or not farm.is_complete or farm.is_depleted():
+			continue
+		var radius := farm.gather_radius
+		var d := farm.global_position.distance_to(world_pos)
+		if d < best_dist + radius * 0.35:
+			best_dist = d
+			best = farm
 	return best
 
 

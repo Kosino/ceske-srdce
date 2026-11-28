@@ -6,11 +6,12 @@ enum State {
 	MOVE_TO_BUILD, BUILDING, MOVE_TO_REPAIR, REPAIRING
 }
 
-## DESIGN: wood 0.40/s; gold/stone = wood × 0.9; food 0.31/s. Carry 10.
+## DESIGN: wood 0.40/s; gold/stone = wood × 0.9; food bush 0.30; farm 0.33. Carry 10.
 const WOOD_HARVEST_RATE := 0.40
+const FARM_HARVEST_RATE := 0.33
 const HARVEST_RATES := {
 	"wood": WOOD_HARVEST_RATE,
-	"food": 0.31,
+	"food": 0.30,
 	"gold": WOOD_HARVEST_RATE * 0.9,
 	"stone": WOOD_HARVEST_RATE * 0.9,
 }
@@ -21,7 +22,8 @@ const REPAIR_HP_PER_SEC := 1.0
 @export var carry_capacity: int = 10
 
 var state: State = State.IDLE
-var target_resource: ResourceNode
+## ResourceNode or Farm (duck-typed harvest / is_depleted / gather_radius).
+var target_resource: Node2D
 var target_dropoff: Node2D
 var target_building: Building
 var target_repair: Building
@@ -46,18 +48,27 @@ func _ready() -> void:
 	_refresh_carry_label()
 
 
-func assign_gather(resource: ResourceNode, dropoff: Node2D = null) -> void:
+func assign_gather(resource: Node2D, dropoff: Node2D = null) -> void:
 	if resource == null or not is_instance_valid(resource):
 		return
-	if not resource.has_method("harvest"):
+	if not resource.has_method("harvest") or not resource.has_method("is_depleted"):
 		print("[GATHER] refuse harvest target (not a resource): %s" % resource.name)
 		return
+	if resource.call("is_depleted"):
+		return
+	if resource is Farm and not (resource as Farm).is_complete:
+		return
 	_leave_build_site()
-	target_resource = resource
+	_release_farm_claim()
+	target_resource = null
 	target_dropoff = dropoff
-	if is_instance_valid(target_resource):
-		if not target_resource.depleted.is_connected(_on_resource_depleted):
-			target_resource.depleted.connect(_on_resource_depleted, CONNECT_ONE_SHOT)
+	if resource is Farm:
+		if not (resource as Farm).try_claim_farmer(self):
+			NotificationManager.show_message("Farma už má zemědělce.")
+			return
+	target_resource = resource
+	if target_resource.has_signal("depleted") and not target_resource.depleted.is_connected(_on_resource_depleted):
+		target_resource.depleted.connect(_on_resource_depleted, CONNECT_ONE_SHOT)
 	_go_to_resource()
 
 
@@ -120,7 +131,11 @@ func notify_build_finished(building: Building) -> void:
 
 
 func _harvest_rate_for(resource_type: String) -> float:
-	var base := float(HARVEST_RATES.get(resource_type, 0.30))
+	var base: float
+	if target_resource is Farm:
+		base = FARM_HARVEST_RATE
+	else:
+		base = float(HARVEST_RATES.get(resource_type, 0.30))
 	return base * GameManager.gather_rate_mult(team, resource_type)
 
 
@@ -221,8 +236,14 @@ func command_attack(target: Node2D) -> void:
 
 
 func _interrupt_gather_orders() -> void:
+	_release_farm_claim()
 	target_resource = null
 	target_dropoff = null
+
+
+func _release_farm_claim() -> void:
+	if target_resource is Farm and is_instance_valid(target_resource):
+		(target_resource as Farm).release_farmer(self)
 
 
 func _leave_build_site() -> void:
@@ -268,14 +289,22 @@ func _begin_building() -> void:
 
 
 func _go_to_resource() -> void:
-	if not is_instance_valid(target_resource) or target_resource.is_depleted():
+	if not is_instance_valid(target_resource) or target_resource.call("is_depleted"):
+		_release_farm_claim()
 		state = State.IDLE
 		stop_movement()
 		return
-	if not (target_resource is ResourceNode):
+	if not target_resource.has_method("harvest"):
 		print("[GATHER] refuse non-resource gather target")
+		_release_farm_claim()
 		target_resource = null
 		state = State.IDLE
+		return
+	if target_resource is Farm and not (target_resource as Farm).try_claim_farmer(self):
+		NotificationManager.show_message("Farma už má zemědělce.")
+		target_resource = null
+		state = State.IDLE
+		stop_movement()
 		return
 	state = State.MOVE_TO_RESOURCE
 	attack_target = null
@@ -283,23 +312,31 @@ func _go_to_resource() -> void:
 
 
 func _begin_harvest() -> void:
-	if not is_instance_valid(target_resource) or target_resource.is_depleted():
+	if not is_instance_valid(target_resource) or target_resource.call("is_depleted"):
+		_release_farm_claim()
 		state = State.IDLE
 		return
 	if not target_resource.has_method("harvest"):
 		print("[GATHER] refuse harvesting non-resource %s" % target_resource.name)
+		_release_farm_claim()
+		target_resource = null
+		state = State.IDLE
+		return
+	if target_resource is Farm and not (target_resource as Farm).try_claim_farmer(self):
+		NotificationManager.show_message("Farma už má zemědělce.")
 		target_resource = null
 		state = State.IDLE
 		return
 	state = State.HARVESTING
-	carried_type = target_resource.resource_type
+	carried_type = str(target_resource.get("resource_type"))
 	_harvest_accumulator = 0.0
 	stop_movement()
 	print("[GATHER] harvesting %s" % carried_type)
 
 
 func _harvest(delta: float) -> void:
-	if not is_instance_valid(target_resource) or target_resource.is_depleted():
+	if not is_instance_valid(target_resource) or target_resource.call("is_depleted"):
+		_release_farm_claim()
 		if carried_amount > 0:
 			_go_to_dropoff()
 		else:
@@ -313,7 +350,7 @@ func _harvest(delta: float) -> void:
 	_harvest_accumulator -= float(chunk)
 
 	var room := carry_capacity - carried_amount
-	var taken := target_resource.harvest(mini(chunk, room))
+	var taken: int = int(target_resource.call("harvest", mini(chunk, room)))
 	carried_amount += taken
 	if taken > 0:
 		if carried_type == "wood":
@@ -322,7 +359,9 @@ func _harvest(delta: float) -> void:
 			AudioManager.play_sfx("mining")
 	_refresh_carry_label()
 
-	if carried_amount >= carry_capacity or not is_instance_valid(target_resource):
+	if carried_amount >= carry_capacity or not is_instance_valid(target_resource) or target_resource.call("is_depleted"):
+		if is_instance_valid(target_resource) and target_resource.call("is_depleted"):
+			_release_farm_claim()
 		_go_to_dropoff()
 
 
@@ -382,7 +421,10 @@ func _find_nearest_dropoff(resource_type: String) -> Node2D:
 func _reached_resource() -> bool:
 	if not is_instance_valid(target_resource):
 		return false
-	return global_position.distance_to(target_resource.global_position) <= target_resource.gather_radius
+	var radius := 28.0
+	if "gather_radius" in target_resource:
+		radius = float(target_resource.get("gather_radius"))
+	return global_position.distance_to(target_resource.global_position) <= radius
 
 
 func _dropoff_radius(node: Node2D) -> float:
@@ -398,6 +440,7 @@ func _reached_dropoff() -> bool:
 
 
 func _on_resource_depleted() -> void:
+	_release_farm_claim()
 	if state == State.HARVESTING or state == State.MOVE_TO_RESOURCE:
 		if carried_amount > 0:
 			_go_to_dropoff()

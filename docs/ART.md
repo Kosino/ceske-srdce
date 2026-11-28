@@ -32,7 +32,7 @@ Production PNGs live under `assets/sprites/{buildings,units,resources,terrain,fx
 | `assets/sprites/buildings/siege_workshop.png` | 120×90 | footprint 80×80 | Obléhací dílna / SiegeWorkshop | wired (T-23) |
 | `assets/sprites/units/ram_{down,left,right,up}.png` | 48×45 | collision ~20×20 | Beranidlo / Ram | facing from velocity |
 | `assets/sprites/units/trebuchet_{down,left,right,up}.png` | 56×64 | collision ~22×22 | Trebuchet | packed look; unpack = offset/modulate |
-| `assets/sprites/buildings/farm.png` (+ `_empty` / `_sown` / `_ripe`) | 80×53–54 | footprint 80×80 | Farma / Farm | wired (T-19); default = ripe |
+| `assets/sprites/buildings/farm.png` (+ `_empty` / `_sown` / `_ripe`) | 80×53–54 | footprint 80×80 | Farma / Farm | wired (T-19); ghost = ripe; new build = sown |
 
 ## Integration (done)
 
@@ -86,7 +86,7 @@ Farm field sprites from the original PR #10 pipeline (magenta key → defringe �
 | `assets/sprites/buildings/farm_ripe.png` | 80×53 | golden wheat |
 | `assets/sprites/buildings/farm.png` | 80×53 | alias of ripe (default place / ghost) |
 
-Wired as `Farm` building (visual + placement; requires Mill; no gather loop yet). Screenshot: `docs/screenshots/t19_farms.png`.
+Wired as `Farm` building (requires Mill). Gather: 0.33 food/s, stockpile 175, max 1 farmer; drop-off Mill/TC. States: sown (new) → ripe (farming) → empty (depleted). Reseed deferred. Screenshot: `docs/screenshots/t19_farms.png`.
 
 ## T-18 team recolour (palette swap)
 

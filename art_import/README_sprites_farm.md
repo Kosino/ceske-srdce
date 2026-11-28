@@ -8,7 +8,7 @@ No procedurally drawn pixels.
 ## Notes for integration
 
 - Canvases are bottom-centred: 80×53–54 (footprint 80×80). Feet/anchor via `Building._anchor_sprite`.
-- Default place / ghost texture: `farm.png` (= ripe).
+- Ghost texture: `farm.png` (= ripe). New complete farm uses `farm_sown.png` until farming → ripe → empty.
 - Camera: front 3/4 / almost straight-on (same as mill / siege), not isometric.
 - Do NOT draw sprites procedurally. New art = generate on magenta + this pipeline.
 
