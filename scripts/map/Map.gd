@@ -124,6 +124,8 @@ func _ready() -> void:
 		await prepare_walk_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--walk-v2-shot"):
 		await prepare_walk_v2_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--cav-walk-shot"):
+		await prepare_cav_walk_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--team-read-shot"):
 		await prepare_team_read_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--fog-shot"):
@@ -319,6 +321,87 @@ func prepare_team_read_screenshot() -> void:
 		]
 	)
 	_save_shot("t28_team_read.png", 0)
+
+
+## T-34: light cavalry + knight mid-walk + rally flag sprite.
+func prepare_cav_walk_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	for n in get_tree().get_nodes_in_group("player_town_hall"):
+		if n is Node2D:
+			(n as Node2D).visible = false
+			(n as Node2D).position = Vector2(-4000, -4000)
+	for n in get_tree().get_nodes_in_group("enemy_town_hall"):
+		if n is Node2D:
+			(n as Node2D).visible = false
+			(n as Node2D).position = Vector2(-4000, -4000)
+	for n in get_tree().get_nodes_in_group("units"):
+		if n is Unit and is_instance_valid(n):
+			(n as Unit).visible = false
+			(n as Unit).position = Vector2(-5000, -5000)
+	var origin := Vector2(980, 720)
+	var cav: LightCavalry = preload("res://scenes/units/LightCavalry.tscn").instantiate() as LightCavalry
+	cav.team = 0
+	cav.contribute_population = false
+	cav.position = origin + Vector2(-40, 10)
+	units.add_child(cav)
+	var kn: Knight = preload("res://scenes/units/Knight.tscn").instantiate() as Knight
+	kn.team = 0
+	kn.contribute_population = false
+	kn.position = origin + Vector2(90, 10)
+	units.add_child(kn)
+	var hall: DropOff = DROPOFF_SCENE.instantiate() as DropOff
+	hall.team = 0
+	hall.position = origin + Vector2(-160, 40)
+	hall.spawn_parent = units
+	units.add_child(hall)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	for u in [cav, kn]:
+		u.set_process(false)
+		u.set_physics_process(false)
+		if u.navigation_agent:
+			u.navigation_agent.avoidance_enabled = false
+			if u.navigation_agent.velocity_computed.is_connected(u._on_velocity_computed):
+				u.navigation_agent.velocity_computed.disconnect(u._on_velocity_computed)
+	cav._facing = "right"
+	cav._walk_frame = 1
+	cav.velocity = Vector2(90, 0)
+	kn._facing = "right"
+	kn._walk_frame = 2
+	kn.velocity = Vector2(80, 0)
+	for u in [cav, kn]:
+		if u._visual == null:
+			u._visual = u.get_node_or_null("Visual") as Sprite2D
+		if u.has_walk_sheet():
+			u._apply_walk_frame()
+			u._visual.scale = Vector2(2.2, 2.2)
+			u._anchor_sprite_to_feet()
+	SelectionManager.clear_selection()
+	SelectionManager.select_building(hall)
+	SelectionManager.set_building_rally(origin + Vector2(40, -50), null)
+	var rally := RallyPointController.of(hall)
+	if rally:
+		rally.visible = true
+		if rally._flag:
+			rally._flag.scale = Vector2(2.5, 2.5)
+	if cam:
+		cam.set_zoom_clamped(2.2)
+		cam.center_at(origin + Vector2(20, -10))
+	await get_tree().process_frame
+	await get_tree().process_frame
+	print(
+		"[SHOT] cav-walk lc_sheet=%s kn_sheet=%s flag=%s"
+		% [
+			str(cav.has_walk_sheet()),
+			str(kn.has_walk_sheet()),
+			str(rally != null and rally.has_flag_sprite()),
+		]
+	)
+	_save_shot("t34_cav_walk.png", 0)
 
 
 ## T-27: archer + spearman mid-walk (walk-v2 sheets) + idle facing.
@@ -4195,6 +4278,16 @@ func _run_walk_cycle_smoke() -> void:
 	monk.contribute_population = false
 	monk.position = PLAYER_TC_POS + Vector2(380, 120)
 	units.add_child(monk)
+	var cav: LightCavalry = preload("res://scenes/units/LightCavalry.tscn").instantiate() as LightCavalry
+	cav.team = 0
+	cav.contribute_population = false
+	cav.position = PLAYER_TC_POS + Vector2(440, 120)
+	units.add_child(cav)
+	var kn: Knight = preload("res://scenes/units/Knight.tscn").instantiate() as Knight
+	kn.team = 0
+	kn.contribute_population = false
+	kn.position = PLAYER_TC_POS + Vector2(520, 120)
+	units.add_child(kn)
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 
@@ -4203,6 +4296,8 @@ func _run_walk_cycle_smoke() -> void:
 		and sol_ai.has_walk_sheet()
 		and archer.has_walk_sheet()
 		and spear.has_walk_sheet()
+		and cav.has_walk_sheet()
+		and kn.has_walk_sheet()
 	)
 	# Idle fallback: unit without a walk sheet stays on static facing while "moving".
 	var fallback_ok: bool = not monk.has_walk_sheet()
@@ -4294,6 +4389,42 @@ func _run_walk_cycle_smoke() -> void:
 		and spear.walk_frame() != spear_frame_before
 	)
 
+	# T-34: light cavalry + knight advance walk frames while moving.
+	var cav_frame_before: int = cav.walk_frame()
+	cav.velocity = Vector2(90, 0)
+	cav._update_facing_from_velocity()
+	var cav_saw_change: bool = false
+	for _c in range(5):
+		cav._update_walk_animation(0.05)
+		if cav.walk_frame() != cav_frame_before:
+			cav_saw_change = true
+	var cav_walk_ok: bool = (
+		cav.has_walk_sheet()
+		and cav.is_walk_animating()
+		and cav._visual.texture == cav._walk_sheet
+		and cav._visual.hframes == Unit.WALK_FRAME_COUNT
+		and cav._visual.vframes == Unit.WALK_DIRS.size()
+		and cav_saw_change
+		and cav.walk_frame() != cav_frame_before
+	)
+	var kn_frame_before: int = kn.walk_frame()
+	kn.velocity = Vector2(80, 0)
+	kn._update_facing_from_velocity()
+	var kn_saw_change: bool = false
+	for _k in range(5):
+		kn._update_walk_animation(0.05)
+		if kn.walk_frame() != kn_frame_before:
+			kn_saw_change = true
+	var kn_walk_ok: bool = (
+		kn.has_walk_sheet()
+		and kn.is_walk_animating()
+		and kn._visual.texture == kn._walk_sheet
+		and kn._visual.hframes == Unit.WALK_FRAME_COUNT
+		and kn._visual.vframes == Unit.WALK_DIRS.size()
+		and kn_saw_change
+		and kn.walk_frame() != kn_frame_before
+	)
+
 	# Monk without sheet stays on static facing while "moving".
 	monk.velocity = Vector2(60, 0)
 	monk._update_facing_from_velocity()
@@ -4318,10 +4449,12 @@ func _run_walk_cycle_smoke() -> void:
 		and modulate_ok
 		and archer_walk_ok
 		and spear_walk_ok
+		and cav_walk_ok
+		and kn_walk_ok
 		and tex_before != null
 	)
 	print(
-		"[TEST] walk sheet=%s fallback=%s idle=%s moved=%s back_idle=%s modulate=%s archer=%s spear=%s"
+		"[TEST] walk sheet=%s fallback=%s idle=%s moved=%s back_idle=%s modulate=%s archer=%s spear=%s cav=%s knight=%s"
 		% [
 			sheet_ok,
 			fallback_ok,
@@ -4331,13 +4464,19 @@ func _run_walk_cycle_smoke() -> void:
 			modulate_ok,
 			archer_walk_ok,
 			spear_walk_ok,
+			cav_walk_ok,
+			kn_walk_ok,
 		]
 	)
 	if all_ok:
 		print("[TEST] PASS walk cycle (frame change + idle + AI modulate)")
 	else:
 		print("[TEST] FAIL walk cycle (frame change + idle + AI modulate)")
-	for n in [vill, sol_ai, archer, spear, monk]:
+	if cav_walk_ok and kn_walk_ok:
+		print("[TEST] PASS cavalry walk frames")
+	else:
+		print("[TEST] FAIL cavalry walk frames")
+	for n in [vill, sol_ai, archer, spear, monk, cav, kn]:
 		if n != null and is_instance_valid(n):
 			n.queue_free()
 	await get_tree().physics_frame
@@ -4525,7 +4664,12 @@ func _run_aoe_controls_smoke() -> void:
 	var rally_ground := hall.global_position + Vector2(160, 40)
 	var set_ok := SelectionManager.set_building_rally(rally_ground, null)
 	var rally := RallyPointController.of(hall)
-	rally_flag_ok = set_ok and rally != null and rally.has_rally and rally.visible
+	var rally_sprite_ok := (
+		rally != null
+		and rally.has_flag_sprite()
+		and ResourceLoader.exists("res://assets/sprites/fx/rally_flag.png")
+	)
+	rally_flag_ok = set_ok and rally != null and rally.has_rally and rally.visible and rally_sprite_ok
 	# Ground rally → trained villager moves there.
 	GameManager.add_resource("food", 100)
 	GameManager.add_population_cap(5)
@@ -4561,13 +4705,17 @@ func _run_aoe_controls_smoke() -> void:
 			break
 	rally_gather_ok = gatherer != null
 	print(
-		"[TEST] rally flag=%s move=%s gather=%s queued=%s"
-		% [rally_flag_ok, rally_move_ok, rally_gather_ok, queued]
+		"[TEST] rally flag=%s sprite=%s move=%s gather=%s queued=%s"
+		% [rally_flag_ok, rally_sprite_ok, rally_move_ok, rally_gather_ok, queued]
 	)
 	if rally_flag_ok and rally_move_ok and rally_gather_ok:
 		print("[TEST] PASS rally point (flag + move + gather)")
 	else:
 		print("[TEST] FAIL rally point (flag + move + gather)")
+	if rally_sprite_ok and rally != null and rally.visible and rally.has_rally:
+		print("[TEST] PASS rally flag sprite")
+	else:
+		print("[TEST] FAIL rally flag sprite")
 	if is_instance_valid(hall):
 		hall.queue_free()
 	await get_tree().physics_frame

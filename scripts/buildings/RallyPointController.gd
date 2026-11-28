@@ -4,9 +4,12 @@ class_name RallyPointController
 ## if rally is on a resource (or farm), villagers start gathering.
 
 
+const FLAG_TEX: Texture2D = preload("res://assets/sprites/fx/rally_flag.png")
+
 var has_rally: bool = false
 var rally_world: Vector2 = Vector2.ZERO
 var rally_target: Node2D = null
+var _flag: Sprite2D
 
 
 static func ensure(host: Node) -> RallyPointController:
@@ -39,6 +42,31 @@ static func can_host(node: Node) -> bool:
 	return node.has_signal("unit_spawned") and node.has_method("get_queue_summary")
 
 
+func _ready() -> void:
+	_ensure_flag_sprite()
+
+
+func _ensure_flag_sprite() -> void:
+	if _flag != null and is_instance_valid(_flag):
+		return
+	_flag = get_node_or_null("Flag") as Sprite2D
+	if _flag == null:
+		_flag = Sprite2D.new()
+		_flag.name = "Flag"
+		add_child(_flag)
+	_flag.texture = FLAG_TEX
+	_flag.centered = true
+	_flag.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	# Feet / stake base at rally world position.
+	var h := float(FLAG_TEX.get_height()) if FLAG_TEX else 28.0
+	_flag.offset = Vector2(0.0, -h * 0.5)
+
+
+func has_flag_sprite() -> bool:
+	_ensure_flag_sprite()
+	return _flag != null and _flag.texture != null and _flag.texture == FLAG_TEX
+
+
 func set_rally(world_pos: Vector2, target: Node2D = null) -> void:
 	has_rally = true
 	rally_world = world_pos
@@ -48,15 +76,14 @@ func set_rally(world_pos: Vector2, target: Node2D = null) -> void:
 		rally_target = null
 	top_level = true
 	global_position = world_pos
+	_ensure_flag_sprite()
 	visible = true
-	queue_redraw()
 
 
 func clear_rally() -> void:
 	has_rally = false
 	rally_target = null
 	visible = false
-	queue_redraw()
 
 
 func apply_to_unit(unit: Node) -> void:
@@ -76,10 +103,5 @@ func apply_to_unit(unit: Node) -> void:
 
 
 func _draw() -> void:
-	if not has_rally or not visible:
-		return
-	# Small placeholder flag (art pipeline can replace later).
-	draw_line(Vector2(0, 2), Vector2(0, -20), Color(0.32, 0.2, 0.08), 2.0)
-	var pts := PackedVector2Array([Vector2(1, -20), Vector2(16, -14), Vector2(1, -8)])
-	draw_colored_polygon(pts, Color(0.88, 0.18, 0.14, 0.95))
-	draw_circle(Vector2(0, 2), 3.0, Color(0.15, 0.15, 0.15, 0.9))
+	# Sprite2D flag replaces the old procedural polygon placeholder.
+	pass
