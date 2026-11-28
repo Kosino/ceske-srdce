@@ -84,6 +84,7 @@ func _ready() -> void:
 		await _run_command_panel_context_smoke()
 		await _run_garrison_smoke()
 		await _run_idle_excludes_garrison_smoke()
+		await _run_pop_counts_garrison_smoke()
 		await _run_balance_harness_smoke()
 		await _run_dock_fishing_smoke()
 		await _run_water_blocks_land_smoke()
@@ -144,6 +145,8 @@ func _ready() -> void:
 		await prepare_formation_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--ai-shot"):
 		await prepare_ai_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--t31-shot"):
+		await prepare_t31_ai_base_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--command-panel-shot"):
 		await prepare_command_panel_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--garrison-shot"):
@@ -206,9 +209,10 @@ func prepare_t36_ui_screenshot() -> void:
 		g.try_enter(v)
 		need -= 1
 	# Leave at least one free idle villager so Nečinní shows a non-garrison count.
+	## Must contribute pop — garrisoned units stay in Pop, so HUD matches living units.
 	var free_idle: Villager = VILLAGER_SCENE.instantiate() as Villager
 	free_idle.team = 0
-	free_idle.contribute_population = false
+	free_idle.contribute_population = true
 	free_idle.position = hall.global_position + Vector2(-50, 70)
 	units.add_child(free_idle)
 	free_idle.state = Villager.State.IDLE
@@ -1650,6 +1654,76 @@ func prepare_ai_screenshot() -> void:
 		cam.position = ai.base_position + Vector2(-80, 40)
 	await get_tree().process_frame
 	_save_shot("pixel_art_ai_economy.png", 0)
+
+
+## T-31: AI base after eco→wave→stone walls, fog off (F9).
+func prepare_t31_ai_base_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	var fog := _ensure_fog_of_war()
+	fog.fog_enabled = false
+	var victory := get_node_or_null("VictoryController") as VictoryController
+	if victory:
+		victory.set_process(false)
+	var ai := get_node_or_null("SimpleEnemyAI") as SimpleEnemyAI
+	if ai == null:
+		push_error("[SHOT] no SimpleEnemyAI")
+		get_tree().quit(1)
+		return
+	ai.rng.seed = 4242 + ai.team * 7919
+	ai.timing_jitter = 1.0
+	Engine.time_scale = 120.0
+	var start_elapsed: float = ai._sim_elapsed
+	var wall_t0 := Time.get_ticks_msec()
+	var frames := 0
+	while frames < 8000:
+		await get_tree().process_frame
+		frames += 1
+		var ph := get_tree().get_first_node_in_group("player_town_hall") as DropOff
+		if ph != null and is_instance_valid(ph):
+			ph.hp = ph.max_hp
+		## Wave first; defenses follow. Bound wall-clock for slow GL drivers.
+		if (
+			ai._waves_launched >= 1
+			and ai._count_own_buildings("watch_tower") >= 2
+			and ai._count_own_buildings("stone_wall") >= 40
+		):
+			break
+		if ai._sim_elapsed - start_elapsed >= 720.0:
+			break
+		if Time.get_ticks_msec() - wall_t0 > 90000:
+			break
+	Engine.time_scale = 1.0
+	ai.set_process(false)
+	## Ensure towers+walls visible even if wall-clock cut the sim short.
+	while (
+		ai._waves_launched >= 1
+		and ai._count_own_buildings("watch_tower") < 2
+		and ai.stone >= 125
+		and ai.wood >= 25
+	):
+		ai._try_place_next_building()
+	var guard := 0
+	while ai._waves_launched >= 1 and ai._count_own_buildings("stone_wall") < 48 and ai.stone >= 5 and guard < 20:
+		ai._try_place_stone_defenses()
+		guard += 1
+	## Non-headless shot: finish AI foundations so walls/towers read complete (no 0% spam).
+	for n in get_tree().get_nodes_in_group("enemy_buildings"):
+		if n is Building and not (n as Building).is_complete:
+			(n as Building)._finish_construction()
+	for n in get_tree().get_nodes_in_group("walls"):
+		if n is WallSegment and (n as WallSegment).team == ai.team and not (n as WallSegment).is_complete:
+			(n as WallSegment)._finish_construction()
+	ai.print_ai_summary()
+	var cam := get_node_or_null("Camera2D") as Camera2D
+	if cam:
+		cam.position = ai.base_position + Vector2(-40, 20)
+		cam.zoom = Vector2(0.75, 0.75)
+	await get_tree().create_timer(0.4).timeout
+	await get_tree().process_frame
+	_save_shot("t31_ai_base.png", 0)
 
 
 func _save_shot(filename: String, squad_n: int) -> void:
@@ -3201,8 +3275,10 @@ func _run_ai_economy_smoke() -> void:
 		victory.reset_for_test()
 	var stone_ok := ai.stone < 300
 	var wave_ok := ai._first_wave_count >= 6
+	var farms_ok := ai._count_farms() >= 4
+	var walls_ok := ai.walls_not_sealing()
 	print(
-		"[TEST] ai_economy vills=%d farms=%d age=%d waved=%s first_wave=%d stone=%d stone_ok=%s wave_ok=%s counter_ok=%s elapsed=%.0fs frames=%d"
+		"[TEST] ai_economy vills=%d farms=%d age=%d waved=%s first_wave=%d stone=%d stone_ok=%s wave_ok=%s farms_ok=%s walls_not_sealing=%s counter_ok=%s elapsed=%.0fs frames=%d"
 		% [
 			ai._count_villagers(),
 			ai._count_farms(),
@@ -3212,12 +3288,14 @@ func _run_ai_economy_smoke() -> void:
 			ai.stone,
 			stone_ok,
 			wave_ok,
+			farms_ok,
+			walls_ok,
 			counter_ok,
 			ai._sim_elapsed,
 			frames,
 		]
 	)
-	ok = ok and counter_ok and stone_ok and wave_ok
+	ok = ok and counter_ok and stone_ok and wave_ok and farms_ok and walls_ok
 	if ok:
 		print("[TEST] PASS AI places building and launches wave")
 	else:
@@ -5240,6 +5318,79 @@ func _run_idle_excludes_garrison_smoke() -> void:
 	SelectionManager.clear_selection()
 	SelectionManager.select_building(null)
 	for n in [free_v, gar_v, hall]:
+		if n != null and is_instance_valid(n):
+			n.queue_free()
+	await get_tree().physics_frame
+
+
+## Pop must keep garrisoned units (no drop on enter, no double on eject).
+func _run_pop_counts_garrison_smoke() -> void:
+	await get_tree().physics_frame
+	GameManager.add_population_cap(10)
+	var hall: DropOff = DROPOFF_SCENE.instantiate() as DropOff
+	hall.team = 0
+	hall.position = PLAYER_TC_POS + Vector2(-260, -200)
+	hall.spawn_parent = units
+	units.add_child(hall)
+	await get_tree().physics_frame
+	var g := GarrisonController.ensure(hall)
+	var pop0 := GameManager.population
+
+	var a: Villager = VILLAGER_SCENE.instantiate() as Villager
+	a.team = 0
+	a.contribute_population = true
+	a.position = hall.global_position + Vector2(28, 18)
+	units.add_child(a)
+	var b: Villager = VILLAGER_SCENE.instantiate() as Villager
+	b.team = 0
+	b.contribute_population = true
+	b.position = hall.global_position + Vector2(40, 26)
+	units.add_child(b)
+	await get_tree().physics_frame
+	var pop_after_spawn := GameManager.population
+	var spawn_ok := pop_after_spawn == pop0 + 2
+
+	var entered := g.try_enter(a) and g.try_enter(b)
+	await get_tree().process_frame
+	var pop_garrisoned := GameManager.population
+	## Not missing: garrisoned units still count toward Pop.
+	var keep_ok := entered and g.count() == 2 and pop_garrisoned == pop_after_spawn
+
+	g.eject_all(false)
+	await get_tree().physics_frame
+	var pop_ejected := GameManager.population
+	## Not double: eject must not re-add population.
+	var eject_ok := (
+		g.count() == 0
+		and not a.is_garrisoned
+		and not b.is_garrisoned
+		and pop_ejected == pop_after_spawn
+	)
+
+	g.try_enter(a)
+	await get_tree().process_frame
+	var pop_before_die := GameManager.population
+	a.die()
+	await get_tree().physics_frame
+	var pop_after_die := GameManager.population
+	var die_ok := (
+		pop_before_die == pop_after_spawn
+		and pop_after_die == pop_before_die - 1
+		and g.count() == 0
+	)
+
+	var all_ok := spawn_ok and keep_ok and eject_ok and die_ok
+	print(
+		"[TEST] pop_counts_garrison spawn=%d enter=%d eject=%d die=%d ok=%s"
+		% [pop_after_spawn - pop0, pop_garrisoned, pop_ejected, pop_after_die, all_ok]
+	)
+	if all_ok:
+		print("[TEST] PASS pop counts garrison")
+	else:
+		print("[TEST] FAIL pop counts garrison")
+
+	SelectionManager.clear_selection()
+	for n in [b, hall]:
 		if n != null and is_instance_valid(n):
 			n.queue_free()
 	await get_tree().physics_frame
