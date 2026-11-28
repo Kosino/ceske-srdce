@@ -142,6 +142,7 @@ Farma (T-19/T-25): po dostavbě stav `sown` se zásobou 175 jídla; sklizeň →
 | Pila | 100 D | 25 s | 600 | 80×80, drop-off dřevo |
 | Důlní tábor | 100 D | 25 s | 600 | 80×80, drop-off zlato + kámen |
 | Mlýn | 100 D | 35 s | 1000 | drop-off jídlo, farmy |
+| Přístaviště *(T-39)* | 150 D | 40 s | 1000 | 72×72, věk 1; jen na břehu (část footprintu na vodě); drop-off jídlo z ryb; trénuje Rybářskou loď |
 | Farma *(T-19)* | 60 D | 15 s | 480 | 80×80, vyžaduje Mlýn; jídlo 0.33/s; zásoba 175; max 1 zemědělec; stavy sown→ripe→empty |
 | Kasárna | 175 D | 50 s | 1200 | Zbrojnoš, Kopiník |
 | Střelnice | 175 D | 50 s | 1200 | Lučištník |
@@ -159,6 +160,7 @@ Farma (T-19/T-25): po dostavbě stav `sown` se zásobou 175 jídla; sklizeň →
 
 | Jednotka | Cena | Čas | HP | Funkce |
 |----------|------|-----|----|--------|
+| Rybářská loď *(T-39)* | 75 D | 25 s | 60 | věk 1 (Přístaviště); jen po vodě; lov hejn ryb (225 J); nosnost 15; drop-off přístaviště |
 | Mnich *(NÁVRH AoE II-like)* | 100 Z | 51 s | 30 | věk 3 (Klášter); léčení + konverze; bez klasického útoku; rychlost 56 px/s (0.7×); heal 4 HP/s / dosah 4 dlaždice; konverze ~8 s |
 | Beranidlo *(Schváleno T-13)* | 160 D, 75 Z | 36 s | 175 | věk 4 (Obléhací dílna); jen budovy/zdi; útok 2 + **125 vs budovy**; zbroj 0/7; 40 px/s (0.5×) |
 | Trebuchet *(Schváleno T-13)* | 200 D, 200 Z | 50 s | 150 | věk 4; jen budovy; pack/unpack 8 s; dosah 16 dlaždic / min 4; útok 40 pierce; zbroj 2/8; packed 48 px/s, unpacked 0 |
@@ -171,6 +173,8 @@ Oprava: vesničan RMB na poškozenou vlastní budovu/zeď — +1 HP/s; plná opr
 
 ### Mapa & doly (Fáze 4)
 Deterministický generátor (seed). U každé radnice (≤12 dlaždic): 1 les (~25 stromů), 6 keřů bobulí, 1 zlatý důl (7 dlaždic × 800), 1 kamenný důl (5 × 350). Zbytek mapy: 6–8 lesů + 2–3 doly (zlato/kámen), zrcadlově férové. Žádné zdroje na cestách/budovách.
+
+Řeka *(T-39)*: 1 meandrující tok (2–4 dlaždice šířky) napříč mapou + 1–2 brody (průchodné pro pozemní jednotky). Hluboká voda neprůchodná po zemi; rybářské lodě jen po vodě. 3–5 hejn ryb × 225 jídla.
 
 Poznámka: `population_max` = Radnice +5 a každý Dům +5, strop 200 (`GameManager.add_population_cap` / `can_add_population`).
 Lučištník střílí šípem na zamčenou pozici cíle v okamžiku výstřelu; zásah jen pokud cíl u dopadu zůstal (jinak miss). Žádný friendly fire.

@@ -8,6 +8,8 @@ const MAP_SIZE := Vector2(3000, 3000)
 const FOREST_COLOR := Color(0.08, 0.32, 0.12)
 const GOLD_COLOR := Color(0.92, 0.82, 0.2)
 const STONE_COLOR := Color(0.55, 0.55, 0.58)
+const WATER_COLOR := Color(0.18, 0.38, 0.72, 0.9)
+const FISH_COLOR := Color(0.75, 0.85, 0.95)
 const FRAME_COLOR := Color(1.0, 1.0, 0.85, 0.95)
 
 @onready var draw_area: MinimapDraw = %MinimapDraw as MinimapDraw
@@ -36,9 +38,11 @@ func paint_minimap(surf: Control) -> void:
 	if tree == null:
 		return
 	var fog := tree.get_first_node_in_group("fog_of_war") as FogOfWar
+	_draw_water(surf, r, fog)
 	_draw_dots(surf, tree, "forest_resources", FOREST_COLOR, r, 1.6, fog, false)
 	_draw_dots(surf, tree, "gold_mines", GOLD_COLOR, r, 2.4, fog, false)
 	_draw_dots(surf, tree, "stone_mines", STONE_COLOR, r, 2.4, fog, false)
+	_draw_dots(surf, tree, "fish_schools", FISH_COLOR, r, 2.0, fog, false)
 	_draw_building_squares(surf, tree, "player_buildings", TeamColors.minimap_build(0), r, fog, false)
 	# Enemy buildings: last-known only (newly built in grey stay hidden until sighted).
 	_draw_building_squares(surf, tree, "enemy_buildings", TeamColors.minimap_build(1), r, fog, false, true)
@@ -47,6 +51,30 @@ func paint_minimap(surf: Control) -> void:
 	_draw_dots(surf, tree, "enemy_units", TeamColors.minimap_unit(1), r, 2.5, fog, true)
 	_draw_fog_overlay(surf, r, fog)
 	_draw_camera_frame(surf, r)
+
+
+func _draw_water(surf: Control, r: Vector2, fog: FogOfWar) -> void:
+	if not WaterNav.has_water():
+		return
+	var cell := Vector2(r.x / float(WaterNav.MAP_TILES), r.y / float(WaterNav.MAP_TILES))
+	for t in WaterNav.water_tiles.keys():
+		var tile: Vector2i = t
+		var world := WaterNav.tile_center(tile)
+		if _fog_hides(fog, world, false):
+			continue
+		surf.draw_rect(
+			Rect2(Vector2(float(tile.x) * cell.x, float(tile.y) * cell.y), cell),
+			WATER_COLOR
+		)
+	for t2 in WaterNav.ford_tiles.keys():
+		var ft: Vector2i = t2
+		var fw := WaterNav.tile_center(ft)
+		if _fog_hides(fog, fw, false):
+			continue
+		surf.draw_rect(
+			Rect2(Vector2(float(ft.x) * cell.x, float(ft.y) * cell.y), cell),
+			Color(0.45, 0.38, 0.22, 0.85)
+		)
 
 
 func _fog_hides(fog: FogOfWar, world: Vector2, require_visible: bool) -> bool:

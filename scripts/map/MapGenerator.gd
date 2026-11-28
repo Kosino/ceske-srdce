@@ -18,6 +18,10 @@ const WORLD_FOREST_MIN := 6
 const WORLD_FOREST_MAX := 8
 const WORLD_MINE_MIN := 2
 const WORLD_MINE_MAX := 3
+const FISH_AMOUNT := 225
+const FISH_SCHOOL_MIN := 3
+const FISH_SCHOOL_MAX := 5
+const RIVER_CENTER_X := 37
 
 const RESOURCE_SCENE := preload("res://scenes/world/ResourceNode.tscn")
 
@@ -26,6 +30,8 @@ var rng := RandomNumberGenerator.new()
 var blocked: Dictionary = {} # Vector2i -> true
 var spawned: Array[Dictionary] = [] # {type, pos, amount} for tests
 var parent: Node2D
+## River tiles painted by Map after generate (water + fords).
+var river_paint: Array[Dictionary] = [] # {tile: Vector2i, kind: "water"|"ford"}
 
 
 func generate(
@@ -40,10 +46,15 @@ func generate(
 	rng.seed = p_seed
 	blocked.clear()
 	spawned.clear()
+	river_paint.clear()
+	WaterNav.clear()
 	for t in extra_blocked:
 		_block(t)
 	_block_footprint(player_tc, 3)
 	_block_footprint(enemy_tc, 3)
+
+	_place_river()
+	_place_fish_schools()
 
 	_place_tc_pack(player_tc, false)
 	_place_tc_pack(enemy_tc, true)
@@ -76,6 +87,95 @@ func count_near(tc: Vector2, resource_type: String, radius_tiles: float = float(
 		if (e["pos"] as Vector2).distance_to(tc) <= r + 0.5:
 			n += 1
 	return n
+
+
+## One meandering N–S river (2–4 tiles wide) with 1–2 walkable fords.
+func _place_river() -> void:
+	var width := rng.randi_range(2, 4)
+	var ford_count := rng.randi_range(1, 2)
+	# Ford Y positions between TCs band and south/north — avoid TC y≈17.
+	var ford_ys: Array[int] = []
+	var attempts := 0
+	while ford_ys.size() < ford_count and attempts < 40:
+		attempts += 1
+		var fy := rng.randi_range(8, MAP_TILES - 9)
+		if absi(fy - 17) < 6:
+			continue
+		var ok := true
+		for existing in ford_ys:
+			if absi(existing - fy) < 10:
+				ok = false
+				break
+		if ok:
+			ford_ys.append(fy)
+	if ford_ys.is_empty():
+		ford_ys.append(40)
+
+	var cx := RIVER_CENTER_X
+	for y in range(1, MAP_TILES - 1):
+		# Gentle meander.
+		var wobble := int(round(sin(float(y) * 0.18 + float(seed_value % 7)) * 2.0))
+		var center := cx + wobble
+		var half := width / 2
+		var is_ford_row := false
+		for fy in ford_ys:
+			if absi(y - fy) <= 1:
+				is_ford_row = true
+				break
+		for dx in range(-half, width - half):
+			var t := Vector2i(center + dx, y)
+			if not _in_bounds(t):
+				continue
+			# Keep TC clearings dry.
+			if _near_any_tc(t, 10):
+				continue
+			if is_ford_row:
+				WaterNav.set_ford(t)
+				river_paint.append({"tile": t, "kind": "ford"})
+			else:
+				WaterNav.set_water(t)
+				river_paint.append({"tile": t, "kind": "water"})
+			_block(t)
+
+
+func _place_fish_schools() -> void:
+	var water_list: Array[Vector2i] = []
+	for t in WaterNav.water_tiles.keys():
+		water_list.append(t as Vector2i)
+	if water_list.is_empty():
+		return
+	var count := rng.randi_range(FISH_SCHOOL_MIN, FISH_SCHOOL_MAX)
+	var placed := 0
+	var tries := 0
+	while placed < count and tries < 80:
+		tries += 1
+		var t: Vector2i = water_list[rng.randi_range(0, water_list.size() - 1)]
+		if not WaterNav.is_water(t):
+			continue
+		# Spread schools apart.
+		var too_close := false
+		for e in spawned:
+			if str(e.get("type", "")) != "fish":
+				continue
+			if (e["pos"] as Vector2).distance_to(_world_of(t)) < float(TILE * 6):
+				too_close = true
+				break
+		if too_close:
+			continue
+		_spawn_fish(t)
+		placed += 1
+
+
+func _spawn_fish(tile: Vector2i) -> void:
+	if parent == null:
+		return
+	var node: ResourceNode = RESOURCE_SCENE.instantiate() as ResourceNode
+	node.resource_type = "food"
+	node.is_fish_school = true
+	node.amount_remaining = FISH_AMOUNT
+	node.position = _world_of(tile)
+	parent.add_child(node)
+	spawned.append({"type": "fish", "pos": node.position, "amount": FISH_AMOUNT})
 
 
 func _place_tc_pack(tc: Vector2, mirror_x: bool) -> void:

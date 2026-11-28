@@ -7,6 +7,7 @@ const BUILD_BUTTONS := [
 	{"id": "lumber_camp", "name": "Pila"},
 	{"id": "mining_camp", "name": "Důlní tábor"},
 	{"id": "mill", "name": "Mlýn"},
+	{"id": "dock", "name": "Přístaviště"},
 	{"id": "farm", "name": "Farma"},
 	{"id": "barracks", "name": "Kasárna"},
 	{"id": "palisade", "name": "Palisáda"},
@@ -42,6 +43,7 @@ var _unique_button: Button
 var _monk_button: Button
 var _market_button: Button
 var _farm_reseed_button: Button
+var _fishing_boat_button: Button
 var _ungarrison_button: Button
 var _town_bell_button: Button
 var _formation_row: HBoxContainer
@@ -55,6 +57,7 @@ var _unique_row: HBoxContainer
 var _monk_row: HBoxContainer
 var _market_row: HBoxContainer
 var _farm_reseed_row: HBoxContainer
+var _dock_row: HBoxContainer
 var _garrison_row: HBoxContainer
 var _research_refresh_accum: float = 0.0
 var _smith_connected: Blacksmith = null
@@ -333,6 +336,12 @@ func _refresh_context_ui() -> void:
 		_farm_reseed_row.visible = is_farm
 	if is_farm:
 		_refresh_farm_reseed_button()
+	var is_dock := has_building and b is Dock and (b as Dock).is_complete
+	_ensure_dock_row()
+	if _dock_row:
+		_dock_row.visible = is_dock
+	if is_dock:
+		_refresh_dock_button()
 
 	var is_garrison_host := has_building and GarrisonController.can_host(b)
 	var is_hall := has_building and (b is DropOff or b.is_in_group("player_town_hall"))
@@ -344,7 +353,7 @@ func _refresh_context_ui() -> void:
 	if is_garrison_host:
 		_refresh_garrison_buttons()
 
-	var show_train := has_building and not is_smith and not is_university and not is_farm
+	var show_train := has_building and not is_smith and not is_university and not is_farm and not is_dock
 	if train_row:
 		train_row.visible = show_train
 	if not show_train:
@@ -972,6 +981,53 @@ func _on_farm_reseed_pressed() -> void:
 
 func get_farm_reseed_button() -> Button:
 	return _farm_reseed_button
+
+
+func _ensure_dock_row() -> void:
+	if command_vbox == null:
+		return
+	if command_vbox.has_node("DockRow"):
+		_dock_row = command_vbox.get_node_or_null("DockRow") as HBoxContainer
+		_fishing_boat_button = (
+			_dock_row.get_node_or_null("TrainFishingBoat") as Button if _dock_row else null
+		)
+		return
+	_dock_row = HBoxContainer.new()
+	_dock_row.name = "DockRow"
+	_dock_row.visible = false
+	command_vbox.add_child(_dock_row)
+	_fishing_boat_button = Button.new()
+	_fishing_boat_button.name = "TrainFishingBoat"
+	_fishing_boat_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_fishing_boat_button.pressed.connect(_on_fishing_boat_train_pressed)
+	_dock_row.add_child(_fishing_boat_button)
+	_refresh_dock_button()
+
+
+func _refresh_dock_button() -> void:
+	if _fishing_boat_button == null:
+		return
+	var cost_txt := CivData.format_cost(Dock.UNIT_DEFS["fishing_boat"]["cost"])
+	_fishing_boat_button.text = "Rybářská loď\n%s" % cost_txt
+	_fishing_boat_button.tooltip_text = "Rybářská loď — %s" % cost_txt
+	_fishing_boat_button.clip_text = false
+	_fishing_boat_button.add_theme_font_size_override("font_size", 12)
+	var unlocked := GameManager.is_unit_unlocked("fishing_boat")
+	_fishing_boat_button.disabled = not unlocked
+	_fishing_boat_button.modulate = Color.WHITE if unlocked else Color(0.6, 0.6, 0.6)
+
+
+func _on_fishing_boat_train_pressed() -> void:
+	var dock := SelectionManager.selected_building as Dock
+	if dock == null:
+		NotificationManager.show_message("Vyber Přístaviště.")
+		return
+	dock.enqueue_fishing_boat()
+	_refresh_dock_button()
+
+
+func get_fishing_boat_button() -> Button:
+	return _fishing_boat_button
 
 
 func is_formation_row_visible() -> bool:

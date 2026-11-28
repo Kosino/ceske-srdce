@@ -9,6 +9,7 @@ const ARCHERY_SCENE := preload("res://scenes/buildings/ArcheryRange.tscn")
 const LUMBER_SCENE := preload("res://scenes/buildings/LumberCamp.tscn")
 const MINING_SCENE := preload("res://scenes/buildings/MiningCamp.tscn")
 const MILL_SCENE := preload("res://scenes/buildings/Mill.tscn")
+const DOCK_SCENE := preload("res://scenes/buildings/Dock.tscn")
 const FARM_SCENE := preload("res://scenes/buildings/Farm.tscn")
 const BLACKSMITH_SCENE := preload("res://scenes/buildings/Blacksmith.tscn")
 const STABLE_SCENE := preload("res://scenes/buildings/Stable.tscn")
@@ -28,6 +29,7 @@ const GHOST_TEXTURES := {
 	"lumber_camp": preload("res://assets/sprites/buildings/lumber_camp.png"),
 	"mining_camp": preload("res://assets/sprites/buildings/mining_camp.png"),
 	"mill": preload("res://assets/sprites/buildings/mill.png"),
+	"dock": preload("res://assets/sprites/buildings/dock.png"),
 	"farm": preload("res://assets/sprites/buildings/farm.png"),
 	"blacksmith": preload("res://assets/sprites/buildings/blacksmith.png"),
 	"stable": preload("res://assets/sprites/buildings/stable.png"),
@@ -50,6 +52,7 @@ const COSTS := {
 	"lumber_camp": {"wood": 100},
 	"mining_camp": {"wood": 100},
 	"mill": {"wood": 100},
+	"dock": {"wood": 150},
 	"farm": {"wood": 60},
 	"blacksmith": {"wood": 150},
 	"stable": {"wood": 175},
@@ -71,6 +74,7 @@ const BUILD_TIMES := {
 	"lumber_camp": 25.0,
 	"mining_camp": 25.0,
 	"mill": 35.0,
+	"dock": 40.0,
 	"farm": 15.0,
 	"blacksmith": 40.0,
 	"stable": 45.0,
@@ -92,6 +96,7 @@ const FOOTPRINTS := {
 	"lumber_camp": Vector2(80, 80),
 	"mining_camp": Vector2(80, 80),
 	"mill": Vector2(72, 72),
+	"dock": Vector2(72, 72),
 	"farm": Vector2(80, 80),
 	"blacksmith": Vector2(80, 80),
 	"stable": Vector2(80, 80),
@@ -234,6 +239,8 @@ func place_at(building_type: String, world_pos: Vector2) -> Building:
 		(building as Castle).spawn_parent = entities
 	elif building is Monastery:
 		(building as Monastery).spawn_parent = entities
+	elif building is Dock:
+		(building as Dock).spawn_parent = entities
 	var build_t: float = float(BUILD_TIMES.get(building_type, building.build_time))
 	building.start_construction(build_t)
 	_assign_builders(building)
@@ -568,6 +575,8 @@ func _instantiate_building(building_type: String) -> Building:
 			return MINING_SCENE.instantiate() as Building
 		"mill":
 			return MILL_SCENE.instantiate() as Building
+		"dock":
+			return DOCK_SCENE.instantiate() as Building
 		"farm":
 			return FARM_SCENE.instantiate() as Building
 		"blacksmith":
@@ -663,6 +672,15 @@ func _can_place(building_type: String, world_pos: Vector2) -> bool:
 		return false
 	if building_type == "watch_tower":
 		return _can_place_wall_tile(WallNav.world_to_tile(world_pos))
+	# Dock must straddle shore (part of footprint on water, part on land).
+	if building_type == "dock":
+		if not WaterNav.footprint_on_shore(world_pos, size):
+			return false
+	elif WaterNav.has_water():
+		# Other buildings cannot sit on deep water.
+		var t := WaterNav.world_to_tile(world_pos)
+		if WaterNav.blocks_land(t):
+			return false
 	if entities == null:
 		return true
 	for child in entities.get_children():

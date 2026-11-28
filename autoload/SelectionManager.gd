@@ -185,8 +185,15 @@ func issue_gather(resource: Node2D) -> void:
 	if resource is Farm and not (resource as Farm).is_complete:
 		return
 	var any := false
+	var is_fish := resource is ResourceNode and (resource as ResourceNode).is_fish()
 	for u in selected_units:
-		if is_instance_valid(u) and u is Villager:
+		if not is_instance_valid(u):
+			continue
+		if is_fish:
+			if u is FishingBoat:
+				(u as FishingBoat).assign_fish(resource as ResourceNode)
+				any = true
+		elif u is Villager:
 			(u as Villager).assign_gather(resource)
 			any = true
 	if any:

@@ -11,12 +11,14 @@ const PROJECTILE_SCENE := preload("res://scenes/combat/Projectile.tscn")
 const TEX_GRASS_1 := preload("res://assets/sprites/terrain/grass_1.png")
 const TEX_GRASS_2 := preload("res://assets/sprites/terrain/grass_2.png")
 const TEX_DIRT := preload("res://assets/sprites/terrain/dirt.png")
+const TEX_WATER := preload("res://assets/sprites/terrain/water.png")
 
 const TILE := 40
 const MAP_TILES := 75 # 3000 / 40
 const SOURCE_GRASS_1 := 0
 const SOURCE_GRASS_2 := 1
 const SOURCE_DIRT := 2
+const SOURCE_WATER := 3
 const PLAYER_TC_POS := Vector2(900, 700)
 const ENEMY_TC_POS := Vector2(2100, 700)
 const MAP_SEED := 4242
@@ -83,6 +85,8 @@ func _ready() -> void:
 		await _run_garrison_smoke()
 		await _run_idle_excludes_garrison_smoke()
 		await _run_balance_harness_smoke()
+		await _run_dock_fishing_smoke()
+		await _run_water_blocks_land_smoke()
 		print("[TEST] all headless smokes finished")
 		get_tree().quit(0)
 		return
@@ -146,6 +150,8 @@ func _ready() -> void:
 		await prepare_garrison_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--t36-ui-shot"):
 		await prepare_t36_ui_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--dock-shot"):
+		await prepare_dock_screenshot()
 	else:
 		await _sample_windowed_fps()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 debug. F9 fog.")
@@ -1744,7 +1750,7 @@ func _set_dirt(layer: TileMapLayer, tile: Vector2i) -> void:
 func _build_terrain_tileset() -> TileSet:
 	var tileset := TileSet.new()
 	tileset.tile_size = Vector2i(TILE, TILE)
-	var textures: Array[Texture2D] = [TEX_GRASS_1, TEX_GRASS_2, TEX_DIRT]
+	var textures: Array[Texture2D] = [TEX_GRASS_1, TEX_GRASS_2, TEX_DIRT, TEX_WATER]
 	for i in textures.size():
 		var atlas := TileSetAtlasSource.new()
 		atlas.texture = textures[i]
@@ -1753,6 +1759,22 @@ func _build_terrain_tileset() -> TileSet:
 		# grass_2 already brightness-matched — modulate 1.0 (default).
 		tileset.add_source(atlas, i)
 	return tileset
+
+
+func _paint_river_terrain() -> void:
+	var layer := get_node_or_null("Terrain") as TileMapLayer
+	if layer == null or map_generator == null:
+		return
+	for e in map_generator.river_paint:
+		var t: Vector2i = e["tile"]
+		var kind := str(e["kind"])
+		if kind == "water":
+			layer.set_cell(t, SOURCE_WATER, Vector2i.ZERO)
+		else:
+			# Ford: dirt crossing through the river.
+			layer.set_cell(t, SOURCE_DIRT, Vector2i.ZERO)
+			if not _dirt_tiles.has(t):
+				_dirt_tiles.append(t)
 
 
 func _spawn_core_demo() -> void:
@@ -1785,6 +1807,7 @@ func _spawn_core_demo() -> void:
 
 	map_generator = MapGenerator.new()
 	map_generator.generate(units, MAP_SEED, PLAYER_TC_POS, ENEMY_TC_POS, _dirt_tiles)
+	_paint_river_terrain()
 
 
 func _ensure_fog_of_war() -> FogOfWar:
@@ -5757,3 +5780,286 @@ func _run_balance_harness_smoke() -> void:
 		print("[TEST] PASS balance harness (pairs + report)")
 	else:
 		print("[TEST] FAIL balance harness (pairs + report)")
+
+
+## T-39: fishing boat delivers food to dock.
+func _run_dock_fishing_smoke() -> void:
+	await get_tree().physics_frame
+	GameManager.current_age = 1
+	GameManager.wood = 500
+	GameManager.food = 50
+
+	var river_ok: bool = WaterNav.has_water() and WaterNav.water_tiles.size() >= 20
+	var ford_ok: bool = WaterNav.ford_tiles.size() >= 2
+	var fish_count := 0
+	for n in get_tree().get_nodes_in_group("fish_schools"):
+		if n is ResourceNode and (n as ResourceNode).is_fish():
+			fish_count += 1
+	var fish_ok: bool = fish_count >= 3 and fish_count <= 5
+
+	var design_ok: bool = (
+		int(BuildingPlacer.COSTS["dock"].get("wood", 0)) == 150
+		and int(Dock.UNIT_DEFS["fishing_boat"]["cost"].get("wood", 0)) == 75
+		and FishingBoat.CARRY_DEFAULT == 15
+		and MapGenerator.FISH_AMOUNT == 225
+		and AgeData.building_unlock_age("dock") == 1
+		and AgeData.unit_unlock_age("fishing_boat") == 1
+	)
+
+	var tex_dock := load("res://assets/sprites/buildings/dock.png") as Texture2D
+	var tex_boat := load("res://assets/sprites/units/fishing_boat_down.png") as Texture2D
+	var tex_fish := load("res://assets/sprites/resources/fish_school.png") as Texture2D
+	var tex_water := load("res://assets/sprites/terrain/water.png") as Texture2D
+	var sprites_ok: bool = (
+		tex_dock != null and tex_boat != null and tex_fish != null and tex_water != null
+		and tex_dock.get_width() <= 80
+		and tex_water.get_width() == 40 and tex_water.get_height() == 40
+	)
+
+	var shore := _find_shore_world_pos()
+	var dock: Dock = null
+	var shore_place_ok := false
+	var land_block_ok := false
+	if shore != Vector2.ZERO:
+		# Inland placement must fail for dock.
+		var inland := PLAYER_TC_POS + Vector2(120, 80)
+		land_block_ok = not building_placer._can_place("dock", inland)
+		GameManager.wood = 500
+		dock = building_placer.place_at("dock", shore) as Dock
+		shore_place_ok = dock != null and WaterNav.footprint_on_shore(dock.global_position, dock.footprint)
+		if dock:
+			dock.is_complete = true
+			dock.build_progress = 1.0
+			dock.hp = dock.max_hp
+			dock._show_final_visual()
+			dock._on_construction_finished()
+			dock.spawn_parent = units
+	await get_tree().physics_frame
+
+	# Spawn boat + fish near dock water.
+	var boat: FishingBoat = preload("res://scenes/units/FishingBoat.tscn").instantiate() as FishingBoat
+	boat.team = 0
+	boat.contribute_population = false
+	var water_spawn := _nearest_water_world(shore if shore != Vector2.ZERO else PLAYER_TC_POS)
+	boat.position = water_spawn
+	units.add_child(boat)
+	await get_tree().physics_frame
+
+	var fish: ResourceNode = RESOURCE_SCENE.instantiate() as ResourceNode
+	fish.resource_type = "food"
+	fish.is_fish_school = true
+	fish.amount_remaining = 30
+	# Prefer a neighbouring water tile so boat has a short trip.
+	var fish_pos := water_spawn
+	for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(2, 0)]:
+		var cand: Vector2i = WaterNav.world_to_tile(water_spawn) + d
+		if WaterNav.is_water(cand):
+			fish_pos = WaterNav.tile_center(cand)
+			break
+	fish.position = fish_pos
+	units.add_child(fish)
+	await get_tree().physics_frame
+
+	var food0 := GameManager.food
+	boat.carry_capacity = 5
+	boat.assign_fish(fish, dock)
+	var gather_ok := false
+	for _i in 1200:
+		await get_tree().physics_frame
+		if GameManager.food > food0:
+			gather_ok = true
+			break
+
+	var all_ok: bool = (
+		river_ok and ford_ok and fish_ok and design_ok and sprites_ok
+		and shore_place_ok and land_block_ok and gather_ok and dock != null
+	)
+	print(
+		"[TEST] dock_fishing river=%s ford=%s fish=%s design=%s sprites=%s shore=%s inland_block=%s gather=%s"
+		% [river_ok, ford_ok, fish_ok, design_ok, sprites_ok, shore_place_ok, land_block_ok, gather_ok]
+	)
+	if all_ok:
+		print("[TEST] PASS dock fishing (boat delivers food to dock)")
+	else:
+		print("[TEST] FAIL dock fishing (boat delivers food to dock)")
+
+	if boat != null and is_instance_valid(boat):
+		boat.command_stop()
+		boat.queue_free()
+	if fish != null and is_instance_valid(fish):
+		fish.queue_free()
+	if dock != null and is_instance_valid(dock):
+		dock.queue_free()
+	await get_tree().physics_frame
+
+
+## T-39: deep water blocks land units; fords remain walkable.
+func _run_water_blocks_land_smoke() -> void:
+	await get_tree().physics_frame
+	var has_water := WaterNav.has_water()
+	var water_tile := Vector2i(-1, -1)
+	for t in WaterNav.water_tiles.keys():
+		water_tile = t as Vector2i
+		break
+	var ford_tile := Vector2i(-1, -1)
+	for t2 in WaterNav.ford_tiles.keys():
+		ford_tile = t2 as Vector2i
+		break
+
+	var water_blocks := has_water and water_tile != Vector2i(-1, -1) and WaterNav.blocks_land(water_tile)
+	var ford_open := ford_tile != Vector2i(-1, -1) and not WaterNav.blocks_land(ford_tile)
+	var boat_blocks_land := WaterNav.blocks_boat(WaterNav.world_to_tile(PLAYER_TC_POS))
+
+	# Cross at ford: path exists and never steps on deep water.
+	var ford_land_a := _nearest_land_beside(ford_tile)
+	var ford_land_b := _opposite_land_beside(ford_tile, ford_land_a)
+	var cross := WaterNav.find_path_land(
+		WaterNav.tile_center(ford_land_a), WaterNav.tile_center(ford_land_b), 0, get_tree()
+	)
+	var ford_cross_ok := not cross.is_empty()
+	for wp in cross:
+		if WaterNav.blocks_land(WaterNav.world_to_tile(wp)):
+			ford_cross_ok = false
+			break
+	# Ordering into deep water must not produce water-tile waypoints.
+	var land_near := _nearest_land_beside(water_tile)
+	var into_water := WaterNav.find_path_land(
+		WaterNav.tile_center(land_near), WaterNav.tile_center(water_tile), 0, get_tree()
+	)
+	var no_water_step := true
+	for wp2 in into_water:
+		if WaterNav.blocks_land(WaterNav.world_to_tile(wp2)):
+			no_water_step = false
+			break
+	# Ford tile is a legal land step; deep water is not.
+	var ford_step_ok := (
+		not WaterNav.blocks_land(ford_tile)
+		and WaterNav.blocks_land(water_tile)
+	)
+
+	var all_ok: bool = (
+		has_water and water_blocks and ford_open and boat_blocks_land
+		and ford_cross_ok and no_water_step and ford_step_ok
+	)
+	print(
+		"[TEST] water_blocks has=%s water_block=%s ford_open=%s boat_land_block=%s ford_cross=%s no_water_step=%s ford_step=%s"
+		% [has_water, water_blocks, ford_open, boat_blocks_land, ford_cross_ok, no_water_step, ford_step_ok]
+	)
+	if all_ok:
+		print("[TEST] PASS water blocks land")
+	else:
+		print("[TEST] FAIL water blocks land")
+
+
+func _find_shore_world_pos() -> Vector2:
+	for t in WaterNav.water_tiles.keys():
+		var wt: Vector2i = t
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var land: Vector2i = wt + d
+			if land.x < 1 or land.y < 1 or land.x >= WaterNav.MAP_TILES - 1 or land.y >= WaterNav.MAP_TILES - 1:
+				continue
+			if WaterNav.is_aquatic(land):
+				continue
+			var pos := (WaterNav.tile_center(wt) + WaterNav.tile_center(land)) * 0.5
+			if building_placer != null and building_placer._can_place("dock", pos):
+				return pos
+			# Nudge toward land so footprint straddles.
+			var nudged := WaterNav.tile_center(land).lerp(WaterNav.tile_center(wt), 0.35)
+			if building_placer != null and building_placer._can_place("dock", nudged):
+				return nudged
+	return Vector2.ZERO
+
+
+func _nearest_water_world(near: Vector2) -> Vector2:
+	var best := near
+	var best_d := INF
+	for t in WaterNav.water_tiles.keys():
+		var c := WaterNav.tile_center(t as Vector2i)
+		var d := c.distance_to(near)
+		if d < best_d:
+			best_d = d
+			best = c
+	return best
+
+
+func _nearest_land_beside(water_tile: Vector2i) -> Vector2i:
+	for r in range(1, 6):
+		for dx in range(-r, r + 1):
+			for dy in range(-r, r + 1):
+				if absi(dx) != r and absi(dy) != r and r > 0:
+					continue
+				var t: Vector2i = water_tile + Vector2i(dx, dy)
+				if t.x < 0 or t.y < 0 or t.x >= WaterNav.MAP_TILES or t.y >= WaterNav.MAP_TILES:
+					continue
+				if not WaterNav.is_aquatic(t):
+					return t
+	return water_tile + Vector2i(2, 0)
+
+
+func _opposite_land_beside(ford_tile: Vector2i, from_land: Vector2i) -> Vector2i:
+	var delta: Vector2i = from_land - ford_tile
+	var other: Vector2i = ford_tile - delta
+	if not WaterNav.is_aquatic(other):
+		return other
+	for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var t: Vector2i = ford_tile + d
+		if t != from_land and not WaterNav.is_aquatic(t):
+			return t
+	return from_land
+
+
+## T-39 screenshot: river + dock + boat at fish school + villager for scale.
+func prepare_dock_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	var fog := _ensure_fog_of_war()
+	fog.fog_enabled = false
+	GameManager.current_age = 1
+	GameManager.wood = 500
+	GameManager.food = 200
+
+	var shore := _find_shore_world_pos()
+	if shore == Vector2.ZERO:
+		shore = _nearest_water_world(Vector2(1500, 1400)) + Vector2(-30, 0)
+	var dock: Dock = preload("res://scenes/buildings/Dock.tscn").instantiate() as Dock
+	dock.team = 0
+	dock.is_complete = true
+	dock.position = shore
+	dock.spawn_parent = units
+	units.add_child(dock)
+	dock._show_final_visual()
+	dock._on_construction_finished()
+
+	var water_pos := _nearest_water_world(shore)
+	var fish: ResourceNode = RESOURCE_SCENE.instantiate() as ResourceNode
+	fish.resource_type = "food"
+	fish.is_fish_school = true
+	fish.amount_remaining = 225
+	fish.position = water_pos + Vector2(50, 10)
+	units.add_child(fish)
+
+	var boat: FishingBoat = preload("res://scenes/units/FishingBoat.tscn").instantiate() as FishingBoat
+	boat.team = 0
+	boat.contribute_population = false
+	boat.position = fish.position + Vector2(-28, 8)
+	units.add_child(boat)
+	boat.assign_fish(fish, dock)
+
+	var villager: Villager = VILLAGER_SCENE.instantiate() as Villager
+	villager.team = 0
+	villager.contribute_population = false
+	# Stand on land near dock for scale.
+	var land := _nearest_land_beside(WaterNav.world_to_tile(shore))
+	villager.position = WaterNav.tile_center(land) + Vector2(-20, 10)
+	units.add_child(villager)
+
+	SelectionManager.select_single(boat)
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	if cam:
+		cam.set_zoom_clamped(1.35)
+		cam.center_at(shore.lerp(fish.position, 0.45))
+	await get_tree().create_timer(0.55).timeout
+	await get_tree().process_frame
+	_save_shot("t39_dock.png", 0)

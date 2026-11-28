@@ -175,8 +175,22 @@ Screenshot: `docs/screenshots/t34_cav_walk.png` (cavalry + villager + TC, defaul
 - Knight walk keeps team-blue for T-18; light cavalry has none (modulate / underfoot marker).
 - NN downscale from larger generated frames softens some horse-leg detail vs idle.
 
+## T-39 říční přístaviště (dock / boat / fish / water)
+
+PR #10 pipeline (magenta key → defringe → crop → NN scale → shared 32-colour palette). No `gen_*` procedural drawing. Front ¾.
+
+| File | Size | Notes |
+|---|---|---|
+| `assets/sprites/buildings/dock.png` | 72×74 | wooden pier + board roof; smaller than TC |
+| `assets/sprites/units/fishing_boat_{down,left,right,up}.png` | ~49×52 / 64×40 | dugout/punt; ~1.3× villager height |
+| `assets/sprites/resources/fish_school.png` | 40×26 | fish school resource |
+| `assets/sprites/terrain/water.png` | 40×40 | river tile (Vltava/Labe blues from palette) |
+
+Czech UI: **Přístaviště**, **Rybářská loď**. Screenshot: `docs/screenshots/t39_dock.png`.
+
 ## What this pack does not include
 
 - Walk-cycle sheets for units beyond villager, soldier, archer, spearman, light cavalry, and knight.
 - Dedicated trebuchet unpacked / firing frames (T-23 uses packed art + subtle deploy cue).
 - Full team-blue coverage on every unit/building (see art debt above).
+- Boat walk-cycle sheet (static facings only).

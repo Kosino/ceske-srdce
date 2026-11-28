@@ -55,6 +55,9 @@ func assign_gather(resource: Node2D, dropoff: Node2D = null) -> void:
 	if not resource.has_method("harvest") or not resource.has_method("is_depleted"):
 		print("[GATHER] refuse harvest target (not a resource): %s" % resource.name)
 		return
+	if resource is ResourceNode and (resource as ResourceNode).is_fish():
+		NotificationManager.show_message("Ryby loví jen rybářská loď.")
+		return
 	if resource.call("is_depleted"):
 		return
 	if resource is Farm and not (resource as Farm).is_complete:
