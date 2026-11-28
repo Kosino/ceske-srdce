@@ -74,7 +74,9 @@ func _ready() -> void:
 	_panel_left = offset_left
 	_panel_top = offset_top
 	_panel_bottom_inset = offset_bottom
-	_panel_width = offset_right - offset_left
+	# T-36: slightly wider so full Zbrojnoš/Kopiník labels fit without clipping.
+	_panel_width = maxf(offset_right - offset_left, 304.0)
+	offset_right = _panel_left + _panel_width
 	SelectionManager.selection_changed.connect(_on_context_changed)
 	SelectionManager.building_selection_changed.connect(_on_building_changed)
 	SelectionManager.formation_changed.connect(_refresh_formation_buttons)
@@ -86,6 +88,7 @@ func _ready() -> void:
 	_ensure_tech_row()
 	_ensure_uni_tech_row()
 	_polish_train_villager_button()
+	_polish_train_military_buttons()
 	_refresh_age_ui()
 	_refresh_formation_buttons(SelectionManager.formation)
 	_refresh_context_ui()
@@ -99,6 +102,38 @@ func _polish_train_villager_button() -> void:
 	train_villager.tooltip_text = "Vesničan — 50 J"
 	train_villager.clip_text = false
 	train_villager.custom_minimum_size.x = maxf(train_villager.custom_minimum_size.x, 88.0)
+
+
+## T-36: full unit labels (was Zbroj/Kop/Luc) + cost tooltips; smaller font so text fits.
+func _polish_train_military_buttons() -> void:
+	_apply_train_label(
+		train_soldier,
+		"Zbrojnoš",
+		"Zbrojnoš — %s" % CivData.format_cost(Barracks.UNIT_DEFS["soldier"]["cost"]),
+		96.0
+	)
+	_apply_train_label(
+		train_spearman,
+		"Kopiník",
+		"Kopiník — %s" % CivData.format_cost(Barracks.UNIT_DEFS["spearman"]["cost"]),
+		88.0
+	)
+	_apply_train_label(
+		train_archer,
+		"Lučištník",
+		"Lučištník — %s" % CivData.format_cost(ArcheryRange.UNIT_DEFS["archer"]["cost"]),
+		96.0
+	)
+
+
+func _apply_train_label(btn: Button, label: String, tip: String, min_w: float) -> void:
+	if btn == null:
+		return
+	btn.text = label
+	btn.tooltip_text = tip
+	btn.clip_text = false
+	btn.add_theme_font_size_override("font_size", 12)
+	btn.custom_minimum_size.x = maxf(btn.custom_minimum_size.x, min_w)
 
 
 func _process(delta: float) -> void:
@@ -327,6 +362,8 @@ func _refresh_context_ui() -> void:
 		train_spearman.visible = is_barracks
 	if train_archer:
 		train_archer.visible = is_archery
+	if is_barracks or is_archery:
+		_polish_train_military_buttons()
 	# Hide generic train buttons when Stable/Siege/Castle/Monastery/Market selected.
 	if is_stable or is_siege or is_castle or is_monastery or is_market:
 		if train_villager:
@@ -943,6 +980,18 @@ func is_formation_row_visible() -> bool:
 
 func get_train_villager_button() -> Button:
 	return train_villager
+
+
+func get_train_soldier_button() -> Button:
+	return train_soldier
+
+
+func get_train_spearman_button() -> Button:
+	return train_spearman
+
+
+func get_train_archer_button() -> Button:
+	return train_archer
 
 
 func _ensure_garrison_row() -> void:

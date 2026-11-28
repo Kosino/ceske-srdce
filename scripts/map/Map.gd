@@ -80,6 +80,7 @@ func _ready() -> void:
 		await _run_aoe_controls_smoke()
 		await _run_command_panel_context_smoke()
 		await _run_garrison_smoke()
+		await _run_idle_excludes_garrison_smoke()
 		await _run_balance_harness_smoke()
 		print("[TEST] all headless smokes finished")
 		get_tree().quit(0)
@@ -140,9 +141,81 @@ func _ready() -> void:
 		await prepare_command_panel_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--garrison-shot"):
 		await prepare_garrison_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--t36-ui-shot"):
+		await prepare_t36_ui_screenshot()
 	else:
 		await _sample_windowed_fps()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 debug. F9 fog.")
+
+
+## T-36: barracks train labels + TC with garrison + idle HUD.
+func prepare_t36_ui_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	GameManager.food = 400
+	GameManager.wood = 400
+	GameManager.gold = 200
+	var hall: DropOff = null
+	for n in get_tree().get_nodes_in_group("player_town_hall"):
+		if n is DropOff:
+			hall = n as DropOff
+			break
+	if hall == null:
+		hall = DROPOFF_SCENE.instantiate() as DropOff
+		hall.team = 0
+		hall.position = PLAYER_TC_POS
+		hall.spawn_parent = units
+		units.add_child(hall)
+		await get_tree().physics_frame
+	var barracks: Barracks = BARRACKS_SCENE.instantiate() as Barracks
+	barracks.team = 0
+	barracks.is_complete = true
+	barracks.build_progress = 1.0
+	barracks.hp = barracks.max_hp
+	barracks.position = hall.global_position + Vector2(130, 40)
+	barracks.spawn_parent = units
+	units.add_child(barracks)
+	barracks._show_final_visual()
+	await get_tree().physics_frame
+	var g := GarrisonController.ensure(hall)
+	var need := 2
+	for n in get_tree().get_nodes_in_group("villagers"):
+		if need <= 0:
+			break
+		if n is Villager and (n as Villager).team == 0 and not (n as Villager).is_garrisoned:
+			g.try_enter(n as Villager)
+			need -= 1
+	while need > 0:
+		var v: Villager = VILLAGER_SCENE.instantiate() as Villager
+		v.team = 0
+		v.contribute_population = false
+		v.position = hall.global_position + Vector2(36, 28)
+		units.add_child(v)
+		await get_tree().physics_frame
+		g.try_enter(v)
+		need -= 1
+	# Leave at least one free idle villager so Nečinní shows a non-garrison count.
+	var free_idle: Villager = VILLAGER_SCENE.instantiate() as Villager
+	free_idle.team = 0
+	free_idle.contribute_population = false
+	free_idle.position = hall.global_position + Vector2(-50, 70)
+	units.add_child(free_idle)
+	free_idle.state = Villager.State.IDLE
+	await get_tree().physics_frame
+	SelectionManager.idle_villager_count_changed.emit(SelectionManager.count_idle_villagers())
+	SelectionManager.select_building(barracks)
+	var panel := _find_command_panel()
+	if panel:
+		panel._refresh_context_ui()
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	if cam:
+		cam.set_zoom_clamped(1.05)
+		cam.center_at(hall.global_position + Vector2(70, 40))
+	await get_tree().create_timer(0.7).timeout
+	await get_tree().process_frame
+	_save_shot("t36_ui.png", g.count() if g else 0)
 
 
 ## T-35: TC with garrisoned villagers + count badge / panel.
@@ -4915,13 +4988,63 @@ func _run_command_panel_context_smoke() -> void:
 			and "Vesničan" in vesn.tooltip_text
 		)
 
+	# T-36: barracks / archery train buttons use full Czech labels + cost tooltips.
+	var barracks: Barracks = BARRACKS_SCENE.instantiate() as Barracks
+	barracks.team = 0
+	barracks.is_complete = true
+	barracks.position = PLAYER_TC_POS + Vector2(260, -80)
+	barracks.spawn_parent = units
+	units.add_child(barracks)
+	await get_tree().physics_frame
+	SelectionManager.select_building(barracks)
+	await get_tree().process_frame
+	if panel:
+		panel._refresh_context_ui()
+	await get_tree().process_frame
+	var sol_btn: Button = panel.get_train_soldier_button() if panel else null
+	var spear_btn: Button = panel.get_train_spearman_button() if panel else null
+	var labels_ok: bool = (
+		sol_btn != null and spear_btn != null
+		and sol_btn.visible and spear_btn.visible
+		and sol_btn.text == "Zbrojnoš"
+		and spear_btn.text == "Kopiník"
+		and "60" in sol_btn.tooltip_text
+		and "35" in spear_btn.tooltip_text
+		and not sol_btn.clip_text
+		and not spear_btn.clip_text
+	)
+	var range_b: ArcheryRange = preload("res://scenes/buildings/ArcheryRange.tscn").instantiate() as ArcheryRange
+	range_b.team = 0
+	range_b.is_complete = true
+	range_b.position = PLAYER_TC_POS + Vector2(320, -40)
+	range_b.spawn_parent = units
+	units.add_child(range_b)
+	await get_tree().physics_frame
+	SelectionManager.select_building(range_b)
+	await get_tree().process_frame
+	if panel:
+		panel._refresh_context_ui()
+	await get_tree().process_frame
+	var arch_btn: Button = panel.get_train_archer_button() if panel else null
+	var archer_label_ok: bool = (
+		arch_btn != null
+		and arch_btn.visible
+		and arch_btn.text == "Lučištník"
+		and "45" in arch_btn.tooltip_text
+		and not arch_btn.clip_text
+	)
+
 	var all_ok: bool = (
 		panel_ok and sel_ok and form_units_ok and form_hidden_ok and info_ok
 		and reseed_sown_ok and empty_wood_ok and empty_broke_ok and vesn_ok
+		and labels_ok and archer_label_ok
 	)
 	print(
-		"[TEST] command_panel form_units=%s form_hid=%s info=%s reseed_sown=%s empty_wood=%s empty_broke=%s vesn=%s"
-		% [form_units_ok, form_hidden_ok, info_ok, reseed_sown_ok, empty_wood_ok, empty_broke_ok, vesn_ok]
+		"[TEST] command_panel form_units=%s form_hid=%s info=%s reseed_sown=%s empty_wood=%s empty_broke=%s vesn=%s labels=%s archer=%s"
+		% [
+			form_units_ok, form_hidden_ok, info_ok, reseed_sown_ok, empty_wood_ok, empty_broke_ok,
+			vesn_ok, labels_ok, archer_label_ok,
+		]
 	)
 	if all_ok:
 		print("[TEST] PASS command panel context")
@@ -4934,6 +5057,94 @@ func _run_command_panel_context_smoke() -> void:
 		farm.queue_free()
 	if spawned_hall and hall != null and is_instance_valid(hall):
 		hall.queue_free()
+	if barracks != null and is_instance_valid(barracks):
+		barracks.queue_free()
+	if range_b != null and is_instance_valid(range_b):
+		range_b.queue_free()
+	await get_tree().physics_frame
+
+
+## T-36: Nečinní / `.` hotkey must ignore garrisoned villagers.
+func _run_idle_excludes_garrison_smoke() -> void:
+	await get_tree().physics_frame
+	var hall: DropOff = DROPOFF_SCENE.instantiate() as DropOff
+	hall.team = 0
+	hall.position = PLAYER_TC_POS + Vector2(-220, -180)
+	hall.spawn_parent = units
+	units.add_child(hall)
+	await get_tree().physics_frame
+	var g := GarrisonController.ensure(hall)
+
+	var free_v: Villager = VILLAGER_SCENE.instantiate() as Villager
+	free_v.team = 0
+	free_v.contribute_population = false
+	free_v.position = hall.global_position + Vector2(-40, 50)
+	units.add_child(free_v)
+	free_v.state = Villager.State.IDLE
+
+	var gar_v: Villager = VILLAGER_SCENE.instantiate() as Villager
+	gar_v.team = 0
+	gar_v.contribute_population = false
+	gar_v.position = hall.global_position + Vector2(30, 20)
+	units.add_child(gar_v)
+	await get_tree().physics_frame
+	var entered := g.try_enter(gar_v)
+	# Garrisoned villagers keep IDLE state — exclusion must use is_garrisoned.
+	gar_v.state = Villager.State.IDLE
+	await get_tree().process_frame
+
+	# Count without garrison filter would include gar_v; with filter it must not.
+	var raw_idle := 0
+	for node in get_tree().get_nodes_in_group("villagers"):
+		if node is Villager:
+			var vv := node as Villager
+			if vv.team == 0 and vv.state == Villager.State.IDLE:
+				raw_idle += 1
+	var idle_list := SelectionManager.list_idle_villagers()
+	var counted := SelectionManager.count_idle_villagers()
+	var excludes_ok := (
+		entered
+		and gar_v.is_garrisoned
+		and gar_v.state == Villager.State.IDLE
+		and raw_idle >= counted + 1
+		and not SelectionManager.is_villager_idle(gar_v)
+		and SelectionManager.is_villager_idle(free_v)
+		and not idle_list.has(gar_v)
+		and idle_list.has(free_v)
+	)
+
+	var idle_btn := get_node_or_null("UI/IdleVillagerButton") as IdleVillagerButton
+	if idle_btn:
+		idle_btn._on_count(counted)
+	var btn_txt := idle_btn.text if idle_btn else ""
+	var btn_ok := idle_btn != null and btn_txt == ("Nečinní %d" % counted)
+
+	# Cycle may hit any free idle villager from the demo map — never a garrisoned one.
+	SelectionManager.clear_selection()
+	var picked := SelectionManager.select_next_idle_villager()
+	var pick_ok := (
+		picked != null
+		and is_instance_valid(picked)
+		and not picked.is_garrisoned
+		and SelectionManager.is_villager_idle(picked)
+		and picked != gar_v
+	)
+
+	var all_ok := excludes_ok and btn_ok and pick_ok and counted >= 1
+	print(
+		"[TEST] idle_excludes_garrison raw=%d counted=%d entered=%s btn=%s pick=%s"
+		% [raw_idle, counted, entered, btn_txt, picked.name if picked else "?"]
+	)
+	if all_ok:
+		print("[TEST] PASS idle excludes garrison")
+	else:
+		print("[TEST] FAIL idle excludes garrison")
+
+	SelectionManager.clear_selection()
+	SelectionManager.select_building(null)
+	for n in [free_v, gar_v, hall]:
+		if n != null and is_instance_valid(n):
+			n.queue_free()
 	await get_tree().physics_frame
 
 
