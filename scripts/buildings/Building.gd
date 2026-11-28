@@ -309,6 +309,9 @@ func apply_repair(amount: float) -> float:
 
 
 func die() -> void:
+	var g := GarrisonController.of(self)
+	if g:
+		g.on_host_destroyed()
 	destroyed.emit(self)
 	AudioManager.play_sfx("building_destroyed")
 	print("[COMBAT] building destroyed team=%d id=%s" % [team, building_id])

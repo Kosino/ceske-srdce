@@ -79,6 +79,7 @@ func _ready() -> void:
 		await _run_fog_polish_smoke()
 		await _run_aoe_controls_smoke()
 		await _run_command_panel_context_smoke()
+		await _run_garrison_smoke()
 		await _run_balance_harness_smoke()
 		print("[TEST] all headless smokes finished")
 		get_tree().quit(0)
@@ -135,9 +136,62 @@ func _ready() -> void:
 		await prepare_ai_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--command-panel-shot"):
 		await prepare_command_panel_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--garrison-shot"):
+		await prepare_garrison_screenshot()
 	else:
 		await _sample_windowed_fps()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 debug. F9 fog.")
+
+
+## T-35: TC with garrisoned villagers + count badge / panel.
+func prepare_garrison_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	var hall: DropOff = null
+	for n in get_tree().get_nodes_in_group("player_town_hall"):
+		if n is DropOff:
+			hall = n as DropOff
+			break
+	if hall == null:
+		hall = DROPOFF_SCENE.instantiate() as DropOff
+		hall.team = 0
+		hall.position = PLAYER_TC_POS
+		hall.spawn_parent = units
+		units.add_child(hall)
+		await get_tree().physics_frame
+	var g := GarrisonController.ensure(hall)
+	# Garrison a few villagers near the TC for the count badge.
+	var need := 3
+	var spawned: Array[Villager] = []
+	for n in get_tree().get_nodes_in_group("villagers"):
+		if need <= 0:
+			break
+		if n is Villager and (n as Villager).team == 0 and not (n as Villager).is_garrisoned:
+			g.try_enter(n as Villager)
+			need -= 1
+	while need > 0:
+		var v: Villager = VILLAGER_SCENE.instantiate() as Villager
+		v.team = 0
+		v.contribute_population = false
+		v.position = hall.global_position + Vector2(40, 40)
+		units.add_child(v)
+		spawned.append(v)
+		await get_tree().physics_frame
+		g.try_enter(v)
+		need -= 1
+	SelectionManager.select_building(hall)
+	var panel := _find_command_panel()
+	if panel:
+		panel._refresh_context_ui()
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	if cam:
+		cam.set_zoom_clamped(1.05)
+		cam.center_at(hall.global_position + Vector2(40, 20))
+	await get_tree().create_timer(0.7).timeout
+	await get_tree().process_frame
+	_save_shot("t35_garrison.png", g.count() if g else 0)
 
 
 ## T-28: player (blue) vs AI (red) archer/spearman — idle + walk, underfoot team markers.
@@ -4696,6 +4750,169 @@ func _run_command_panel_context_smoke() -> void:
 		farm.queue_free()
 	if spawned_hall and hall != null and is_instance_valid(hall):
 		hall.queue_free()
+	await get_tree().physics_frame
+
+
+## T-35: garrison enter/eject/arrows/bell (+ heal + count).
+func _run_garrison_smoke() -> void:
+	await get_tree().physics_frame
+	var hall: DropOff = DROPOFF_SCENE.instantiate() as DropOff
+	hall.team = 0
+	hall.position = PLAYER_TC_POS + Vector2(-160, -160)
+	hall.spawn_parent = units
+	units.add_child(hall)
+	await get_tree().physics_frame
+	var g := GarrisonController.ensure(hall)
+	var cap_ok := g != null and g.capacity == GarrisonController.CAPACITY_TC
+
+	var v1: Villager = VILLAGER_SCENE.instantiate() as Villager
+	v1.team = 0
+	v1.contribute_population = false
+	v1.position = hall.global_position + Vector2(30, 20)
+	units.add_child(v1)
+	var v2: Villager = VILLAGER_SCENE.instantiate() as Villager
+	v2.team = 0
+	v2.contribute_population = false
+	v2.position = hall.global_position + Vector2(40, 30)
+	units.add_child(v2)
+	var archer: Archer = ARCHER_SCENE.instantiate() as Archer
+	archer.team = 0
+	archer.contribute_population = false
+	archer.position = hall.global_position + Vector2(20, 40)
+	units.add_child(archer)
+	await get_tree().physics_frame
+
+	# --- Enter: hidden + count ---
+	var enter1 := g.try_enter(v1)
+	var enter2 := g.try_enter(v2)
+	var enter_a := g.try_enter(archer)
+	var hidden_ok := (
+		enter1 and enter2 and enter_a
+		and not v1.visible and not v2.visible and not archer.visible
+		and v1.is_garrisoned and g.count() == 3
+	)
+	print("[TEST] garrison enter count=%d hidden=%s cap=%s" % [g.count(), hidden_ok, cap_ok])
+
+	# --- Arrows: TC base 0 + 3 garrison arrow units => 3 projectiles ---
+	var foe: Soldier = SOLDIER_SCENE.instantiate() as Soldier
+	foe.team = 1
+	foe.contribute_population = false
+	foe.position = hall.global_position + Vector2(80, 0)
+	units.add_child(foe)
+	await get_tree().physics_frame
+	var bonus := g.arrow_bonus()
+	var arrows := g.total_arrows(0)
+	hall._attack_timer = 0.0
+	var before_proj := 0
+	for n in units.get_children():
+		if n is Projectile:
+			before_proj += 1
+	hall._try_auto_attack()
+	await get_tree().process_frame
+	var after_proj := 0
+	for n in units.get_children():
+		if n is Projectile:
+			after_proj += 1
+	var arrows_ok := bonus == 3 and arrows == 3 and (after_proj - before_proj) >= 3
+	print("[TEST] garrison arrows bonus=%d total=%d spawned=%d ok=%s" % [bonus, arrows, after_proj - before_proj, arrows_ok])
+
+	# --- Heal while garrisoned ---
+	v1.hp = maxf(1.0, v1.max_hp * 0.4)
+	var hp0 := v1.hp
+	g._heal_garrison(2.0)
+	var heal_ok := v1.hp > hp0
+	print("[TEST] garrison heal %.1f -> %.1f ok=%s" % [hp0, v1.hp, heal_ok])
+
+	# --- Eject to rally ---
+	var rally_pos := hall.global_position + Vector2(140, 40)
+	SelectionManager.select_building(hall)
+	SelectionManager.set_building_rally(rally_pos, null)
+	var panel := _find_command_panel()
+	if panel:
+		panel._refresh_context_ui()
+	await get_tree().process_frame
+	var ungarrison_btn := panel.get_ungarrison_button() if panel else null
+	var btn_visible := panel != null and panel.is_garrison_row_visible() and ungarrison_btn != null
+	var ejected := SelectionManager.eject_selected_building_garrison()
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var eject_ok := (
+		ejected == 3 and g.count() == 0
+		and v1.visible and not v1.is_garrisoned
+		and (
+			v1.state == Villager.State.MOVING
+			or v1.global_position.distance_to(rally_pos) < 220.0
+		)
+	)
+	print("[TEST] garrison eject n=%d empty=%s btn=%s ok=%s" % [ejected, g.count() == 0, btn_visible, eject_ok])
+
+	# --- Town bell: call then return ---
+	v1.command_stop()
+	v2.command_stop()
+	# Put villagers on a gather task so return can restore it.
+	var wood: ResourceNode = RESOURCE_SCENE.instantiate() as ResourceNode
+	wood.resource_type = "wood"
+	wood.amount_remaining = 200
+	wood.position = hall.global_position + Vector2(-100, 60)
+	units.add_child(wood)
+	await get_tree().physics_frame
+	v1.assign_gather(wood)
+	v2.assign_gather(wood)
+	await get_tree().physics_frame
+	hall.bell_active = false
+	hall._bell_snapshots.clear()
+	hall.toggle_town_bell()
+	# Force enter (skip walk) for headless determinism.
+	for vv in [v1, v2]:
+		if not vv.is_garrisoned:
+			g.try_enter(vv)
+	await get_tree().physics_frame
+	var bell_call_ok := hall.bell_active and g.count() >= 2
+	hall.toggle_town_bell()
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var bell_return_ok := (
+		not hall.bell_active
+		and not v1.is_garrisoned
+		and v1.target_resource == wood
+	)
+	print("[TEST] garrison bell call=%s return=%s" % [bell_call_ok, bell_return_ok])
+
+	# Tower capacity 5
+	var tower: WatchTower = preload("res://scenes/buildings/WatchTower.tscn").instantiate() as WatchTower
+	tower.team = 0
+	tower.is_complete = true
+	tower.position = hall.global_position + Vector2(200, 0)
+	tower.spawn_parent = units
+	units.add_child(tower)
+	await get_tree().physics_frame
+	var tg := GarrisonController.ensure(tower)
+	var tower_cap_ok := tg != null and tg.capacity == GarrisonController.CAPACITY_TOWER
+
+	# Info / count line
+	SelectionManager.select_building(hall)
+	g.try_enter(archer)
+	await get_tree().process_frame
+	var sel := get_node_or_null("UI/SelectionInfo") as SelectionInfo
+	if sel:
+		sel._refresh()
+	var info_ok := sel != null and sel.label != null and ("Posádka" in sel.label.text)
+	print("[TEST] garrison info=%s tower_cap=%s text=%s" % [info_ok, tower_cap_ok, sel.label.text if sel and sel.label else "?"])
+
+	var all_ok := (
+		cap_ok and hidden_ok and arrows_ok and heal_ok and eject_ok
+		and btn_visible and bell_call_ok and bell_return_ok and tower_cap_ok and info_ok
+	)
+	if all_ok:
+		print("[TEST] PASS garrison (enter/eject/arrows/bell)")
+	else:
+		print("[TEST] FAIL garrison (enter/eject/arrows/bell)")
+
+	SelectionManager.clear_selection()
+	SelectionManager.select_building(null)
+	for n in [v1, v2, archer, foe, wood, tower, hall]:
+		if n != null and is_instance_valid(n):
+			n.queue_free()
 	await get_tree().physics_frame
 
 

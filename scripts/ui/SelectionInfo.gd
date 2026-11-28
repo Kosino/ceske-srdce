@@ -117,7 +117,10 @@ func _building_info_line(b: Node) -> String:
 		return "Sklad zlata / kamene"
 	if b is House:
 		return "Obydlí"
-	if b is WatchTower or b is Gate or b is WallSegment:
+	if b is WatchTower:
+		var tg := GarrisonController.of(b)
+		return tg.summary_line() if tg else "Obrana"
+	if b is Gate or b is WallSegment:
 		return "Obrana"
 	return "Budova"
 

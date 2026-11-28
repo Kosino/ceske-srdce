@@ -42,6 +42,8 @@ var _unique_button: Button
 var _monk_button: Button
 var _market_button: Button
 var _farm_reseed_button: Button
+var _ungarrison_button: Button
+var _town_bell_button: Button
 var _formation_row: HBoxContainer
 var _build_scroll: ScrollContainer
 var _build_row: GridContainer
@@ -53,9 +55,12 @@ var _unique_row: HBoxContainer
 var _monk_row: HBoxContainer
 var _market_row: HBoxContainer
 var _farm_reseed_row: HBoxContainer
+var _garrison_row: HBoxContainer
 var _research_refresh_accum: float = 0.0
 var _smith_connected: Blacksmith = null
 var _uni_connected: University = null
+var _garrison_connected: GarrisonController = null
+var _bell_connected: DropOff = null
 ## Scene-authored insets; width locked, height grows only for a compact scroll viewport.
 var _panel_left: float = 0.0
 var _panel_top: float = 0.0
@@ -294,12 +299,21 @@ func _refresh_context_ui() -> void:
 	if is_farm:
 		_refresh_farm_reseed_button()
 
+	var is_garrison_host := has_building and GarrisonController.can_host(b)
+	var is_hall := has_building and (b is DropOff or b.is_in_group("player_town_hall"))
+	_ensure_garrison_row()
+	_connect_garrison_signal(b if is_garrison_host else null)
+	_connect_bell_signal(b as DropOff if is_hall else null)
+	if _garrison_row:
+		_garrison_row.visible = is_garrison_host
+	if is_garrison_host:
+		_refresh_garrison_buttons()
+
 	var show_train := has_building and not is_smith and not is_university and not is_farm
 	if train_row:
 		train_row.visible = show_train
 	if not show_train:
 		return
-	var is_hall := b is DropOff or b.is_in_group("player_town_hall")
 	var is_barracks := b is Barracks
 	var is_archery := b is ArcheryRange
 	if train_villager:
@@ -929,3 +943,112 @@ func is_formation_row_visible() -> bool:
 
 func get_train_villager_button() -> Button:
 	return train_villager
+
+
+func _ensure_garrison_row() -> void:
+	if command_vbox == null:
+		return
+	if command_vbox.has_node("GarrisonRow"):
+		_garrison_row = command_vbox.get_node_or_null("GarrisonRow") as HBoxContainer
+		_ungarrison_button = (
+			_garrison_row.get_node_or_null("Ungarrison") as Button if _garrison_row else null
+		)
+		_town_bell_button = (
+			_garrison_row.get_node_or_null("TownBell") as Button if _garrison_row else null
+		)
+		return
+	_garrison_row = HBoxContainer.new()
+	_garrison_row.name = "GarrisonRow"
+	_garrison_row.add_theme_constant_override("separation", 4)
+	_garrison_row.visible = false
+	command_vbox.add_child(_garrison_row)
+	_ungarrison_button = Button.new()
+	_ungarrison_button.name = "Ungarrison"
+	_ungarrison_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_ungarrison_button.text = "Vyprázdnit"
+	_ungarrison_button.tooltip_text = "Vyprázdnit posádku (na shromaždiště)"
+	_ungarrison_button.pressed.connect(_on_ungarrison_pressed)
+	_garrison_row.add_child(_ungarrison_button)
+	_town_bell_button = Button.new()
+	_town_bell_button.name = "TownBell"
+	_town_bell_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_town_bell_button.text = "Zvonek (H)"
+	_town_bell_button.tooltip_text = "Zvonek — vesničané do posádky (H)"
+	_town_bell_button.pressed.connect(_on_town_bell_pressed)
+	_garrison_row.add_child(_town_bell_button)
+	_refresh_garrison_buttons()
+
+
+func _refresh_garrison_buttons() -> void:
+	if _ungarrison_button == null:
+		return
+	var b := SelectionManager.selected_building
+	var g := GarrisonController.of(b) if b != null and is_instance_valid(b) else null
+	var n := g.count() if g else 0
+	_ungarrison_button.disabled = n <= 0
+	_ungarrison_button.text = "Vyprázdnit" if n <= 0 else "Vyprázdnit (%d)" % n
+	_ungarrison_button.tooltip_text = "Vyprázdnit posádku na shromaždiště"
+	var is_hall := b is DropOff and is_instance_valid(b)
+	if _town_bell_button:
+		_town_bell_button.visible = is_hall
+		if is_hall:
+			var hall := b as DropOff
+			_town_bell_button.text = "Zpět (H)" if hall.bell_active else "Zvonek (H)"
+			_town_bell_button.tooltip_text = (
+				"Vrátit vesničany k práci (H)" if hall.bell_active
+				else "Zvonek — blízké vesničany do posádky (H)"
+			)
+
+
+func _connect_garrison_signal(building: Node) -> void:
+	if _garrison_connected and is_instance_valid(_garrison_connected):
+		if _garrison_connected.garrison_changed.is_connected(_on_garrison_changed):
+			_garrison_connected.garrison_changed.disconnect(_on_garrison_changed)
+	_garrison_connected = null
+	if building == null or not is_instance_valid(building):
+		return
+	var g := GarrisonController.ensure(building)
+	_garrison_connected = g
+	if g and not g.garrison_changed.is_connected(_on_garrison_changed):
+		g.garrison_changed.connect(_on_garrison_changed)
+
+
+func _on_garrison_changed(_count: int, _cap: int) -> void:
+	_refresh_garrison_buttons()
+	if SelectionManager.selected_building != null:
+		SelectionManager.building_selection_changed.emit(SelectionManager.selected_building)
+
+
+func _connect_bell_signal(hall: DropOff) -> void:
+	if _bell_connected and is_instance_valid(_bell_connected):
+		if _bell_connected.bell_changed.is_connected(_on_bell_changed):
+			_bell_connected.bell_changed.disconnect(_on_bell_changed)
+	_bell_connected = hall
+	if hall and not hall.bell_changed.is_connected(_on_bell_changed):
+		hall.bell_changed.connect(_on_bell_changed)
+
+
+func _on_bell_changed(_active: bool) -> void:
+	_refresh_garrison_buttons()
+
+
+func _on_ungarrison_pressed() -> void:
+	SelectionManager.eject_selected_building_garrison()
+	_refresh_garrison_buttons()
+
+
+func _on_town_bell_pressed() -> void:
+	SelectionManager.toggle_town_bell()
+	_refresh_garrison_buttons()
+
+
+func get_ungarrison_button() -> Button:
+	return _ungarrison_button
+
+
+func get_town_bell_button() -> Button:
+	return _town_bell_button
+
+
+func is_garrison_row_visible() -> bool:
+	return _garrison_row != null and _garrison_row.visible
