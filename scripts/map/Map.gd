@@ -3150,7 +3150,7 @@ func _run_defeat_smoke() -> void:
 	victory.reset_for_test()
 
 
-## T-30 Standard AI: accelerated ~10 in-game minutes → ≥12 vills, ≥1 farm, age≥2, ≥1 wave.
+## T-30/T-31 Standard AI: accelerated ~10 in-game minutes → eco + stone spend + wave≥6 + counters.
 func _run_ai_economy_smoke() -> void:
 	var ai := get_node_or_null("SimpleEnemyAI") as SimpleEnemyAI
 	if ai == null:
@@ -3163,6 +3163,11 @@ func _run_ai_economy_smoke() -> void:
 	## Deterministic RNG; do not wipe buildings/age already earned during prior smokes.
 	ai.rng.seed = 4242 + ai.team * 7919
 	ai.timing_jitter = 1.0
+	## Counter-selection (TechData.unit_role table) — pure, no scene units required.
+	var pick_arch := ai.select_counter_unit({"archer": 10, "cavalry": 1, "infantry": 2})
+	var pick_cav := ai.select_counter_unit({"archer": 1, "cavalry": 10, "infantry": 2})
+	var counter_ok := pick_arch in ["light_cavalry", "soldier"] and pick_cav == "spearman"
+	print("[TEST] ai_counter vs_archers=%s vs_cavalry=%s ok=%s" % [pick_arch, pick_cav, counter_ok])
 	var start_elapsed: float = ai._sim_elapsed
 	Engine.time_scale = 80.0
 	var ok := false
@@ -3193,9 +3198,25 @@ func _run_ai_economy_smoke() -> void:
 	if victory:
 		victory.set_process(true)
 		victory.reset_for_test()
-	print("[TEST] ai_economy vills=%d farms=%d age=%d waved=%s elapsed=%.0fs frames=%d" % [
-		ai._count_villagers(), ai._count_farms(), ai.age, ai.has_launched_wave(), ai._sim_elapsed, frames
-	])
+	var stone_ok := ai.stone < 300
+	var wave_ok := ai._first_wave_count >= 6
+	print(
+		"[TEST] ai_economy vills=%d farms=%d age=%d waved=%s first_wave=%d stone=%d stone_ok=%s wave_ok=%s counter_ok=%s elapsed=%.0fs frames=%d"
+		% [
+			ai._count_villagers(),
+			ai._count_farms(),
+			ai.age,
+			ai.has_launched_wave(),
+			ai._first_wave_count,
+			ai.stone,
+			stone_ok,
+			wave_ok,
+			counter_ok,
+			ai._sim_elapsed,
+			frames,
+		]
+	)
+	ok = ok and counter_ok and stone_ok and wave_ok
 	if ok:
 		print("[TEST] PASS AI places building and launches wave")
 	else:
