@@ -323,16 +323,12 @@ func prepare_team_read_screenshot() -> void:
 	_save_shot("t28_team_read.png", 0)
 
 
-## T-34: light cavalry + knight mid-walk + rally flag sprite.
+## T-34: walking cavalry next to villager + TC at default zoom (size parity).
 func prepare_cav_walk_screenshot() -> void:
 	DisplayServer.window_set_size(Vector2i(1280, 720))
 	var debug := get_node_or_null("DebugPanel")
 	if debug:
 		debug.visible = false
-	for n in get_tree().get_nodes_in_group("player_town_hall"):
-		if n is Node2D:
-			(n as Node2D).visible = false
-			(n as Node2D).position = Vector2(-4000, -4000)
 	for n in get_tree().get_nodes_in_group("enemy_town_hall"):
 		if n is Node2D:
 			(n as Node2D).visible = false
@@ -341,32 +337,48 @@ func prepare_cav_walk_screenshot() -> void:
 		if n is Unit and is_instance_valid(n):
 			(n as Unit).visible = false
 			(n as Unit).position = Vector2(-5000, -5000)
-	var origin := Vector2(980, 720)
+	## Use demo player TC when present; otherwise spawn one.
+	var hall: DropOff = null
+	for n in get_tree().get_nodes_in_group("player_town_hall"):
+		if n is DropOff and is_instance_valid(n):
+			hall = n as DropOff
+			hall.visible = true
+			break
+	if hall == null:
+		hall = DROPOFF_SCENE.instantiate() as DropOff
+		hall.team = 0
+		hall.position = PLAYER_TC_POS
+		hall.spawn_parent = units
+		units.add_child(hall)
+	var origin := hall.global_position + Vector2(110, 70)
+	var vill: Villager = VILLAGER_SCENE.instantiate() as Villager
+	vill.team = 0
+	vill.contribute_population = false
+	vill.position = origin + Vector2(-50, 10)
+	units.add_child(vill)
 	var cav: LightCavalry = preload("res://scenes/units/LightCavalry.tscn").instantiate() as LightCavalry
 	cav.team = 0
 	cav.contribute_population = false
-	cav.position = origin + Vector2(-40, 10)
+	cav.position = origin + Vector2(20, 10)
 	units.add_child(cav)
 	var kn: Knight = preload("res://scenes/units/Knight.tscn").instantiate() as Knight
 	kn.team = 0
 	kn.contribute_population = false
-	kn.position = origin + Vector2(90, 10)
+	kn.position = origin + Vector2(100, 10)
 	units.add_child(kn)
-	var hall: DropOff = DROPOFF_SCENE.instantiate() as DropOff
-	hall.team = 0
-	hall.position = origin + Vector2(-160, 40)
-	hall.spawn_parent = units
-	units.add_child(hall)
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	var cam := get_node_or_null("Camera2D") as RTSCamera
-	for u in [cav, kn]:
+	for u in [vill, cav, kn]:
 		u.set_process(false)
 		u.set_physics_process(false)
 		if u.navigation_agent:
 			u.navigation_agent.avoidance_enabled = false
 			if u.navigation_agent.velocity_computed.is_connected(u._on_velocity_computed):
 				u.navigation_agent.velocity_computed.disconnect(u._on_velocity_computed)
+	vill._facing = "right"
+	vill.velocity = Vector2.ZERO
+	vill._apply_facing_texture()
 	cav._facing = "right"
 	cav._walk_frame = 1
 	cav.velocity = Vector2(90, 0)
@@ -378,27 +390,27 @@ func prepare_cav_walk_screenshot() -> void:
 			u._visual = u.get_node_or_null("Visual") as Sprite2D
 		if u.has_walk_sheet():
 			u._apply_walk_frame()
-			u._visual.scale = Vector2(2.2, 2.2)
-			u._anchor_sprite_to_feet()
+			## Keep Unit.gd walk/idle size scale — do not boost for the shot.
 	SelectionManager.clear_selection()
 	SelectionManager.select_building(hall)
-	SelectionManager.set_building_rally(origin + Vector2(40, -50), null)
+	SelectionManager.set_building_rally(origin + Vector2(40, -40), null)
 	var rally := RallyPointController.of(hall)
 	if rally:
 		rally.visible = true
-		if rally._flag:
-			rally._flag.scale = Vector2(2.5, 2.5)
 	if cam:
-		cam.set_zoom_clamped(2.2)
-		cam.center_at(origin + Vector2(20, -10))
+		## Default zoom (1.0) so cavalry vs TC/villager scale is readable.
+		cam.set_zoom_clamped(1.0)
+		cam.center_at(origin + Vector2(10, -20))
 	await get_tree().process_frame
 	await get_tree().process_frame
 	print(
-		"[SHOT] cav-walk lc_sheet=%s kn_sheet=%s flag=%s"
+		"[SHOT] cav-walk lc_sheet=%s kn_sheet=%s flag=%s vill=%s zoom=%.2f"
 		% [
 			str(cav.has_walk_sheet()),
 			str(kn.has_walk_sheet()),
 			str(rally != null and rally.has_flag_sprite()),
+			str(is_instance_valid(vill)),
+			cam.zoom.x if cam else -1.0,
 		]
 	)
 	_save_shot("t34_cav_walk.png", 0)
@@ -4476,6 +4488,30 @@ func _run_walk_cycle_smoke() -> void:
 		print("[TEST] PASS cavalry walk frames")
 	else:
 		print("[TEST] FAIL cavalry walk frames")
+
+	# T-34 scale fix: walk draw height / idle draw height in [0.9, 1.1].
+	var parity_units: Array[Unit] = [cav, kn, archer, spear]
+	var parity_ok := true
+	var parity_parts: PackedStringArray = []
+	for u in parity_units:
+		u.velocity = Vector2.ZERO
+		u._facing = "down"
+		u._apply_facing_texture()
+		var idle_h: float = u.visual_draw_height()
+		u.velocity = Vector2(80, 0)
+		u._walk_frame = 1
+		u._apply_walk_frame()
+		var walk_h: float = u.visual_draw_height()
+		var ratio := 0.0 if idle_h <= 0.0 else walk_h / idle_h
+		var unit_ok := idle_h > 0.0 and ratio >= 0.9 and ratio <= 1.1
+		parity_ok = parity_ok and unit_ok
+		parity_parts.append("%s=%.3f" % [u.unit_id if u.unit_id != "" else u.get_class(), ratio])
+	print("[TEST] walk/idle size parity %s ok=%s" % [" ".join(parity_parts), parity_ok])
+	if parity_ok:
+		print("[TEST] PASS walk/idle size parity")
+	else:
+		print("[TEST] FAIL walk/idle size parity")
+
 	for n in [vill, sol_ai, archer, spear, monk, cav, kn]:
 		if n != null and is_instance_valid(n):
 			n.queue_free()

@@ -161,18 +161,19 @@ crop → NN scale → shared 32-colour palette). No `gen_*` procedural drawing.
 
 | File | Size | Notes |
 |---|---|---|
-| `assets/sprites/units/light_cavalry_walk.png` | 256×320 | 4×4 cells 64×80; no team-blue |
-| `assets/sprites/units/knight_walk.png` | 256×320 | 4×4 cells 64×80; team-blue on barding/shield |
+| `assets/sprites/units/light_cavalry_walk.png` | 216×268 | 4×4 cells **54×67** (= idle canvas); no team-blue |
+| `assets/sprites/units/knight_walk.png` | 216×300 | 4×4 cells **54×75** (= idle canvas); team-blue on barding/shield |
 | `assets/sprites/fx/rally_flag.png` | 19×30 | wooden stake + red banner |
 
-Screenshot: `docs/screenshots/t34_cav_walk.png`.
+`Unit.gd` also scales walk cells so draw height matches the idle facing texture (covers
+spearman 40-cell vs 45 idle, etc.). Smoke: `PASS walk/idle size parity`.
+Screenshot: `docs/screenshots/t34_cav_walk.png` (cavalry + villager + TC, default zoom).
 
 ### Art debt (cavalry walk)
 
-- Cavalry walk cells are larger (64×80) than infantry walk-v1/v2 (32×40) so horse+rider fit;
-  idle canvases remain 54×67 / 54×75 — slight size change idle↔walk is possible.
 - Side rows are true profiles; front/back are front-3/4 generations (same contract as walk-v2).
 - Knight walk keeps team-blue for T-18; light cavalry has none (modulate / underfoot marker).
+- NN downscale from larger generated frames softens some horse-leg detail vs idle.
 
 ## What this pack does not include
 

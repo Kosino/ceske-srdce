@@ -7,12 +7,14 @@ production palette (no dither). No procedurally drawn pixels, no deforming of id
 
 ## Layout (engine contract)
 
-- `assets/sprites/units/{light_cavalry,knight}_walk.png`, **256×320**
-- **4 columns** (frames 0–3) × **4 rows** (down, left, right, up), cell **64×80**
-  (larger than infantry 32×40 so the horse fits).
+- `assets/sprites/units/{light_cavalry,knight}_walk.png`
+- **4 columns** (frames 0–3) × **4 rows** (down, left, right, up)
+- Cell size **matches idle canvas**: light_cavalry **54×67** (sheet 216×268),
+  knight **54×75** (sheet 216×300). Content NN-scaled to idle footprint then re-quantized.
 - Feet on the cell's bottom row; horizontal anchor = torso/head centre.
 - `_right` row = horizontal mirror of `_left`.
 - Light cavalry: no team-blue. Knight: team-blue on barding/shield (T-18).
+- `Unit.gd` walk size scale keeps draw height = idle facing height.
 
 ## Rally flag
 
