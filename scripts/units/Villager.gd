@@ -42,6 +42,7 @@ func _ready() -> void:
 	max_hp = 25.0
 	speed = 80.0
 	attack_damage = 3.0
+	sight_range = 4.0 * 40.0
 	super._ready()
 	configure_facing_sprites("villager")
 	add_to_group("villagers")

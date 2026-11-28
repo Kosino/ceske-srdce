@@ -18,7 +18,7 @@ func _ready() -> void:
 	attack_cooldown = 0.85
 	can_attack = true
 	attack_type = "melee"
-	sight_range = 5.0 * 40.0
+	sight_range = 6.0 * 40.0
 	super._ready()
 	configure_facing_sprites("knight")
 	add_to_group("soldiers")

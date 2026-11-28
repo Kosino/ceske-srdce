@@ -35,31 +35,87 @@ func paint_minimap(surf: Control) -> void:
 	var tree := get_tree()
 	if tree == null:
 		return
-	_draw_dots(surf, tree, "forest_resources", FOREST_COLOR, r, 1.6)
-	_draw_dots(surf, tree, "gold_mines", GOLD_COLOR, r, 2.4)
-	_draw_dots(surf, tree, "stone_mines", STONE_COLOR, r, 2.4)
-	_draw_building_squares(surf, tree, "player_buildings", TeamColors.minimap_build(0), r)
-	_draw_building_squares(surf, tree, "enemy_buildings", TeamColors.minimap_build(1), r)
-	_draw_dots(surf, tree, "player_units", TeamColors.minimap_unit(0), r, 2.5)
-	_draw_dots(surf, tree, "enemy_units", TeamColors.minimap_unit(1), r, 2.5)
+	var fog := tree.get_first_node_in_group("fog_of_war") as FogOfWar
+	_draw_dots(surf, tree, "forest_resources", FOREST_COLOR, r, 1.6, fog, false)
+	_draw_dots(surf, tree, "gold_mines", GOLD_COLOR, r, 2.4, fog, false)
+	_draw_dots(surf, tree, "stone_mines", STONE_COLOR, r, 2.4, fog, false)
+	_draw_building_squares(surf, tree, "player_buildings", TeamColors.minimap_build(0), r, fog, false)
+	_draw_building_squares(surf, tree, "enemy_buildings", TeamColors.minimap_build(1), r, fog, false)
+	_draw_dots(surf, tree, "player_units", TeamColors.minimap_unit(0), r, 2.5, fog, false)
+	# AI units only when currently in sight (not merely explored).
+	_draw_dots(surf, tree, "enemy_units", TeamColors.minimap_unit(1), r, 2.5, fog, true)
+	_draw_fog_overlay(surf, r, fog)
 	_draw_camera_frame(surf, r)
 
 
+func _fog_hides(fog: FogOfWar, world: Vector2, require_visible: bool) -> bool:
+	if fog == null or not fog.fog_enabled:
+		return false
+	if require_visible:
+		return not fog.is_world_visible(world)
+	return not fog.is_world_explored(world)
+
+
+func _draw_fog_overlay(surf: Control, r: Vector2, fog: FogOfWar) -> void:
+	if fog == null or not fog.fog_enabled:
+		return
+	# Coarse fog sample so minimap stays cheap (~25×25 probes).
+	const STEPS := 25
+	var cell := Vector2(r.x / float(STEPS), r.y / float(STEPS))
+	for gy in STEPS:
+		for gx in STEPS:
+			var world := Vector2(
+				(float(gx) + 0.5) / float(STEPS) * MAP_SIZE.x,
+				(float(gy) + 0.5) / float(STEPS) * MAP_SIZE.y
+			)
+			var t := fog.world_to_tile(world)
+			var st := fog.tile_state(t.x, t.y)
+			var col: Color
+			if st == FogOfWar.STATE_UNEXPLORED:
+				col = Color(0.0, 0.0, 0.0, 0.92)
+			elif st == FogOfWar.STATE_EXPLORED:
+				col = Color(0.12, 0.12, 0.14, 0.55)
+			else:
+				continue
+			surf.draw_rect(Rect2(Vector2(float(gx) * cell.x, float(gy) * cell.y), cell), col)
+
+
 func _draw_dots(
-	surf: Control, tree: SceneTree, group: String, color: Color, r: Vector2, radius: float
+	surf: Control,
+	tree: SceneTree,
+	group: String,
+	color: Color,
+	r: Vector2,
+	radius: float,
+	fog: FogOfWar = null,
+	require_visible: bool = false
 ) -> void:
 	for n in tree.get_nodes_in_group(group):
 		if not (n is Node2D):
 			continue
-		var uv := _world_to_uv((n as Node2D).global_position)
+		var world := (n as Node2D).global_position
+		if _fog_hides(fog, world, require_visible):
+			continue
+		var uv := _world_to_uv(world)
 		surf.draw_circle(Vector2(uv.x * r.x, uv.y * r.y), radius, color)
 
 
-func _draw_building_squares(surf: Control, tree: SceneTree, group: String, color: Color, r: Vector2) -> void:
+func _draw_building_squares(
+	surf: Control,
+	tree: SceneTree,
+	group: String,
+	color: Color,
+	r: Vector2,
+	fog: FogOfWar = null,
+	require_visible: bool = false
+) -> void:
 	for n in tree.get_nodes_in_group(group):
 		if not (n is Node2D):
 			continue
-		var uv := _world_to_uv((n as Node2D).global_position)
+		var world := (n as Node2D).global_position
+		if _fog_hides(fog, world, require_visible):
+			continue
+		var uv := _world_to_uv(world)
 		var c := Vector2(uv.x * r.x, uv.y * r.y)
 		surf.draw_rect(Rect2(c - Vector2(3, 3), Vector2(6, 6)), color)
 
