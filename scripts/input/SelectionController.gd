@@ -312,6 +312,7 @@ func _find_damaged_own_building_at(world_pos: Vector2) -> Building:
 
 
 func _find_enemy_at(world_pos: Vector2) -> Node2D:
+	var fog := get_tree().get_first_node_in_group("fog_of_war") as FogOfWar
 	var best: Node2D = null
 	var best_dist := 40.0
 	for group_name in ["enemy_units", "enemy_buildings", "enemy_town_hall"]:
@@ -319,6 +320,9 @@ func _find_enemy_at(world_pos: Vector2) -> Node2D:
 			if not (node is Node2D):
 				continue
 			var n := node as Node2D
+			# Hidden under fog: units need current LOS; buildings need last-known / LOS.
+			if fog != null and fog.fog_enabled and not fog.is_enemy_targetable(n):
+				continue
 			var radius := 24.0
 			if n is DropOff:
 				radius = (n as DropOff).dropoff_radius

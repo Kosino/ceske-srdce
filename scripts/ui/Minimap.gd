@@ -40,7 +40,8 @@ func paint_minimap(surf: Control) -> void:
 	_draw_dots(surf, tree, "gold_mines", GOLD_COLOR, r, 2.4, fog, false)
 	_draw_dots(surf, tree, "stone_mines", STONE_COLOR, r, 2.4, fog, false)
 	_draw_building_squares(surf, tree, "player_buildings", TeamColors.minimap_build(0), r, fog, false)
-	_draw_building_squares(surf, tree, "enemy_buildings", TeamColors.minimap_build(1), r, fog, false)
+	# Enemy buildings: last-known only (newly built in grey stay hidden until sighted).
+	_draw_building_squares(surf, tree, "enemy_buildings", TeamColors.minimap_build(1), r, fog, false, true)
 	_draw_dots(surf, tree, "player_units", TeamColors.minimap_unit(0), r, 2.5, fog, false)
 	# AI units only when currently in sight (not merely explored).
 	_draw_dots(surf, tree, "enemy_units", TeamColors.minimap_unit(1), r, 2.5, fog, true)
@@ -59,8 +60,8 @@ func _fog_hides(fog: FogOfWar, world: Vector2, require_visible: bool) -> bool:
 func _draw_fog_overlay(surf: Control, r: Vector2, fog: FogOfWar) -> void:
 	if fog == null or not fog.fog_enabled:
 		return
-	# Coarse fog sample so minimap stays cheap (~25×25 probes).
-	const STEPS := 25
+	# Finer probe grid (~40×40) softens minimap fog cells vs stair-step tiles.
+	const STEPS := 40
 	var cell := Vector2(r.x / float(STEPS), r.y / float(STEPS))
 	for gy in STEPS:
 		for gx in STEPS:
@@ -107,13 +108,17 @@ func _draw_building_squares(
 	color: Color,
 	r: Vector2,
 	fog: FogOfWar = null,
-	require_visible: bool = false
+	require_visible: bool = false,
+	enemy_last_known: bool = false
 ) -> void:
 	for n in tree.get_nodes_in_group(group):
 		if not (n is Node2D):
 			continue
 		var world := (n as Node2D).global_position
-		if _fog_hides(fog, world, require_visible):
+		if enemy_last_known:
+			if fog != null and fog.fog_enabled and not fog.is_enemy_building_revealed(n as Node2D):
+				continue
+		elif _fog_hides(fog, world, require_visible):
 			continue
 		var uv := _world_to_uv(world)
 		var c := Vector2(uv.x * r.x, uv.y * r.y)
