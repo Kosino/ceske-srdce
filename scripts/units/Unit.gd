@@ -32,6 +32,11 @@ const WALK_DIRS: Array[String] = ["down", "left", "right", "up"]
 const WALK_FRAME_COUNT := 4
 const WALK_FPS := 8.0
 const WALK_MOVE_EPS_SQ := 4.0
+## AoE-style underfoot team blob (inside selection ring r=14 so arcs do not collide).
+const SELECTION_RING_RADIUS := 14.0
+const TEAM_MARKER_RX := 8.0
+const TEAM_MARKER_RY := 4.5
+const TEAM_MARKER_ALPHA := 0.9
 
 var hp: float
 var selected: bool = false
@@ -225,9 +230,28 @@ func _hp_fill_color() -> Color:
 	return Color(0.2, 0.85, 0.25, 0.95) if team == 0 else Color(0.9, 0.2, 0.15, 0.95)
 
 
+## T-28: team colour for the underfoot oval (player blue / AI red).
+func team_marker_color() -> Color:
+	var c := TeamColors.color_for(team)
+	c.a = TEAM_MARKER_ALPHA
+	return c
+
+
+func _draw_team_marker() -> void:
+	## Filled ellipse under feet; max radius < selection ring so they do not collide.
+	var col := team_marker_color()
+	var pts := PackedVector2Array()
+	const SEGMENTS := 20
+	for i in SEGMENTS:
+		var a := TAU * float(i) / float(SEGMENTS)
+		pts.append(Vector2(cos(a) * TEAM_MARKER_RX, sin(a) * TEAM_MARKER_RY))
+	draw_colored_polygon(pts, col)
+
+
 func _draw() -> void:
+	_draw_team_marker()
 	if selected:
-		draw_arc(Vector2.ZERO, 14.0, 0.0, TAU, 28, Color(1.0, 0.9, 0.2, 0.95), 2.0)
+		draw_arc(Vector2.ZERO, SELECTION_RING_RADIUS, 0.0, TAU, 28, Color(1.0, 0.9, 0.2, 0.95), 2.0)
 	var ratio := clampf(hp / maxf(max_hp, 1.0), 0.0, 1.0)
 	var bar_w := 20.0
 	var bar_y := _hp_bar_y()
