@@ -7,6 +7,7 @@ const BUILD_BUTTONS := [
 	{"id": "lumber_camp", "name": "Pila"},
 	{"id": "mining_camp", "name": "Důlní tábor"},
 	{"id": "mill", "name": "Mlýn"},
+	{"id": "farm", "name": "Farma"},
 	{"id": "barracks", "name": "Kasárna"},
 	{"id": "palisade", "name": "Palisáda"},
 	{"id": "stone_wall", "name": "Zeď"},

@@ -32,6 +32,7 @@ Production PNGs live under `assets/sprites/{buildings,units,resources,terrain,fx
 | `assets/sprites/buildings/siege_workshop.png` | 120×90 | footprint 80×80 | Obléhací dílna / SiegeWorkshop | wired (T-23) |
 | `assets/sprites/units/ram_{down,left,right,up}.png` | 48×45 | collision ~20×20 | Beranidlo / Ram | facing from velocity |
 | `assets/sprites/units/trebuchet_{down,left,right,up}.png` | 56×64 | collision ~22×22 | Trebuchet | packed look; unpack = offset/modulate |
+| `assets/sprites/buildings/farm.png` (+ `_empty` / `_sown` / `_ripe`) | 80×53–54 | footprint 80×80 | Farma / Farm | wired (T-19); default = ripe |
 
 ## Integration (done)
 
@@ -47,6 +48,7 @@ Footprints unchanged:
 House          Vector2(56, 56)
 LumberCamp     Vector2(72, 72)
 Mill           Vector2(72, 72)
+Farm           Vector2(80, 80)
 Barracks       Vector2(80, 80)
 ArcheryRange   Vector2(80, 80)
 DropOff / Radnice: virtual 80×80
@@ -73,6 +75,19 @@ Finished age-4 siege art from the original PR #10 pipeline (magenta key → defr
 
 Import source branch: `art/siege-v1` (`art_import/sprites_siege.tar.gz` sha256 `16661f7b…fc5779`). Screenshot: `docs/screenshots/siege.png`.
 
+## T-19 farm plots (pole u mlýna)
+
+Farm field sprites from the original PR #10 pipeline (magenta key → defringe → crop → NN scale → shared 32-colour palette). No procedural script drawing. Front 3/4, same style as T-23 siege / mill.
+
+| File | Size | State |
+|---|---|---|
+| `assets/sprites/buildings/farm_empty.png` | 80×54 | tilled dirt + corner posts |
+| `assets/sprites/buildings/farm_sown.png` | 80×54 | green seedlings |
+| `assets/sprites/buildings/farm_ripe.png` | 80×53 | golden wheat |
+| `assets/sprites/buildings/farm.png` | 80×53 | alias of ripe (default place / ghost) |
+
+Wired as `Farm` building (visual + placement; requires Mill; no gather loop yet). Screenshot: `docs/screenshots/t19_farms.png`.
+
 ## T-18 team recolour (palette swap)
 
 AoE II-style team colour via `assets/shaders/team_recolour.gdshader` + `TeamColors` (`scripts/data/TeamColors.gd`):
@@ -87,7 +102,7 @@ AoE II-style team colour via `assets/shaders/team_recolour.gdshader` + `TeamColo
 Sprites without distinguishable `(40, 86, 160)` team indices (shader is a no-op on them; tint fallback applies for AI until artists add cloth/banner/shield team blue):
 
 - **Units:** villager, soldier, spearman, archer, monk, light_cavalry, bojovnik_bradatice, druzinik, lancknecht, valecny_vuz, ram, trebuchet
-- **Buildings:** town_center, house, lumber_camp, mill, barracks, archery_range, blacksmith, stable, castle, monastery, university, siege_workshop, walls/gates/towers, construction_site
+- **Buildings:** town_center, house, lumber_camp, mill, farm, barracks, archery_range, blacksmith, stable, castle, monastery, university, siege_workshop, walls/gates/towers, construction_site
 - **Has team blue today:** knight (shield), market (awning/banner)
 
 ## What this pack does not include

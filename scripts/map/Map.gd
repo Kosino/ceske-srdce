@@ -68,6 +68,7 @@ func _ready() -> void:
 		await _run_walls_towers_smoke()
 		await _run_age34_monk_smoke()
 		await _run_age4_siege_smoke()
+		await _run_farm_plots_smoke()
 		await _run_audio_manager_smoke()
 		await _run_team_recolour_smoke()
 		await _run_balance_harness_smoke()
@@ -100,6 +101,8 @@ func _ready() -> void:
 		await prepare_university_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--siege-shot"):
 		await prepare_siege_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--farms-shot"):
+		await prepare_farms_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--team-shot"):
 		await prepare_team_colours_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--formation-shot"):
@@ -405,6 +408,44 @@ func prepare_monk_screenshot() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	_save_shot("monk.png", 0)
+
+
+## T-19: Mlýn + farm plots (empty / sown / ripe) nearby.
+func prepare_farms_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	for n in get_tree().get_nodes_in_group("player_town_hall"):
+		if n is Node2D:
+			(n as Node2D).visible = false
+			(n as Node2D).position = Vector2(-4000, -4000)
+	GameManager.current_age = 1
+	GameManager.wood = 400
+	var origin := Vector2(1020, 700)
+	var mill: Mill = preload("res://scenes/buildings/Mill.tscn").instantiate() as Mill
+	mill.team = 0
+	mill.is_complete = true
+	mill.position = origin
+	units.add_child(mill)
+	var offsets := [Vector2(-100, 70), Vector2(0, 90), Vector2(100, 70)]
+	var states := ["empty", "sown", "ripe"]
+	for i in range(3):
+		var farm: Farm = preload("res://scenes/buildings/Farm.tscn").instantiate() as Farm
+		farm.team = 0
+		farm.is_complete = true
+		farm.farm_state = states[i]
+		farm.position = origin + offsets[i]
+		units.add_child(farm)
+		farm.set_farm_state(states[i])
+	SelectionManager.select_building(mill)
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	if cam:
+		cam.set_zoom_clamped(1.2)
+		cam.center_at(origin + Vector2(0, 50))
+	await get_tree().create_timer(0.5).timeout
+	await get_tree().process_frame
+	_save_shot("t19_farms.png", 0)
 
 
 ## Obléhací dílna + Beranidlo + Trebuchet (age-4 siege).
@@ -2885,6 +2926,96 @@ func _run_age4_siege_smoke() -> void:
 	for s in barrier_walls:
 		if s != null and is_instance_valid(s):
 			s.queue_free()
+	await get_tree().physics_frame
+
+
+## T-19 farm plots: sprite loads + Farm uses it; requires Mill; placeable.
+func _run_farm_plots_smoke() -> void:
+	await get_tree().physics_frame
+	GameManager.current_age = 1
+	GameManager.wood = 400
+	GameManager.food = 200
+
+	var tex_farm := load("res://assets/sprites/buildings/farm.png") as Texture2D
+	var tex_empty := load("res://assets/sprites/buildings/farm_empty.png") as Texture2D
+	var tex_sown := load("res://assets/sprites/buildings/farm_sown.png") as Texture2D
+	var tex_ripe := load("res://assets/sprites/buildings/farm_ripe.png") as Texture2D
+	var sprites_ok: bool = (
+		tex_farm != null and tex_empty != null and tex_sown != null and tex_ripe != null
+		and tex_farm.get_width() == 80
+		and tex_empty.get_width() == 80
+		and tex_sown.get_width() == 80
+		and tex_ripe.get_width() == 80
+	)
+
+	var design_ok: bool = (
+		int(BuildingPlacer.COSTS["farm"].get("wood", 0)) == 60
+		and float(BuildingPlacer.BUILD_TIMES["farm"]) == 15.0
+		and AgeData.building_unlock_age("farm") == 1
+		and BuildingPlacer.FOOTPRINTS["farm"] == Vector2(80, 80)
+		and str(BuildingPlacer.REQUIRES_BUILDING.get("farm", "")) == "mill"
+	)
+
+	# Blocked without mill.
+	var wood0 := GameManager.wood
+	var blocked := building_placer.place_at("farm", PLAYER_TC_POS + Vector2(220, 180))
+	var prereq_ok: bool = blocked == null and GameManager.wood == wood0 and not building_placer._prereq_met("farm")
+
+	var mill: Mill = building_placer.place_at("mill", PLAYER_TC_POS + Vector2(260, 160)) as Mill
+	var mill_ok: bool = mill != null
+	if mill:
+		mill.is_complete = true
+		mill.build_progress = 1.0
+		mill.hp = mill.max_hp
+		mill._show_final_visual()
+	await get_tree().physics_frame
+
+	var farm: Farm = building_placer.place_at("farm", PLAYER_TC_POS + Vector2(360, 200)) as Farm
+	var place_ok: bool = farm != null and building_placer._prereq_met("farm")
+	if farm:
+		farm.is_complete = true
+		farm.build_progress = 1.0
+		farm.hp = farm.max_hp
+		farm.set_farm_state("ripe")
+		farm._show_final_visual()
+	await get_tree().physics_frame
+
+	var uses_sprite: bool = false
+	if farm:
+		var vis := farm.get_node_or_null("Visual") as Sprite2D
+		uses_sprite = (
+			vis != null
+			and vis.texture != null
+			and vis.texture.get_width() == 80
+			and (
+				vis.texture == Farm.TEX_RIPE
+				or vis.texture == Farm.TEX_DEFAULT
+				or vis.texture.resource_path.ends_with("farm.png")
+				or vis.texture.resource_path.ends_with("farm_ripe.png")
+			)
+		)
+		# Cycle states — sprites swap.
+		farm.set_farm_state("empty")
+		var empty_ok: bool = vis.texture == Farm.TEX_EMPTY
+		farm.set_farm_state("sown")
+		var sown_ok: bool = vis.texture == Farm.TEX_SOWN
+		farm.set_farm_state("ripe")
+		var ripe_ok: bool = vis.texture == Farm.TEX_RIPE
+		uses_sprite = uses_sprite and empty_ok and sown_ok and ripe_ok
+
+	var all_ok: bool = sprites_ok and design_ok and prereq_ok and mill_ok and place_ok and uses_sprite
+	print(
+		"[TEST] farm sprites=%s design=%s prereq=%s mill=%s place=%s uses=%s"
+		% [sprites_ok, design_ok, prereq_ok, mill_ok, place_ok, uses_sprite]
+	)
+	if all_ok:
+		print("[TEST] PASS farm plots sprite loads and Farm uses it")
+	else:
+		print("[TEST] FAIL farm plots sprite loads and Farm uses it")
+
+	for n in [mill, farm]:
+		if n != null and is_instance_valid(n):
+			n.queue_free()
 	await get_tree().physics_frame
 
 

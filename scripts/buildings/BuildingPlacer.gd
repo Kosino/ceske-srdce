@@ -9,6 +9,7 @@ const ARCHERY_SCENE := preload("res://scenes/buildings/ArcheryRange.tscn")
 const LUMBER_SCENE := preload("res://scenes/buildings/LumberCamp.tscn")
 const MINING_SCENE := preload("res://scenes/buildings/MiningCamp.tscn")
 const MILL_SCENE := preload("res://scenes/buildings/Mill.tscn")
+const FARM_SCENE := preload("res://scenes/buildings/Farm.tscn")
 const BLACKSMITH_SCENE := preload("res://scenes/buildings/Blacksmith.tscn")
 const STABLE_SCENE := preload("res://scenes/buildings/Stable.tscn")
 const CASTLE_SCENE := preload("res://scenes/buildings/Castle.tscn")
@@ -27,6 +28,7 @@ const GHOST_TEXTURES := {
 	"lumber_camp": preload("res://assets/sprites/buildings/lumber_camp.png"),
 	"mining_camp": preload("res://assets/sprites/buildings/mining_camp.png"),
 	"mill": preload("res://assets/sprites/buildings/mill.png"),
+	"farm": preload("res://assets/sprites/buildings/farm.png"),
 	"blacksmith": preload("res://assets/sprites/buildings/blacksmith.png"),
 	"stable": preload("res://assets/sprites/buildings/stable.png"),
 	"castle": preload("res://assets/sprites/buildings/castle.png"),
@@ -48,6 +50,7 @@ const COSTS := {
 	"lumber_camp": {"wood": 100},
 	"mining_camp": {"wood": 100},
 	"mill": {"wood": 100},
+	"farm": {"wood": 60},
 	"blacksmith": {"wood": 150},
 	"stable": {"wood": 175},
 	"castle": {"stone": 650},
@@ -68,6 +71,7 @@ const BUILD_TIMES := {
 	"lumber_camp": 25.0,
 	"mining_camp": 25.0,
 	"mill": 35.0,
+	"farm": 15.0,
 	"blacksmith": 40.0,
 	"stable": 45.0,
 	"castle": 120.0,
@@ -88,6 +92,7 @@ const FOOTPRINTS := {
 	"lumber_camp": Vector2(80, 80),
 	"mining_camp": Vector2(80, 80),
 	"mill": Vector2(72, 72),
+	"farm": Vector2(80, 80),
 	"blacksmith": Vector2(80, 80),
 	"stable": Vector2(80, 80),
 	"castle": Vector2(160, 160),
@@ -105,6 +110,7 @@ const WALL_TYPES := ["palisade", "stone_wall"]
 
 ## Extra prerequisites beyond age unlock.
 const REQUIRES_BUILDING := {
+	"farm": "mill",
 	"stable": "barracks",
 	"siege_workshop": "university",
 }
@@ -562,6 +568,8 @@ func _instantiate_building(building_type: String) -> Building:
 			return MINING_SCENE.instantiate() as Building
 		"mill":
 			return MILL_SCENE.instantiate() as Building
+		"farm":
+			return FARM_SCENE.instantiate() as Building
 		"blacksmith":
 			return BLACKSMITH_SCENE.instantiate() as Building
 		"stable":
@@ -588,6 +596,8 @@ func _prereq_message(building_type: String) -> String:
 	match str(REQUIRES_BUILDING.get(building_type, "")):
 		"university":
 			return "Nejdřív postav Univerzitu."
+		"mill":
+			return "Nejdřív postav Mlýn."
 		_:
 			return "Nejdřív postav Kasárnu."
 

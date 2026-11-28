@@ -158,6 +158,7 @@ func _refresh_build_cost_labels() -> void:
 		"PlaceLumber": ["Pila", "lumber_camp"],
 		"PlaceMining": ["Důlní tábor", "mining_camp"],
 		"PlaceMill": ["Mlýn", "mill"],
+		"PlaceFarm": ["Farma", "farm"],
 		"PlaceArchery": ["Střelnice", "archery_range"],
 		"PlaceBlacksmith": ["Kovárna", "blacksmith"],
 		"PlaceStable": ["Stáj", "stable"],
