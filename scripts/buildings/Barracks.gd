@@ -125,6 +125,7 @@ func _complete_training() -> void:
 	parent.add_child(unit)
 	if unit is Unit and (unit as Unit).team == 0 and not unit.is_in_group("player_units"):
 		unit.add_to_group("player_units")
+	_apply_rally(unit)
 	unit_spawned.emit(unit)
 	var label := str(UNIT_DEFS.get(unit_id, {}).get("label", unit_id))
 	print("[PROD] spawned %s at %s" % [unit_id, str(unit.position)])
@@ -136,6 +137,12 @@ func _complete_training() -> void:
 			train_remaining = 1.2
 		else:
 			train_remaining = float(UNIT_DEFS[next_id]["time"])
+
+
+func _apply_rally(unit: Node) -> void:
+	var rally := get_node_or_null("RallyPoint")
+	if rally != null and rally.has_method("apply_to_unit"):
+		rally.call("apply_to_unit", unit)
 
 
 func _instantiate_unit(unit_id: String) -> Node2D:

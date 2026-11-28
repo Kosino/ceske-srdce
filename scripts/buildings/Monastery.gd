@@ -102,9 +102,16 @@ func _complete_training() -> void:
 	var parent := spawn_parent if spawn_parent else get_parent()
 	unit.position = global_position + Vector2(0, footprint.y * 0.5 + 24.0)
 	parent.add_child(unit)
+	_apply_rally(unit)
 	unit_spawned.emit(unit)
 	NotificationManager.show_message("Vycvičen Mnich.")
 	print("[PROD] spawned monk at %s" % str(unit.position))
 	queue_changed.emit()
 	if not queue.is_empty():
 		train_remaining = 1.2 if DisplayServer.get_name() == "headless" else MONK_TIME
+
+
+func _apply_rally(unit: Node) -> void:
+	var rally := get_node_or_null("RallyPoint")
+	if rally != null and rally.has_method("apply_to_unit"):
+		rally.call("apply_to_unit", unit)

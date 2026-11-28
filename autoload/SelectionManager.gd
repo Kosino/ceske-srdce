@@ -4,6 +4,7 @@ signal selection_changed(units: Array)
 signal building_selection_changed(building: Node)
 signal formation_changed(kind: String)
 signal resource_focus_changed(resource: ResourceNode)
+signal idle_villager_count_changed(count: int)
 
 var selected_units: Array[Node] = []
 ## Selected production building (Radnice / Kasárna / Střelnice) — AoE-like train UI.
@@ -15,6 +16,15 @@ var hovered_resource: ResourceNode = null
 var hovered_building: Building = null
 ## Current formation for group moves (AoE II style).
 var formation: String = FormationData.LINE
+
+## Control groups 1–9 → unit arrays (AoE-style).
+var _control_groups: Dictionary = {}
+var _last_group_slot: int = -1
+var _last_group_tap_msec: int = -99999
+const GROUP_DOUBLE_TAP_MS := 350
+
+## Idle villager hotkey cycle (`.` / HUD button).
+var _idle_cycle_index: int = 0
 
 
 func set_formation(kind: String) -> void:
@@ -234,3 +244,138 @@ func _add(unit: Node) -> void:
 	selected_units.append(unit)
 	if unit.has_method("set_selected"):
 		unit.set_selected(true)
+
+
+## Ctrl+1–9: save current unit selection into a control group.
+func assign_control_group(slot: int) -> void:
+	if slot < 1 or slot > 9:
+		return
+	var kept: Array[Node] = []
+	for u in selected_units:
+		if u and is_instance_valid(u):
+			kept.append(u)
+	_control_groups[slot] = kept
+	# Assign does not count as a select tap (double-tap is 1–9 only).
+	_last_group_slot = -1
+	if kept.is_empty():
+		NotificationManager.show_message("Skupina %d vymazána." % slot)
+	else:
+		NotificationManager.show_message("Skupina %d (%d)." % [slot, kept.size()])
+		AudioManager.play_sfx("select")
+
+
+## 1–9: recall group. Double-tap same key within window → center camera.
+func select_control_group(slot: int) -> bool:
+	if slot < 1 or slot > 9:
+		return false
+	var raw: Array = _control_groups.get(slot, [])
+	var alive: Array[Node] = []
+	for u in raw:
+		if u and is_instance_valid(u):
+			alive.append(u)
+	_control_groups[slot] = alive
+	var now := Time.get_ticks_msec()
+	var double_tap := (
+		slot == _last_group_slot and (now - _last_group_tap_msec) <= GROUP_DOUBLE_TAP_MS
+	)
+	_last_group_slot = slot
+	_last_group_tap_msec = now
+	if alive.is_empty():
+		return false
+	select_multiple(alive)
+	if double_tap:
+		center_camera_on_nodes(alive)
+	return double_tap
+
+
+func get_control_group(slot: int) -> Array:
+	if slot < 1 or slot > 9:
+		return []
+	var raw: Array = _control_groups.get(slot, [])
+	var alive: Array = []
+	for u in raw:
+		if u and is_instance_valid(u):
+			alive.append(u)
+	_control_groups[slot] = alive
+	return alive
+
+
+func is_villager_idle(v: Villager) -> bool:
+	if v == null or not is_instance_valid(v) or v.team != 0:
+		return false
+	return v.state == Villager.State.IDLE
+
+
+func count_idle_villagers() -> int:
+	var n := 0
+	var tree := get_tree()
+	if tree == null:
+		return 0
+	for node in tree.get_nodes_in_group("villagers"):
+		if node is Villager and is_villager_idle(node as Villager):
+			n += 1
+	return n
+
+
+func list_idle_villagers() -> Array[Villager]:
+	var out: Array[Villager] = []
+	var tree := get_tree()
+	if tree == null:
+		return out
+	for node in tree.get_nodes_in_group("villagers"):
+		if node is Villager and is_villager_idle(node as Villager):
+			out.append(node as Villager)
+	return out
+
+
+## `.` hotkey / HUD: select next idle villager and center camera.
+func select_next_idle_villager() -> Villager:
+	var idle := list_idle_villagers()
+	if idle.is_empty():
+		NotificationManager.show_message("Žádný nečinný vesničan.")
+		return null
+	_idle_cycle_index = _idle_cycle_index % idle.size()
+	var pick: Villager = idle[_idle_cycle_index]
+	_idle_cycle_index = (_idle_cycle_index + 1) % idle.size()
+	select_single(pick)
+	center_camera_on_nodes([pick])
+	return pick
+
+
+func center_camera_on_nodes(nodes: Array) -> void:
+	var tree := get_tree()
+	if tree == null:
+		return
+	var cam := tree.get_first_node_in_group("rts_camera") as RTSCamera
+	if cam == null:
+		return
+	var mid := Vector2.ZERO
+	var n := 0
+	for u in nodes:
+		if u and is_instance_valid(u) and u is Node2D:
+			mid += (u as Node2D).global_position
+			n += 1
+	if n <= 0:
+		return
+	cam.center_at(mid / float(n))
+
+
+func set_building_rally(world_pos: Vector2, resource: Node2D = null) -> bool:
+	var b := selected_building
+	if b == null or not is_instance_valid(b) or not RallyPointController.can_host(b):
+		return false
+	var rally := RallyPointController.ensure(b)
+	if rally == null:
+		return false
+	rally.set_rally(world_pos, resource)
+	AudioManager.play_sfx("command")
+	if resource != null and is_instance_valid(resource):
+		var label := "zdroj"
+		if resource is ResourceNode:
+			label = (resource as ResourceNode).czech_type_name()
+		elif resource is Farm:
+			label = "farma"
+		NotificationManager.show_message("Shromaždiště: %s" % label)
+	else:
+		NotificationManager.show_message("Shromaždiště nastaveno.")
+	return true

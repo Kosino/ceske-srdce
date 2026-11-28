@@ -76,6 +76,7 @@ func _ready() -> void:
 		await _run_walk_cycle_smoke()
 		await _run_team_readability_smoke()
 		await _run_fog_of_war_smoke()
+		await _run_aoe_controls_smoke()
 		await _run_balance_harness_smoke()
 		print("[TEST] all headless smokes finished")
 		get_tree().quit(0)
@@ -112,6 +113,8 @@ func _ready() -> void:
 		await prepare_reseed_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--build-bar-shot"):
 		await prepare_build_bar_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--controls-shot"):
+		await prepare_controls_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--team-shot"):
 		await prepare_team_colours_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--walk-shot"):
@@ -1251,6 +1254,41 @@ func prepare_hud_screenshot() -> void:
 	await get_tree().create_timer(0.8).timeout
 	await get_tree().process_frame
 	_save_shot("hud.png", 1)
+
+
+## T-26: rally flag on Radnice + idle-villager HUD button.
+func prepare_controls_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	var hall: DropOff = null
+	for n in get_tree().get_nodes_in_group("player_town_hall"):
+		if n is DropOff:
+			hall = n as DropOff
+			break
+	var wood: ResourceNode = null
+	for n in get_tree().get_nodes_in_group("resources"):
+		if n is ResourceNode and (n as ResourceNode).resource_type == "wood" and not (n as ResourceNode).is_depleted():
+			wood = n as ResourceNode
+			break
+	if hall:
+		SelectionManager.select_building(hall)
+		var rally_pos := hall.global_position + Vector2(120, 80)
+		if wood:
+			rally_pos = wood.global_position
+			SelectionManager.set_building_rally(rally_pos, wood)
+		else:
+			SelectionManager.set_building_rally(rally_pos, null)
+	# Ensure idle count is visible on the HUD button.
+	SelectionManager.idle_villager_count_changed.emit(SelectionManager.count_idle_villagers())
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	if cam and hall:
+		cam.set_zoom_clamped(1.0)
+		cam.center_at(hall.global_position + Vector2(60, 40))
+	await get_tree().create_timer(0.7).timeout
+	await get_tree().process_frame
+	_save_shot("t26_controls.png", 0)
 
 
 ## T-24: villager selected — build bar inside command panel (no overlap).
@@ -4265,6 +4303,157 @@ func _run_team_readability_smoke() -> void:
 		print("[TEST] FAIL team readability (AI archer/spearman idle+move colour)")
 	for n in [arch_p, arch_e, spear_p, spear_e]:
 		if n != null and is_instance_valid(n):
+			n.queue_free()
+	await get_tree().physics_frame
+
+
+## T-26: control groups, rally point (+ gather), idle villager hotkey/HUD.
+func _run_aoe_controls_smoke() -> void:
+	await get_tree().physics_frame
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	var idle_btn := get_node_or_null("UI/IdleVillagerButton") as IdleVillagerButton
+
+	# --- Control groups ---
+	var a: Villager = VILLAGER_SCENE.instantiate() as Villager
+	a.team = 0
+	a.contribute_population = false
+	a.position = PLAYER_TC_POS + Vector2(-80, 40)
+	units.add_child(a)
+	var b: Villager = VILLAGER_SCENE.instantiate() as Villager
+	b.team = 0
+	b.contribute_population = false
+	b.position = PLAYER_TC_POS + Vector2(-40, 80)
+	units.add_child(b)
+	await get_tree().physics_frame
+	SelectionManager.select_multiple([a, b])
+	SelectionManager.assign_control_group(1)
+	SelectionManager.clear_selection()
+	var group_empty := SelectionManager.selected_units.is_empty()
+	SelectionManager.select_control_group(1)
+	var group_sel := SelectionManager.selected_units.size() == 2
+	if cam:
+		cam.center_at(Vector2(400, 400))
+	# Force double-tap window: reset then two selects.
+	SelectionManager._last_group_slot = 1
+	SelectionManager._last_group_tap_msec = Time.get_ticks_msec()
+	var doubled := SelectionManager.select_control_group(1)
+	var cam_after := cam.position if cam else Vector2.ZERO
+	var mid := (a.global_position + b.global_position) * 0.5
+	var centered := doubled and cam != null and cam_after.distance_to(mid) < 80.0
+	print(
+		"[TEST] control_groups clear=%s recall=%s double_tap=%s centered=%s"
+		% [group_empty, group_sel, doubled, centered]
+	)
+	var groups_ok := group_empty and group_sel and doubled and centered
+	if groups_ok:
+		print("[TEST] PASS control groups (save/recall/double-tap center)")
+	else:
+		print("[TEST] FAIL control groups (save/recall/double-tap center)")
+
+	# --- Rally point (spawn fresh hall — defeat smoke may have freed the demo TC) ---
+	var hall: DropOff = DROPOFF_SCENE.instantiate() as DropOff
+	hall.team = 0
+	hall.position = PLAYER_TC_POS + Vector2(40, -120)
+	hall.spawn_parent = units
+	units.add_child(hall)
+	await get_tree().physics_frame
+	var wood: ResourceNode = null
+	for n in get_tree().get_nodes_in_group("resources"):
+		if n is ResourceNode and (n as ResourceNode).resource_type == "wood" and not (n as ResourceNode).is_depleted():
+			wood = n as ResourceNode
+			break
+	if wood == null:
+		wood = RESOURCE_SCENE.instantiate() as ResourceNode
+		wood.resource_type = "wood"
+		wood.amount_remaining = 200
+		wood.position = hall.global_position + Vector2(140, 20)
+		units.add_child(wood)
+		await get_tree().physics_frame
+	var rally_flag_ok := false
+	var rally_gather_ok := false
+	var rally_move_ok := false
+	SelectionManager.clear_selection()
+	SelectionManager.select_building(hall)
+	var rally_ground := hall.global_position + Vector2(160, 40)
+	var set_ok := SelectionManager.set_building_rally(rally_ground, null)
+	var rally := RallyPointController.of(hall)
+	rally_flag_ok = set_ok and rally != null and rally.has_rally and rally.visible
+	# Ground rally → trained villager moves there.
+	GameManager.add_resource("food", 100)
+	GameManager.add_population_cap(5)
+	var queued := hall.enqueue_villager()
+	hall.train_remaining = 0.0
+	hall._complete_training()
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var spawned_move: Villager = null
+	for n in get_tree().get_nodes_in_group("villagers"):
+		if n is Villager and (n as Villager).team == 0 and (n as Villager).state == Villager.State.MOVING:
+			if (n as Villager).global_position.distance_to(hall.global_position) < 120.0:
+				spawned_move = n as Villager
+				break
+	rally_move_ok = queued and spawned_move != null
+	# Resource rally → villager gathers.
+	SelectionManager.select_building(hall)
+	SelectionManager.set_building_rally(wood.global_position, wood)
+	hall.enqueue_villager()
+	hall.train_remaining = 0.0
+	hall._complete_training()
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var gatherer: Villager = null
+	for n in get_tree().get_nodes_in_group("villagers"):
+		if not (n is Villager) or (n as Villager).team != 0:
+			continue
+		var vv := n as Villager
+		if vv.target_resource == wood and (
+			vv.state == Villager.State.MOVE_TO_RESOURCE or vv.state == Villager.State.HARVESTING
+		):
+			gatherer = vv
+			break
+	rally_gather_ok = gatherer != null
+	print(
+		"[TEST] rally flag=%s move=%s gather=%s queued=%s"
+		% [rally_flag_ok, rally_move_ok, rally_gather_ok, queued]
+	)
+	if rally_flag_ok and rally_move_ok and rally_gather_ok:
+		print("[TEST] PASS rally point (flag + move + gather)")
+	else:
+		print("[TEST] FAIL rally point (flag + move + gather)")
+	if is_instance_valid(hall):
+		hall.queue_free()
+	await get_tree().physics_frame
+
+	# --- Idle villager ---
+	for n in get_tree().get_nodes_in_group("villagers"):
+		if n is Villager and (n as Villager).team == 0:
+			(n as Villager).command_stop()
+	await get_tree().physics_frame
+	var idle_n := SelectionManager.count_idle_villagers()
+	if cam:
+		cam.center_at(Vector2(200, 200))
+	var picked := SelectionManager.select_next_idle_villager()
+	var idle_sel := (
+		picked != null
+		and SelectionManager.selected_units.size() == 1
+		and SelectionManager.selected_units[0] == picked
+	)
+	var idle_cam := cam != null and picked != null and cam.position.distance_to(picked.global_position) < 80.0
+	SelectionManager.idle_villager_count_changed.emit(idle_n)
+	await get_tree().process_frame
+	var btn_ok := idle_btn != null and ("Nečinní" in idle_btn.text) and idle_n >= 1
+	print(
+		"[TEST] idle count=%d sel=%s cam=%s btn=%s text=%s"
+		% [idle_n, idle_sel, idle_cam, btn_ok, idle_btn.text if idle_btn else "?"]
+	)
+	if idle_n >= 1 and idle_sel and idle_cam and btn_ok:
+		print("[TEST] PASS idle villager (hotkey + HUD button)")
+	else:
+		print("[TEST] FAIL idle villager (hotkey + HUD button)")
+
+	SelectionManager.clear_selection()
+	for n in [a, b]:
+		if is_instance_valid(n):
 			n.queue_free()
 	await get_tree().physics_frame
 

@@ -108,6 +108,7 @@ func _complete_training() -> void:
 	parent.add_child(unit)
 	if unit is Unit and (unit as Unit).team == 0 and not unit.is_in_group("player_units"):
 		unit.add_to_group("player_units")
+	_apply_rally(unit)
 	unit_spawned.emit(unit)
 	print("[PROD] spawned archer at %s" % str(unit.position))
 	NotificationManager.show_message("Vycvičen lučištník.")
@@ -115,3 +116,9 @@ func _complete_training() -> void:
 	if not queue.is_empty():
 		var next_id: String = queue[0]
 		train_remaining = float(UNIT_DEFS[next_id]["time"])
+
+
+func _apply_rally(unit: Node) -> void:
+	var rally := get_node_or_null("RallyPoint")
+	if rally != null and rally.has_method("apply_to_unit"):
+		rally.call("apply_to_unit", unit)
