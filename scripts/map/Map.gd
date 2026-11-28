@@ -167,11 +167,25 @@ func prepare_walk_screenshot() -> void:
 		cam.center_at(origin + Vector2(0, -8))
 	await get_tree().create_timer(0.35).timeout
 	# Force mid-walk visuals immediately before capture (feature in action).
-	for u in [vill, sol]:
+	# Disconnect nav avoidance — velocity_computed can reset walk to idle mid-shot.
+	for u in [vill, sol, idle]:
 		if u == null:
 			continue
 		u.set_process(false)
 		u.set_physics_process(false)
+		if u.navigation_agent:
+			u.navigation_agent.avoidance_enabled = false
+			if u.navigation_agent.velocity_computed.is_connected(u._on_velocity_computed):
+				u.navigation_agent.velocity_computed.disconnect(u._on_velocity_computed)
+	idle._facing = "down"
+	idle.velocity = Vector2.ZERO
+	idle._apply_facing_texture()
+	if idle._visual:
+		idle._visual.scale = Vector2(3.5, 3.5)
+		idle._anchor_sprite_to_feet()
+	for u in [vill, sol]:
+		if u == null:
+			continue
 		if u._visual == null:
 			u._visual = u.get_node_or_null("Visual") as Sprite2D
 		u._facing = "right"
@@ -179,8 +193,13 @@ func prepare_walk_screenshot() -> void:
 		u.velocity = Vector2(80, 0)
 		if u.has_walk_sheet():
 			u._apply_walk_frame()
+			# Scale placeholders so walk sheet cells read clearly vs idle art.
+			u._visual.scale = Vector2(3.5, 3.5)
+			u._anchor_sprite_to_feet()
 		else:
 			u._apply_facing_texture()
+	await get_tree().process_frame
+	await get_tree().process_frame
 	print(
 		"[SHOT] walk sheet_v=%s vis=%s active=%s hframes=%d frame=%d tex=%s"
 		% [
