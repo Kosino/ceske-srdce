@@ -107,7 +107,7 @@ func _process(delta: float) -> void:
 	_refresh_farm_reseed_button()
 	# Keep SelectionInfo research timer fresh while research building selected.
 	var sel := SelectionManager.selected_building
-	if sel is Blacksmith or sel is University:
+	if sel != null and is_instance_valid(sel) and (sel is Blacksmith or sel is University):
 		SelectionManager.building_selection_changed.emit(sel)
 
 
@@ -241,17 +241,18 @@ func _refresh_context_ui() -> void:
 	call_deferred("_sync_panel_to_content")
 
 	var b := SelectionManager.selected_building
+	# Guard before `is` — a queued-free building still holds a non-null ref and errors on `is`.
 	var has_building := b != null and is_instance_valid(b)
 	# T-33: formation (Řada/Rozptyl/Box) is unit-only — hide when a building is selected.
 	_ensure_formation_row()
 	if _formation_row:
 		_formation_row.visible = not has_building and not SelectionManager.selected_units.is_empty()
 
-	var is_smith := b is Blacksmith and (b as Blacksmith).is_complete
-	var is_university := b is University and (b as University).is_complete
-	var is_stable := b is Stable and (b as Stable).is_complete
-	var is_siege := b is SiegeWorkshop and (b as SiegeWorkshop).is_complete
-	var is_castle := b is Castle and (b as Castle).is_complete
+	var is_smith := has_building and b is Blacksmith and (b as Blacksmith).is_complete
+	var is_university := has_building and b is University and (b as University).is_complete
+	var is_stable := has_building and b is Stable and (b as Stable).is_complete
+	var is_siege := has_building and b is SiegeWorkshop and (b as SiegeWorkshop).is_complete
+	var is_castle := has_building and b is Castle and (b as Castle).is_complete
 	if _tech_row:
 		_tech_row.visible = is_smith
 	if is_smith:
@@ -276,17 +277,17 @@ func _refresh_context_ui() -> void:
 		_unique_row.visible = is_castle
 	if is_castle:
 		_refresh_unique_button()
-	var is_monastery := b is Monastery and (b as Monastery).is_complete
+	var is_monastery := has_building and b is Monastery and (b as Monastery).is_complete
 	_ensure_monk_row()
 	if _monk_row:
 		_monk_row.visible = is_monastery
 	if is_monastery:
 		_refresh_monk_button()
-	var is_market := b is Market and (b as Market).is_complete
+	var is_market := has_building and b is Market and (b as Market).is_complete
 	_ensure_market_row()
 	if _market_row:
 		_market_row.visible = is_market
-	var is_farm := b is Farm and (b as Farm).is_complete
+	var is_farm := has_building and b is Farm and (b as Farm).is_complete
 	_ensure_farm_reseed_row()
 	if _farm_reseed_row:
 		_farm_reseed_row.visible = is_farm
@@ -303,6 +304,9 @@ func _refresh_context_ui() -> void:
 	var is_archery := b is ArcheryRange
 	if train_villager:
 		train_villager.visible = is_hall
+		# Keep full label/tooltip even if scene was truncated.
+		if is_hall:
+			_polish_train_villager_button()
 	if train_soldier:
 		train_soldier.visible = is_barracks
 	if train_spearman:
@@ -471,7 +475,8 @@ func _ensure_tech_row() -> void:
 func _refresh_tech_buttons(_a = null, _b = null) -> void:
 	if _tech_row == null:
 		return
-	var smith := SelectionManager.selected_building as Blacksmith
+	var sel := SelectionManager.selected_building
+	var smith: Blacksmith = sel as Blacksmith if sel != null and is_instance_valid(sel) else null
 	for tech_id in TechData.BLACKSMITH_ORDER:
 		var btn: Button = _tech_buttons.get(tech_id)
 		if btn == null:
@@ -547,7 +552,8 @@ func _ensure_uni_tech_row() -> void:
 func _refresh_uni_tech_buttons(_a = null, _b = null) -> void:
 	if _uni_tech_row == null:
 		return
-	var uni := SelectionManager.selected_building as University
+	var sel := SelectionManager.selected_building
+	var uni: University = sel as University if sel != null and is_instance_valid(sel) else null
 	for tech_id in TechData.UNIVERSITY_ORDER:
 		var btn: Button = _uni_tech_buttons.get(tech_id)
 		if btn == null:
@@ -882,7 +888,8 @@ func _refresh_farm_reseed_button(_a = null, _b = null) -> void:
 		return
 	var cost_txt := CivData.format_cost(Farm.RESEED_COST)
 	_farm_reseed_button.text = "Znovu osít\n%s" % cost_txt
-	var farm := SelectionManager.selected_building as Farm
+	var sel := SelectionManager.selected_building
+	var farm: Farm = sel as Farm if sel != null and is_instance_valid(sel) else null
 	# Active only when farm is empty AND player can pay 60 wood; tooltip always shows cost.
 	if farm == null or not farm.is_complete:
 		_farm_reseed_button.disabled = true

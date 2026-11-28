@@ -81,6 +81,8 @@ func _refresh(_units: Array = []) -> void:
 
 ## T-33: info text by building type (farm → stock + sow state, not generic training).
 func _building_info_line(b: Node) -> String:
+	if b == null or not is_instance_valid(b):
+		return "Budova"
 	if b is Farm:
 		return _farm_info_line(b as Farm)
 	if b is Blacksmith:

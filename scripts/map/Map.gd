@@ -4645,13 +4645,22 @@ func _run_command_panel_context_smoke() -> void:
 	)
 	GameManager.wood = 200
 
-	# Vesničan button full label (not truncated Vesn).
+	# Vesničan button full label (spawn hall — prior smokes may have freed the demo TC).
 	SelectionManager.select_building(null)
 	var hall: DropOff = null
 	for n in get_tree().get_nodes_in_group("player_town_hall"):
-		if n is DropOff:
+		if n is DropOff and is_instance_valid(n):
 			hall = n as DropOff
 			break
+	var spawned_hall := false
+	if hall == null:
+		hall = DROPOFF_SCENE.instantiate() as DropOff
+		hall.team = 0
+		hall.position = PLAYER_TC_POS + Vector2(60, -100)
+		hall.spawn_parent = units
+		units.add_child(hall)
+		spawned_hall = true
+		await get_tree().physics_frame
 	var vesn_ok: bool = false
 	if hall and panel:
 		SelectionManager.select_building(hall)
@@ -4659,9 +4668,11 @@ func _run_command_panel_context_smoke() -> void:
 		panel._refresh_context_ui()
 		await get_tree().process_frame
 		var vesn: Button = panel.get_train_villager_button()
+		var row_vis: bool = panel.train_row != null and panel.train_row.visible
 		vesn_ok = (
 			vesn != null
 			and vesn.visible
+			and row_vis
 			and vesn.text == "Vesničan"
 			and "Vesničan" in vesn.tooltip_text
 		)
@@ -4683,6 +4694,8 @@ func _run_command_panel_context_smoke() -> void:
 	SelectionManager.clear_selection()
 	if farm != null and is_instance_valid(farm):
 		farm.queue_free()
+	if spawned_hall and hall != null and is_instance_valid(hall):
+		hall.queue_free()
 	await get_tree().physics_frame
 
 
