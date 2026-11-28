@@ -71,6 +71,7 @@ layout_mode = 2
 text = "Resources"
 
 [node name="CommandPanel" type="PanelContainer" parent="UI"]
+clip_contents = true
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0

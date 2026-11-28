@@ -104,6 +104,8 @@ func _ready() -> void:
 		await prepare_siege_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--farms-shot"):
 		await prepare_farms_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--build-bar-shot"):
+		await prepare_build_bar_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--team-shot"):
 		await prepare_team_colours_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--walk-shot"):
@@ -967,6 +969,37 @@ func prepare_hud_screenshot() -> void:
 	_save_shot("hud.png", 1)
 
 
+## T-24: villager selected — build bar inside command panel (no overlap).
+func prepare_build_bar_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	GameManager.current_age = 1
+	var villager: Villager = null
+	for n in get_tree().get_nodes_in_group("villagers"):
+		if n is Villager and (n as Villager).team == 0:
+			villager = n as Villager
+			break
+	if villager == null:
+		villager = preload("res://scenes/units/Villager.tscn").instantiate() as Villager
+		villager.team = 0
+		villager.contribute_population = false
+		villager.position = Vector2(920, 720)
+		units.add_child(villager)
+	SelectionManager.select_single(villager)
+	var cmd := _find_command_panel()
+	if cmd:
+		cmd._refresh_context_ui()
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	if cam:
+		cam.set_zoom_clamped(1.0)
+		cam.center_at(villager.global_position + Vector2(40, 20))
+	await get_tree().create_timer(0.6).timeout
+	await get_tree().process_frame
+	_save_shot("t24_build_bar.png", 1)
+
+
 ## Windowed screenshot: 5 soldiers in Řada PERPENDICULAR to east march; hide DebugPanel.
 func prepare_formation_screenshot() -> void:
 	DisplayServer.window_set_size(Vector2i(1280, 720))
@@ -1679,8 +1712,8 @@ func _run_hud_layout_smoke() -> void:
 	var ui := get_node_or_null("UI")
 	var res := ui.get_node_or_null("ResourceBar") if ui else null
 	var cmd := ui.get_node_or_null("CommandPanel") as CommandPanel if ui else null
-	var sel := ui.get_node_or_null("SelectionInfo") if ui else null
-	var mini := ui.get_node_or_null("Minimap") if ui else null
+	var sel := ui.get_node_or_null("SelectionInfo") as Control if ui else null
+	var mini := ui.get_node_or_null("Minimap") as Control if ui else null
 	var debug := get_node_or_null("DebugPanel")
 	var nodes_ok: bool = res != null and cmd != null and sel != null and mini != null
 	var debug_ok: bool = debug != null and not debug.visible
@@ -1696,16 +1729,20 @@ func _run_hud_layout_smoke() -> void:
 			break
 	var build_ok := false
 	var kovarna_locked := false
-	if villager and cmd:
+	var no_overlap := false
+	if villager and cmd and sel and mini:
 		SelectionManager.select_single(villager)
 		await get_tree().process_frame
 		cmd._refresh_context_ui()
+		await get_tree().process_frame
+		await get_tree().process_frame
 		build_ok = cmd.is_build_row_visible()
 		var kov := cmd.get_build_button("blacksmith")
 		kovarna_locked = kov != null and kov.disabled
 		print("[TEST] hud villager build_row=%s kovarna_disabled=%s tip=%s" % [
 			build_ok, kovarna_locked, kov.tooltip_text if kov else ""
 		])
+		no_overlap = await _build_bar_no_overlap_at_sizes(cmd, sel, mini)
 	SelectionManager.clear_selection()
 
 	# AoE-style: no permanent world labels; Czech names via info_line / SelectionInfo.
@@ -1731,10 +1768,49 @@ func _run_hud_layout_smoke() -> void:
 	czech_ok = czech_ok and any_hidden
 	print("[TEST] hud resource_info_no_world_labels=%s" % czech_ok)
 
-	if nodes_ok and debug_ok and build_ok and kovarna_locked and czech_ok:
+	if nodes_ok and debug_ok and build_ok and kovarna_locked and czech_ok and no_overlap:
 		print("[TEST] PASS HUD layout + villager builds + DebugPanel hidden")
 	else:
 		print("[TEST] FAIL HUD layout + villager builds + DebugPanel hidden")
+
+
+## Build-bar global rect must not intersect SelectionInfo or Minimap at 720p/1080p.
+func _build_bar_no_overlap_at_sizes(cmd: CommandPanel, sel: Control, mini: Control) -> bool:
+	var build := cmd.get_build_bar_control()
+	if build == null:
+		build = cmd.get_node_or_null("CommandMargin/CommandVBox/BuildScroll") as Control
+	if build == null or not build.visible:
+		print("[TEST] FAIL build-bar overlap: BuildScroll missing/hidden")
+		return false
+	var ok := true
+	var prev := DisplayServer.window_get_size()
+	for win_size in [Vector2i(1280, 720), Vector2i(1920, 1080)]:
+		DisplayServer.window_set_size(win_size)
+		# Headless: also drive viewport size so Control anchors reflow.
+		get_viewport().size = win_size
+		cmd._sync_panel_to_content()
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var br := build.get_global_rect()
+		var sr := sel.get_global_rect()
+		var mr := mini.get_global_rect()
+		var cr := cmd.get_global_rect()
+		var hit_sel := br.intersects(sr)
+		var hit_mini := br.intersects(mr)
+		var inside_cmd := cr.grow(1.0).encloses(br)
+		print(
+			"[TEST] build-bar %dx%d rect=%s sel_hit=%s mini_hit=%s inside_cmd=%s"
+			% [win_size.x, win_size.y, br, hit_sel, hit_mini, inside_cmd]
+		)
+		if hit_sel or hit_mini or not inside_cmd:
+			ok = false
+	DisplayServer.window_set_size(prev)
+	get_viewport().size = prev
+	if ok:
+		print("[TEST] PASS build-bar rect must not overlap selection-info rect or minimap rect")
+	else:
+		print("[TEST] FAIL build-bar rect must not overlap selection-info rect or minimap rect")
+	return ok
 
 
 ## Stable training, Spearman vs cavalry bonus, Přemyslovci cav bonus, Knight age lock.
