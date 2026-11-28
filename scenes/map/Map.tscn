@@ -147,7 +147,9 @@ text = "Luc"
 [node name="TrainVillager" type="Button" parent="UI/CommandPanel/CommandMargin/CommandVBox/TrainRow"]
 layout_mode = 2
 size_flags_horizontal = 3
-text = "Vesn"
+custom_minimum_size = Vector2(88, 0)
+tooltip_text = "Vesničan — 50 J"
+text = "Vesničan"
 
 [node name="SelectionInfo" type="PanelContainer" parent="UI"]
 anchors_preset = 7

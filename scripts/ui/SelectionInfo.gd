@@ -41,24 +41,7 @@ func _refresh(_units: Array = []) -> void:
 			name = (b as DropOff).building_name
 		elif b is Building:
 			name = (b as Building).display_name
-		var line2 := "Trénink / produkce"
-		if b is Blacksmith:
-			var smith := b as Blacksmith
-			var prog := smith.research_progress_line()
-			line2 = prog if prog != "" else "Výzkum technologií"
-		elif b is University:
-			var uni := b as University
-			var uprog := uni.research_progress_line()
-			line2 = uprog if uprog != "" else "Výzkum (Univerzita)"
-		elif b is Monastery:
-			line2 = (b as Monastery).get_queue_summary()
-		elif b is Stable:
-			line2 = (b as Stable).get_queue_summary()
-		elif b is SiegeWorkshop:
-			line2 = (b as SiegeWorkshop).get_queue_summary()
-		elif b is Castle:
-			line2 = (b as Castle).get_queue_summary()
-		label.text = "Výběr: %s\n%s" % [name, line2]
+		label.text = "Výběr: %s\n%s" % [name, _building_info_line(b)]
 		return
 	var units: Array = SelectionManager.selected_units
 	if units.is_empty():
@@ -94,3 +77,59 @@ func _refresh(_units: Array = []) -> void:
 	label.text = "Výběr: %s\nFormace: %s" % [
 		", ".join(parts), FormationData.display_name(SelectionManager.formation)
 	]
+
+
+## T-33: info text by building type (farm → stock + sow state, not generic training).
+func _building_info_line(b: Node) -> String:
+	if b is Farm:
+		return _farm_info_line(b as Farm)
+	if b is Blacksmith:
+		var smith := b as Blacksmith
+		var prog := smith.research_progress_line()
+		return prog if prog != "" else "Výzkum technologií"
+	if b is University:
+		var uni := b as University
+		var uprog := uni.research_progress_line()
+		return uprog if uprog != "" else "Výzkum (Univerzita)"
+	if b is DropOff:
+		return (b as DropOff).get_queue_summary()
+	if b is Barracks:
+		return (b as Barracks).get_queue_summary()
+	if b is ArcheryRange:
+		return (b as ArcheryRange).get_queue_summary()
+	if b is Monastery:
+		return (b as Monastery).get_queue_summary()
+	if b is Stable:
+		return (b as Stable).get_queue_summary()
+	if b is SiegeWorkshop:
+		return (b as SiegeWorkshop).get_queue_summary()
+	if b is Castle:
+		return (b as Castle).get_queue_summary()
+	if b is Market:
+		return "Obchod / směna"
+	if b is Mill:
+		return "Sklad jídla"
+	if b is LumberCamp:
+		return "Sklad dřeva"
+	if b is MiningCamp:
+		return "Sklad zlata / kamene"
+	if b is House:
+		return "Obydlí"
+	if b is WatchTower or b is Gate or b is WallSegment:
+		return "Obrana"
+	return "Budova"
+
+
+func _farm_info_line(farm: Farm) -> String:
+	var state_cz := "—"
+	match farm.farm_state:
+		"sown":
+			state_cz = "osetá"
+		"ripe":
+			state_cz = "zralá"
+		"empty":
+			state_cz = "prázdná"
+		_:
+			state_cz = farm.farm_state
+	var stock := maxi(farm.amount_remaining, 0)
+	return "Zásoba: %d J · stav: %s" % [stock, state_cz]

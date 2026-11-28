@@ -42,6 +42,7 @@ var _unique_button: Button
 var _monk_button: Button
 var _market_button: Button
 var _farm_reseed_button: Button
+var _formation_row: HBoxContainer
 var _build_scroll: ScrollContainer
 var _build_row: GridContainer
 var _tech_row: HBoxContainer
@@ -79,9 +80,20 @@ func _ready() -> void:
 	_ensure_build_row()
 	_ensure_tech_row()
 	_ensure_uni_tech_row()
+	_polish_train_villager_button()
 	_refresh_age_ui()
 	_refresh_formation_buttons(SelectionManager.formation)
 	_refresh_context_ui()
+
+
+## T-33: full "Vesničan" label (was truncated "Vesn") + tooltip + width.
+func _polish_train_villager_button() -> void:
+	if train_villager == null:
+		return
+	train_villager.text = "Vesničan"
+	train_villager.tooltip_text = "Vesničan — 50 J"
+	train_villager.clip_text = false
+	train_villager.custom_minimum_size.x = maxf(train_villager.custom_minimum_size.x, 88.0)
 
 
 func _process(delta: float) -> void:
@@ -119,22 +131,28 @@ func _refresh_all_tech_buttons(_a = null, _b = null) -> void:
 
 
 func _ensure_formation_row() -> void:
-	if command_vbox == null or command_vbox.has_node("FormationRow"):
+	if command_vbox == null:
 		return
-	var row := HBoxContainer.new()
-	row.name = "FormationRow"
-	row.add_theme_constant_override("separation", 6)
+	if command_vbox.has_node("FormationRow"):
+		_formation_row = command_vbox.get_node_or_null("FormationRow") as HBoxContainer
+		if _formation_row:
+			for kind in [FormationData.LINE, FormationData.SCATTERED, FormationData.BOX]:
+				_formation_buttons[kind] = _formation_row.get_node_or_null("Formation_%s" % kind) as Button
+		return
+	_formation_row = HBoxContainer.new()
+	_formation_row.name = "FormationRow"
+	_formation_row.add_theme_constant_override("separation", 6)
 	var stop_i := command_vbox.get_node_or_null("StopButton")
 	var insert_at := stop_i.get_index() + 1 if stop_i else command_vbox.get_child_count()
-	command_vbox.add_child(row)
-	command_vbox.move_child(row, insert_at)
+	command_vbox.add_child(_formation_row)
+	command_vbox.move_child(_formation_row, insert_at)
 	for kind in [FormationData.LINE, FormationData.SCATTERED, FormationData.BOX]:
 		var btn := Button.new()
 		btn.name = "Formation_%s" % kind
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		btn.text = FormationData.display_name(kind)
 		btn.pressed.connect(_on_formation_pressed.bind(kind))
-		row.add_child(btn)
+		_formation_row.add_child(btn)
 		_formation_buttons[kind] = btn
 
 
@@ -223,6 +241,12 @@ func _refresh_context_ui() -> void:
 	call_deferred("_sync_panel_to_content")
 
 	var b := SelectionManager.selected_building
+	var has_building := b != null and is_instance_valid(b)
+	# T-33: formation (Řada/Rozptyl/Box) is unit-only — hide when a building is selected.
+	_ensure_formation_row()
+	if _formation_row:
+		_formation_row.visible = not has_building and not SelectionManager.selected_units.is_empty()
+
 	var is_smith := b is Blacksmith and (b as Blacksmith).is_complete
 	var is_university := b is University and (b as University).is_complete
 	var is_stable := b is Stable and (b as Stable).is_complete
@@ -269,7 +293,7 @@ func _refresh_context_ui() -> void:
 	if is_farm:
 		_refresh_farm_reseed_button()
 
-	var show_train := b != null and is_instance_valid(b) and not is_smith and not is_university and not is_farm
+	var show_train := has_building and not is_smith and not is_university and not is_farm
 	if train_row:
 		train_row.visible = show_train
 	if not show_train:
@@ -859,19 +883,20 @@ func _refresh_farm_reseed_button(_a = null, _b = null) -> void:
 	var cost_txt := CivData.format_cost(Farm.RESEED_COST)
 	_farm_reseed_button.text = "Znovu osít\n%s" % cost_txt
 	var farm := SelectionManager.selected_building as Farm
+	# Active only when farm is empty AND player can pay 60 wood; tooltip always shows cost.
 	if farm == null or not farm.is_complete:
 		_farm_reseed_button.disabled = true
-		_farm_reseed_button.tooltip_text = "Vyber farmu"
+		_farm_reseed_button.tooltip_text = "Znovuosití: %s — vyber farmu" % cost_txt
 		return
-	if not farm.can_reseed():
-		_farm_reseed_button.disabled = true
-		_farm_reseed_button.tooltip_text = "Farma ještě není prázdná"
-		return
+	var empty := farm.can_reseed()
 	var can_pay := GameManager.can_afford(Farm.RESEED_COST)
-	_farm_reseed_button.disabled = not can_pay
-	_farm_reseed_button.tooltip_text = (
-		cost_txt if can_pay else "Nedostatek surovin"
-	)
+	_farm_reseed_button.disabled = not (empty and can_pay)
+	if not empty:
+		_farm_reseed_button.tooltip_text = "Znovuosití: %s — farma ještě není prázdná" % cost_txt
+	elif not can_pay:
+		_farm_reseed_button.tooltip_text = "Znovuosití: %s — nedostatek dřeva" % cost_txt
+	else:
+		_farm_reseed_button.tooltip_text = "Znovu osít za %s" % cost_txt
 
 
 func _on_farm_reseed_pressed() -> void:
@@ -889,3 +914,11 @@ func _on_farm_reseed_pressed() -> void:
 
 func get_farm_reseed_button() -> Button:
 	return _farm_reseed_button
+
+
+func is_formation_row_visible() -> bool:
+	return _formation_row != null and _formation_row.visible
+
+
+func get_train_villager_button() -> Button:
+	return train_villager
