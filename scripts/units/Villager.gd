@@ -289,7 +289,15 @@ func _begin_building() -> void:
 
 
 func _go_to_resource() -> void:
-	if not is_instance_valid(target_resource) or target_resource.call("is_depleted"):
+	if not is_instance_valid(target_resource):
+		_release_farm_claim()
+		state = State.IDLE
+		stop_movement()
+		return
+	if target_resource.call("is_depleted"):
+		if target_resource is Farm:
+			_try_auto_reseed_farm()
+			return
 		_release_farm_claim()
 		state = State.IDLE
 		stop_movement()
@@ -312,7 +320,14 @@ func _go_to_resource() -> void:
 
 
 func _begin_harvest() -> void:
-	if not is_instance_valid(target_resource) or target_resource.call("is_depleted"):
+	if not is_instance_valid(target_resource):
+		_release_farm_claim()
+		state = State.IDLE
+		return
+	if target_resource.call("is_depleted"):
+		if target_resource is Farm:
+			_try_auto_reseed_farm()
+			return
 		_release_farm_claim()
 		state = State.IDLE
 		return
@@ -339,6 +354,9 @@ func _harvest(delta: float) -> void:
 		_release_farm_claim()
 		if carried_amount > 0:
 			_go_to_dropoff()
+		elif target_resource is Farm and is_instance_valid(target_resource):
+			# Already empty on this tick — reseed or idle at plot.
+			_try_auto_reseed_farm()
 		else:
 			state = State.IDLE
 		return
@@ -362,6 +380,7 @@ func _harvest(delta: float) -> void:
 	if carried_amount >= carry_capacity or not is_instance_valid(target_resource) or target_resource.call("is_depleted"):
 		if is_instance_valid(target_resource) and target_resource.call("is_depleted"):
 			_release_farm_claim()
+			# Deposit first; `_go_to_resource` auto-reseeds empty farm after drop-off.
 		_go_to_dropoff()
 
 
@@ -442,11 +461,32 @@ func _reached_dropoff() -> bool:
 func _on_resource_depleted() -> void:
 	_release_farm_claim()
 	if state == State.HARVESTING or state == State.MOVE_TO_RESOURCE:
-		if carried_amount > 0:
+		# Farm: always route through drop-off (even 0 carry) so return path can reseed.
+		if carried_amount > 0 or target_resource is Farm:
 			_go_to_dropoff()
 		else:
 			state = State.IDLE
 			stop_movement()
+
+
+## T-25: after harvest finishes, reseed empty farm for 60 wood or idle at the plot.
+func _try_auto_reseed_farm() -> void:
+	stop_movement()
+	var farm := target_resource as Farm
+	if farm == null or not is_instance_valid(farm):
+		state = State.IDLE
+		return
+	if not farm.is_depleted():
+		# Already reseeded (e.g. manual button) — resume gather.
+		var drop_ok := target_dropoff
+		assign_gather(farm, drop_ok)
+		return
+	if farm.try_reseed(team, true):
+		var drop := target_dropoff
+		assign_gather(farm, drop)
+		return
+	# No wood — idle at farm.
+	state = State.IDLE
 
 
 func _refresh_carry_label() -> void:

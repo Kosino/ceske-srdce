@@ -1,7 +1,7 @@
 extends Building
 class_name Farm
 
-## T-19: pole u mlýna — food stockpile gather (DESIGN 0.33/s). Reseed deferred.
+## T-19/T-25: pole u mlýna — food stockpile gather (DESIGN 0.33/s). Reseed 60 wood.
 
 signal depleted
 
@@ -12,13 +12,15 @@ const TEX_DEFAULT := preload("res://assets/sprites/buildings/farm.png")
 
 const STOCKPILE := 175
 const GATHER_RADIUS := 44.0
+const RESEED_WOOD := 60
+const RESEED_COST := {"wood": RESEED_WOOD}
 
 ## Duck-typed like ResourceNode for Villager.assign_gather.
 var resource_type: String = "food"
 var amount_remaining: int = 0
 var gather_radius: float = GATHER_RADIUS
 
-## Visual: sown (new) → ripe (farming) → empty (depleted). Reseed = deferred.
+## Visual: sown (new) → ripe (farming) → empty (depleted) → reseed → sown.
 var farm_state: String = "sown"
 
 var _farmer: Villager = null
@@ -48,6 +50,10 @@ func _on_construction_finished() -> void:
 
 func is_depleted() -> bool:
 	return amount_remaining <= 0
+
+
+func can_reseed() -> bool:
+	return is_complete and is_depleted()
 
 
 func try_claim_farmer(villager: Villager) -> bool:
@@ -89,6 +95,21 @@ func harvest(amount: int) -> int:
 	return taken
 
 
+## Spend 60 wood and restore stockpile to sown. Returns false if not empty / can't afford.
+func try_reseed(payer_team: int = -1, notify_fail: bool = true) -> bool:
+	if not can_reseed():
+		return false
+	var t := team if payer_team < 0 else payer_team
+	if not _spend_reseed(t, notify_fail):
+		return false
+	amount_remaining = STOCKPILE
+	farm_state = "sown"
+	_farmer = null
+	_apply_farm_sprite()
+	print("[FARM] reseeded team=%d wood=-%d stockpile=%d" % [t, RESEED_WOOD, STOCKPILE])
+	return true
+
+
 func set_farm_state(state: String) -> void:
 	farm_state = state
 	_apply_farm_sprite()
@@ -99,7 +120,39 @@ func czech_type_name() -> String:
 
 
 func info_line() -> String:
+	if is_depleted():
+		return "%s — prázdná (znovuosít %d D)" % [czech_type_name(), RESEED_WOOD]
 	return "%s — zbývá %d" % [czech_type_name(), amount_remaining]
+
+
+func _spend_reseed(payer_team: int, notify_fail: bool) -> bool:
+	var ai := _ai_for_team(payer_team)
+	if ai != null:
+		if ai.wood < RESEED_WOOD:
+			if notify_fail and payer_team == 0:
+				NotificationManager.show_message("Nedostatek surovin.")
+			return false
+		ai.wood -= RESEED_WOOD
+		return true
+	if payer_team == 0:
+		if not GameManager.spend(RESEED_COST):
+			if notify_fail:
+				NotificationManager.show_message("Nedostatek surovin.")
+			return false
+		return true
+	if notify_fail and payer_team == 0:
+		NotificationManager.show_message("Nedostatek surovin.")
+	return false
+
+
+func _ai_for_team(payer_team: int) -> SimpleEnemyAI:
+	var tree := get_tree()
+	if tree == null:
+		return null
+	for n in tree.get_nodes_in_group("ai_controllers"):
+		if n is SimpleEnemyAI and (n as SimpleEnemyAI).team == payer_team:
+			return n as SimpleEnemyAI
+	return null
 
 
 func _texture_for_state(state: String) -> Texture2D:

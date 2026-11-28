@@ -86,7 +86,7 @@ Farm field sprites from the original PR #10 pipeline (magenta key → defringe �
 | `assets/sprites/buildings/farm_ripe.png` | 80×53 | golden wheat |
 | `assets/sprites/buildings/farm.png` | 80×53 | alias of ripe (default place / ghost) |
 
-Wired as `Farm` building (requires Mill). Gather: 0.33 food/s, stockpile 175, max 1 farmer; drop-off Mill/TC. States: sown (new) → ripe (farming) → empty (depleted). Reseed deferred. Screenshot: `docs/screenshots/t19_farms.png`.
+Wired as `Farm` building (requires Mill). Gather: 0.33 food/s, stockpile 175, max 1 farmer; drop-off Mill/TC. States: sown (new) → ripe (farming) → empty (depleted) → reseed 60 wood → sown. Screenshots: `docs/screenshots/t19_farms.png`, `docs/screenshots/t25_reseed.png`.
 
 ## T-18 team recolour (palette swap)
 
