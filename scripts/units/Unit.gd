@@ -27,6 +27,12 @@ signal died(unit: Unit)
 ## When false, population was already reserved (e.g. production queue).
 @export var contribute_population: bool = true
 
+## Walk sheet: 4 cols (frames) × 4 rows (down, left, right, up). Missing → idle only.
+const WALK_DIRS: Array[String] = ["down", "left", "right", "up"]
+const WALK_FRAME_COUNT := 4
+const WALK_FPS := 8.0
+const WALK_MOVE_EPS_SQ := 4.0
+
 var hp: float
 var selected: bool = false
 var attack_target: Node2D = null
@@ -34,6 +40,11 @@ var _attack_timer: float = 0.0
 var _facing: String = "down"
 var _facing_textures: Dictionary = {}
 var _visual: Sprite2D
+var _unit_key: String = ""
+var _walk_sheet: Texture2D = null
+var _walk_frame: int = 0
+var _walk_accum: float = 0.0
+var _walk_active: bool = false
 ## When >= 0, group formation move uses min(speed, cap) so the group keeps pace.
 var _move_speed_cap: float = -1.0
 ## Wall-aware waypoint path (tile centers); empty = use NavigationAgent alone.
@@ -68,19 +79,42 @@ func _setup_wall_collision() -> void:
 
 
 func configure_facing_sprites(unit_key: String) -> void:
+	_unit_key = unit_key
 	_facing_textures = {
 		"down": load("res://assets/sprites/units/%s_down.png" % unit_key),
 		"left": load("res://assets/sprites/units/%s_left.png" % unit_key),
 		"right": load("res://assets/sprites/units/%s_right.png" % unit_key),
 		"up": load("res://assets/sprites/units/%s_up.png" % unit_key),
 	}
+	_walk_sheet = null
+	var walk_path := "res://assets/sprites/units/%s_walk.png" % unit_key
+	if ResourceLoader.exists(walk_path):
+		_walk_sheet = load(walk_path) as Texture2D
+	_walk_frame = 0
+	_walk_accum = 0.0
+	_walk_active = false
 	if _visual == null:
 		_visual = get_node_or_null("Visual") as Sprite2D
 	if _visual:
 		_visual.centered = true
 		_visual.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		_visual.hframes = 1
+		_visual.vframes = 1
+		_visual.frame = 0
 	_apply_facing_texture()
 	_apply_team_visual()
+
+
+func has_walk_sheet() -> bool:
+	return _walk_sheet != null
+
+
+func walk_frame() -> int:
+	return _walk_frame
+
+
+func is_walk_animating() -> bool:
+	return _walk_active
 
 
 ## Palette-swap team cloth/shields (AoE II style). Used after spawn and on convert.
@@ -93,9 +127,29 @@ func _apply_team_visual() -> void:
 
 
 func _apply_facing_texture() -> void:
+	## Idle facing texture. Does not touch modulate/material (T-18).
 	if _visual == null or not _facing_textures.has(_facing):
 		return
+	_walk_active = false
+	_visual.hframes = 1
+	_visual.vframes = 1
+	_visual.frame = 0
 	_visual.texture = _facing_textures[_facing]
+	_anchor_sprite_to_feet()
+
+
+func _apply_walk_frame() -> void:
+	## Walk sheet cell. Does not touch modulate/material (T-18).
+	if _visual == null or _walk_sheet == null:
+		return
+	_walk_active = true
+	_visual.texture = _walk_sheet
+	_visual.hframes = WALK_FRAME_COUNT
+	_visual.vframes = WALK_DIRS.size()
+	var row := WALK_DIRS.find(_facing)
+	if row < 0:
+		row = 0
+	_visual.frame = row * WALK_FRAME_COUNT + clampi(_walk_frame, 0, WALK_FRAME_COUNT - 1)
 	_anchor_sprite_to_feet()
 
 
@@ -104,11 +158,14 @@ func _anchor_sprite_to_feet() -> void:
 	if _visual == null or _visual.texture == null:
 		return
 	_visual.centered = true
-	_visual.offset = Vector2(0.0, -float(_visual.texture.get_height()) * 0.5)
+	var tex_h := float(_visual.texture.get_height())
+	if _visual.vframes > 1:
+		tex_h /= float(_visual.vframes)
+	_visual.offset = Vector2(0.0, -tex_h * 0.5)
 
 
 func _update_facing_from_velocity() -> void:
-	if velocity.length_squared() < 4.0:
+	if velocity.length_squared() < WALK_MOVE_EPS_SQ:
 		return
 	var next_facing: String
 	if absf(velocity.x) > absf(velocity.y):
@@ -118,13 +175,38 @@ func _update_facing_from_velocity() -> void:
 	if next_facing == _facing:
 		return
 	_facing = next_facing
-	_apply_facing_texture()
+	if _walk_active and _walk_sheet != null:
+		_apply_walk_frame()
+	else:
+		_apply_facing_texture()
+
+
+func _update_walk_animation(delta: float) -> void:
+	var moving := velocity.length_squared() >= WALK_MOVE_EPS_SQ
+	if not moving:
+		_walk_accum = 0.0
+		_walk_frame = 0
+		if _walk_active:
+			_apply_facing_texture()
+		return
+	if _walk_sheet == null:
+		## No walk sheet → keep static facing (updated by _update_facing_from_velocity).
+		return
+	_walk_accum += delta
+	var step := 1.0 / WALK_FPS
+	while _walk_accum >= step:
+		_walk_accum -= step
+		_walk_frame = (_walk_frame + 1) % WALK_FRAME_COUNT
+	_apply_walk_frame()
 
 
 func _hp_bar_y() -> float:
 	if _visual and _visual.texture:
 		# Feet at origin; bar above sprite top.
-		return -float(_visual.texture.get_height()) - 6.0
+		var tex_h := float(_visual.texture.get_height())
+		if _visual.vframes > 1:
+			tex_h /= float(_visual.vframes)
+		return -tex_h - 6.0
 	return -28.0
 
 
@@ -188,6 +270,10 @@ func stop_movement() -> void:
 		navigation_agent.target_position = global_position
 		navigation_agent.velocity = Vector2.ZERO
 	velocity = Vector2.ZERO
+	_walk_accum = 0.0
+	_walk_frame = 0
+	if _walk_active:
+		_apply_facing_texture()
 
 
 func is_navigation_finished() -> bool:
@@ -376,6 +462,7 @@ func _steer_toward_target() -> void:
 func _on_velocity_computed(safe_velocity: Vector2) -> void:
 	velocity = safe_velocity
 	_update_facing_from_velocity()
+	_update_walk_animation(get_physics_process_delta_time())
 	move_and_slide()
 
 

@@ -105,8 +105,30 @@ Sprites without distinguishable `(40, 86, 160)` team indices (shader is a no-op 
 - **Buildings:** town_center, house, lumber_camp, mill, farm, barracks, archery_range, blacksmith, stable, castle, monastery, university, siege_workshop, walls/gates/towers, construction_site
 - **Has team blue today:** knight (shield), market (awning/banner)
 
+## T-17 walk-cycle (villager + soldier)
+
+Code in `Unit.gd`: optional walk sheet `assets/sprites/units/{unit}_walk.png`
+(4 columns × 4 rows: frames × down/left/right/up, cell 32×40, bottom-centred). Idle = existing
+static facing PNGs. Units without a walk sheet keep the static facing sprite. Frame swaps do
+**not** reset `modulate` / shader material (T-18 palette-swap + AI tint preserved). Feet/anchor
+uses the same per-frame height as idle (40 px) so idle↔walk does not jump.
+
+| File | Size | Notes |
+|---|---|---|
+| `assets/sprites/units/villager_walk.png` | 128×160 | walk-v1 (PR #10 pipeline) |
+| `assets/sprites/units/soldier_walk.png` | 128×160 | walk-v1 (PR #10 pipeline) |
+
+Import source branch: `art/walk-v1` (`art_import/sprites_walk.tar.gz` sha256 `10038ed3…d36f`).
+No `gen_*` procedural drawing. Screenshot: `docs/screenshots/t17_walk.png`.
+
+### Art debt (walk-v1)
+
+- Villager **front (down)** walk: slight head turn in frame 2 (body sway); frames 1/3 repeat the passing pose.
+- Walk figures a few px narrower than idle fronts (villager ~21 vs ~26 px wide in the down row).
+- A few olive pixels on the axe head (quantize / foliage thresholds).
+
 ## What this pack does not include
 
-- Walk-cycle frames (only one pose per facing).
+- Walk-cycle sheets for units beyond villager + soldier (others idle-only).
 - Dedicated trebuchet unpacked / firing frames (T-23 uses packed art + subtle deploy cue).
 - Full team-blue coverage on every unit/building (see art debt above).
