@@ -47,7 +47,8 @@ func _ready() -> void:
 		"--camera-shot", "--mines-shot", "--blacksmith-shot", "--stable-shot", "--castle-shot",
 		"--art-shot", "--walls-shot", "--art-v2-shot", "--monk-shot", "--university-shot",
 		"--siege-shot", "--farms-shot", "--reseed-shot", "--build-bar-shot", "--controls-shot",
-		"--team-shot", "--walk-shot", "--walk-v2-shot", "--team-read-shot", "--fog-shot"
+		"--team-shot", "--walk-shot", "--walk-v2-shot", "--team-read-shot", "--fog-shot",
+		"--fog-polish-shot"
 	]:
 		if args.has(flag):
 			get_tree().change_scene_to_file(MAP_SCENE)

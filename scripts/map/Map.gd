@@ -76,6 +76,7 @@ func _ready() -> void:
 		await _run_walk_cycle_smoke()
 		await _run_team_readability_smoke()
 		await _run_fog_of_war_smoke()
+		await _run_fog_polish_smoke()
 		await _run_aoe_controls_smoke()
 		await _run_balance_harness_smoke()
 		print("[TEST] all headless smokes finished")
@@ -125,6 +126,8 @@ func _ready() -> void:
 		await prepare_team_read_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--fog-shot"):
 		await prepare_fog_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--fog-polish-shot"):
+		await prepare_fog_polish_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--formation-shot"):
 		await prepare_formation_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--ai-shot"):
@@ -1561,6 +1564,54 @@ func prepare_fog_screenshot() -> void:
 	_save_shot("t29_fog.png", 0)
 
 
+## T-32: soft fog edge + last-known enemy building in explored grey.
+func prepare_fog_polish_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	var fog := _ensure_fog_of_war()
+	fog.fog_enabled = true
+	for n in get_tree().get_nodes_in_group("enemy_units"):
+		if n is Unit and is_instance_valid(n):
+			(n as Unit).position = Vector2(40, 40)
+	# Scout reveals east of TC LOS, then pulls back so hut stays last-known in grey.
+	var scout: Villager = null
+	for n in get_tree().get_nodes_in_group("player_units"):
+		if n is Villager:
+			scout = n as Villager
+			break
+	var known_pos := PLAYER_TC_POS + Vector2(420, 40)
+	if scout:
+		scout.position = known_pos
+	await get_tree().physics_frame
+	fog.force_update()
+	var known_hut: Building = preload("res://scenes/buildings/House.tscn").instantiate() as Building
+	known_hut.team = 1
+	known_hut.is_complete = true
+	known_hut.position = known_pos
+	units.add_child(known_hut)
+	await get_tree().physics_frame
+	fog.force_update()
+	# Leave LOS so hut stays as last-known in grey; hidden AI stays out of sight.
+	if scout:
+		scout.position = PLAYER_TC_POS + Vector2(40, 40)
+	var hidden_ai: Soldier = SOLDIER_SCENE.instantiate() as Soldier
+	hidden_ai.team = 1
+	hidden_ai.contribute_population = false
+	hidden_ai.position = PLAYER_TC_POS + Vector2(620, 80)
+	units.add_child(hidden_ai)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	fog.force_update()
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	if cam:
+		cam.set_zoom_clamped(0.85)
+		cam.center_at(PLAYER_TC_POS + Vector2(220, 40))
+	await get_tree().create_timer(0.4).timeout
+	_save_shot("t32_fog_polish.png", 0)
+
+
 ## Headless/manual regression: own buildings must not take friendly damage.
 func _run_friendly_target_smoke() -> void:
 	await get_tree().physics_frame
@@ -1954,6 +2005,7 @@ func _run_civ_bonus_smoke() -> void:
 	var soldier: Soldier = SOLDIER_SCENE.instantiate() as Soldier
 	soldier.team = 0
 	soldier.contribute_population = false
+	soldier.position = PLAYER_TC_POS + Vector2(50, 50)
 	units.add_child(soldier)
 	await get_tree().physics_frame
 	var expect_hp := 45.0 * 1.10
@@ -2400,6 +2452,7 @@ func _run_castle_unique_smoke() -> void:
 	var dru: Druzinik = preload("res://scenes/units/Druzinik.tscn").instantiate() as Druzinik
 	dru.team = 0
 	dru.contribute_population = false
+	dru.position = PLAYER_TC_POS + Vector2(60, 100)
 	units.add_child(dru)
 	await get_tree().physics_frame
 	var prem_ok := dru.attack_damage >= 11.0 * 1.10 - 0.05
@@ -4536,6 +4589,122 @@ func _run_fog_of_war_smoke() -> void:
 	else:
 		print("[TEST] FAIL fog of war (visible / unexplored / hide / persist)")
 	for n in [ai, scout]:
+		if n != null and is_instance_valid(n):
+			n.queue_free()
+	fog.force_update()
+	await get_tree().physics_frame
+
+
+## T-32: soft edges; hidden enemy not click-targetable; unseen / grey-new buildings hidden.
+func _run_fog_polish_smoke() -> void:
+	await get_tree().physics_frame
+	var fog := _ensure_fog_of_war()
+	fog.fog_enabled = true
+	for n in get_tree().get_nodes_in_group("player_units"):
+		if n is Unit and is_instance_valid(n):
+			(n as Unit).position = PLAYER_TC_POS + Vector2(30, 30)
+	fog.force_update()
+	await get_tree().physics_frame
+
+	var soft_ok := fog.uses_soft_edges()
+
+	var sc := get_tree().get_first_node_in_group("selection_controller") as SelectionController
+	var hidden_ai: Soldier = SOLDIER_SCENE.instantiate() as Soldier
+	hidden_ai.team = 1
+	hidden_ai.contribute_population = false
+	hidden_ai.position = PLAYER_TC_POS + Vector2(700, 0)
+	units.add_child(hidden_ai)
+	await get_tree().physics_frame
+	fog.force_update()
+	var enemy_click_blocked := (
+		not hidden_ai.visible
+		and not fog.is_world_visible(hidden_ai.global_position)
+		and sc != null
+		and sc._find_enemy_at(hidden_ai.global_position) == null
+	)
+
+	# Unexplored far corner: building stays hidden.
+	var unseen_hut: Building = preload("res://scenes/buildings/House.tscn").instantiate() as Building
+	unseen_hut.team = 1
+	unseen_hut.is_complete = true
+	unseen_hut.position = Vector2(80, 80)
+	units.add_child(unseen_hut)
+	await get_tree().physics_frame
+	fog.force_update()
+	var unexplored_hidden := (
+		not unseen_hut.visible
+		and not fog.is_enemy_building_revealed(unseen_hut)
+		and (sc == null or sc._find_enemy_at(unseen_hut.global_position) == null)
+	)
+
+	# Explore a south tile, leave grey, then spawn a NEW hut there — must stay hidden until sighted.
+	var scout: Villager = VILLAGER_SCENE.instantiate() as Villager
+	scout.team = 0
+	scout.contribute_population = false
+	var explore_pos := Vector2(200, 2600)
+	scout.position = explore_pos
+	units.add_child(scout)
+	await get_tree().physics_frame
+	fog.force_update()
+	scout.position = PLAYER_TC_POS + Vector2(40, 40)
+	await get_tree().physics_frame
+	fog.force_update()
+	var explore_tile := fog.world_to_tile(explore_pos)
+	var grey_ok := fog.tile_state(explore_tile.x, explore_tile.y) == FogOfWar.STATE_EXPLORED
+	var grey_hut: Building = preload("res://scenes/buildings/House.tscn").instantiate() as Building
+	grey_hut.team = 1
+	grey_hut.is_complete = true
+	grey_hut.position = explore_pos
+	units.add_child(grey_hut)
+	await get_tree().physics_frame
+	fog.force_update()
+	var grey_new_hidden := (
+		grey_ok
+		and not grey_hut.visible
+		and not fog.is_enemy_building_revealed(grey_hut)
+	)
+
+	# Sight a hut outside TC LOS (8 tiles), then leave — last-known stays in explored grey.
+	var known_pos := PLAYER_TC_POS + Vector2(420, 80)
+	scout.position = known_pos
+	await get_tree().physics_frame
+	fog.force_update()
+	var known_hut: Building = preload("res://scenes/buildings/House.tscn").instantiate() as Building
+	known_hut.team = 1
+	known_hut.is_complete = true
+	known_hut.position = known_pos
+	units.add_child(known_hut)
+	await get_tree().physics_frame
+	fog.force_update()
+	var seen_in_sight := (
+		fog.is_world_visible(known_pos)
+		and fog.is_enemy_building_revealed(known_hut)
+		and known_hut.visible
+	)
+	scout.position = PLAYER_TC_POS + Vector2(40, 40)
+	await get_tree().physics_frame
+	fog.force_update()
+	var known_tile := fog.world_to_tile(known_pos)
+	var last_known_ok := (
+		seen_in_sight
+		and fog.tile_state(known_tile.x, known_tile.y) == FogOfWar.STATE_EXPLORED
+		and known_hut.visible
+		and fog.is_enemy_building_revealed(known_hut)
+		and sc != null
+		and sc._find_enemy_at(known_hut.global_position) == known_hut
+	)
+
+	var building_unseen_hidden := unexplored_hidden and grey_new_hidden and last_known_ok
+	var polish_ok := soft_ok and enemy_click_blocked and building_unseen_hidden
+	print(
+		"[TEST] fog polish soft=%s click_blocked=%s unseen=%s grey_new=%s last_known=%s"
+		% [soft_ok, enemy_click_blocked, unexplored_hidden, grey_new_hidden, last_known_ok]
+	)
+	if polish_ok:
+		print("[TEST] PASS fog polish (enemy_click_blocked, building_unseen_hidden)")
+	else:
+		print("[TEST] FAIL fog polish (enemy_click_blocked, building_unseen_hidden)")
+	for n in [hidden_ai, unseen_hut, scout, grey_hut, known_hut]:
 		if n != null and is_instance_valid(n):
 			n.queue_free()
 	fog.force_update()
