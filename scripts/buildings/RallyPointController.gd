@@ -30,15 +30,13 @@ static func of(host: Node) -> RallyPointController:
 
 
 static func can_host(node: Node) -> bool:
-	return (
-		node is DropOff
-		or node is Barracks
-		or node is ArcheryRange
-		or node is Stable
-		or node is Castle
-		or node is Monastery
-		or node is SiegeWorkshop
-	)
+	## Duck-type training buildings — avoid `is Barracks` etc. (circular class load
+	## with training scripts that call RallyPointController.of / _apply_rally).
+	if node == null or not is_instance_valid(node):
+		return false
+	if node is DropOff:
+		return true
+	return node.has_signal("unit_spawned") and node.has_method("get_queue_summary")
 
 
 func set_rally(world_pos: Vector2, target: Node2D = null) -> void:

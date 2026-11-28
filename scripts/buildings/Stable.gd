@@ -123,9 +123,9 @@ func _complete_training() -> void:
 
 
 func _apply_rally(unit: Node) -> void:
-	var rally := RallyPointController.of(self)
-	if rally:
-		rally.apply_to_unit(unit)
+	var rally := get_node_or_null("RallyPoint")
+	if rally != null and rally.has_method("apply_to_unit"):
+		rally.call("apply_to_unit", unit)
 
 
 func _instantiate_unit(unit_id: String) -> Node2D:
