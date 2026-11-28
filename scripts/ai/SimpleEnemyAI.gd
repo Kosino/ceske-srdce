@@ -102,6 +102,8 @@ var _last_counter_pick: String = ""
 var _foundation_born_at: Dictionary = {}
 ## Peak unfinished wall+tower foundations (smoke: must stay ≤ MAX).
 var _smoke_max_unfinished_fortifications: int = 0
+## Frozen chebyshev radius for the perimeter wall ring (set on first plan).
+var _cached_wall_ring_radius: int = 0
 
 
 func _ready() -> void:
@@ -161,6 +163,7 @@ func configure_sim(sim_seed: int, jitter: float, strat: String = BalanceSim.STRA
 	_last_counter_pick = ""
 	_foundation_born_at.clear()
 	_smoke_max_unfinished_fortifications = 0
+	_cached_wall_ring_radius = 0
 	print("[AI] team=%d strategy=%s" % [team, strategy])
 
 
@@ -193,6 +196,7 @@ func configure_standard(sim_seed: int, jitter: float = 1.0) -> void:
 	_last_counter_pick = ""
 	_foundation_born_at.clear()
 	_smoke_max_unfinished_fortifications = 0
+	_cached_wall_ring_radius = 0
 	print("[AI] team=%d standard seed=%d" % [team, sim_seed])
 
 
@@ -589,6 +593,7 @@ func _try_place_next_building() -> void:
 	elif BalanceSim.active and strategy == BalanceSim.STRAT_RUSH and age >= 2:
 		want_towers = true
 	## Towers before walls (stone spend). Cap unfinished scaffolds (AoE feel).
+	## Prefer enemy-facing side of the perimeter (AoE II).
 	if (
 		want_towers
 		and age >= 2
@@ -598,8 +603,7 @@ func _try_place_next_building() -> void:
 		and _fortification_foundation_room() > 0
 	):
 		var tower_i := _count_own_buildings("watch_tower")
-		var tower_off := Vector2(70, -50) if tower_i == 0 else Vector2(-70, 60)
-		_try_place_building("watch_tower", base_position + tower_off)
+		_try_place_building("watch_tower", base_position + _tower_offset_toward_enemy(tower_i))
 		return
 	## Castle as soon as age 3 (FC + boom must unlock uniques).
 	if age >= 3 and _count_own_buildings("castle") < 1 and stone >= 650:
@@ -679,27 +683,110 @@ func _try_place_stone_defenses() -> void:
 		])
 
 
+## Chebyshev distance of farthest own eco/military building from TC (ignores walls/towers).
+func _farthest_own_building_chebyshev(base_tile: Vector2i) -> int:
+	var farthest := 0
+	var bgroup := "player_buildings" if team == 0 else "enemy_buildings"
+	for n in get_tree().get_nodes_in_group(bgroup):
+		if not (n is Building):
+			continue
+		var b := n as Building
+		if b.team != team:
+			continue
+		if b.building_id == "stone_wall" or b.building_id == "palisade" or b.building_id == "watch_tower":
+			continue
+		var t := WallNav.world_to_tile(b.global_position)
+		var d := maxi(absi(t.x - base_tile.x), absi(t.y - base_tile.y))
+		farthest = maxi(farthest, d)
+	return farthest
+
+
+## Perimeter ring radius: farthest own building + 3–4 tiles (frozen after first plan).
+func perimeter_ring_radius() -> int:
+	if _cached_wall_ring_radius > 0:
+		return _cached_wall_ring_radius
+	var base_tile := WallNav.world_to_tile(base_position)
+	var farthest := _farthest_own_building_chebyshev(base_tile)
+	## Compact bases get +4; sprawling bases +3 so the ring stays tight.
+	var margin := 3 if farthest >= 6 else 4
+	var r := maxi(farthest + margin, 7)
+	_cached_wall_ring_radius = r
+	return r
+
+
+## True if tile is walkable land and free of resources / deep river.
+func _wall_tile_buildable(tile: Vector2i) -> bool:
+	if tile.x < 0 or tile.y < 0 or tile.x >= WallNav.MAP_TILES or tile.y >= WallNav.MAP_TILES:
+		return false
+	if WaterNav.blocks_land(tile):
+		return false
+	for n in get_tree().get_nodes_in_group("resources"):
+		if n == null or not is_instance_valid(n) or not (n is ResourceNode):
+			continue
+		var res := n as ResourceNode
+		if res.is_depleted():
+			continue
+		if WallNav.world_to_tile(res.global_position) == tile:
+			return false
+	var pos := WallNav.tile_center(tile)
+	var bgroup := "player_buildings" if team == 0 else "enemy_buildings"
+	for n in get_tree().get_nodes_in_group(bgroup):
+		if n == null or not is_instance_valid(n):
+			continue
+		if n is WallSegment or n is Gate:
+			continue
+		if n is Building:
+			var other := n as Building
+			if other.team != team:
+				continue
+			var min_dist := (other.footprint + Vector2(40, 40)).length() * 0.28
+			if pos.distance_to(other.global_position) < min_dist:
+				return false
+	if _hall != null and is_instance_valid(_hall):
+		if pos.distance_to(_hall.global_position) < 70.0:
+			return false
+	return true
+
+
+## AoE II perimeter ring band at R and R+1 (N/E/S). West side open as ≥1 gate/gap.
 func _tc_wall_tiles(base_tile: Vector2i) -> Array[Vector2i]:
-	## Rings N/E/S only — permanent west corridor so villagers can reach resources.
 	var out: Array[Vector2i] = []
 	var seen := {}
-	for r in [3, 4, 5, 6]:
+	var r0 := perimeter_ring_radius()
+	## ~5-tile-wide west gap on N/S runs (egress for gatherers + army).
+	var gap_half := 2
+	for r in [r0, r0 + 1]:
 		for i in range(-r, r + 1):
-			## 3-tile-wide west gap: skip westernmost columns on N/S runs.
-			var skip_west_ns: bool = i <= (-r + 1)
+			var skip_west_ns: bool = i <= (-r + gap_half)
 			var candidates: Array[Vector2i] = []
 			if not skip_west_ns:
 				candidates.append(Vector2i(base_tile.x + i, base_tile.y - r)) ## north
 				candidates.append(Vector2i(base_tile.x + i, base_tile.y + r)) ## south
 			candidates.append(Vector2i(base_tile.x + r, base_tile.y + i)) ## east (full)
-			## Never place west ring — egress for gatherers + army.
+			## Never place west ring — permanent corridor / gap.
 			for t in candidates:
 				var key := "%d:%d" % [t.x, t.y]
 				if seen.has(key):
 					continue
 				seen[key] = true
+				if not _wall_tile_buildable(t):
+					continue
 				out.append(t)
 	return out
+
+
+## Watch towers on the enemy-facing arc of the perimeter.
+func _tower_offset_toward_enemy(index: int) -> Vector2:
+	var dir := Vector2(-1.0, 0.0)
+	var enemy := _enemy_town_hall()
+	if enemy != null and is_instance_valid(enemy):
+		var delta: Vector2 = enemy.global_position - base_position
+		if delta.length() > 1.0:
+			dir = delta.normalized()
+	var r_px := float(perimeter_ring_radius()) * float(WallNav.TILE) * 0.82
+	var perp := Vector2(-dir.y, dir.x)
+	var lateral := 55.0 if index == 0 else -55.0
+	return dir * r_px + perp * lateral
 
 
 func _own_wall_on_tile(tile: Vector2i) -> bool:
@@ -809,6 +896,27 @@ func walls_not_sealing() -> bool:
 	if res != null:
 		to = res.global_position
 	return WallNav.path_exists(from, to, team, get_tree())
+
+
+## Smoke: every own wall sits in the perimeter band (R..R+1); none in the base core.
+func smoke_walls_on_perimeter_ring() -> bool:
+	var base_tile := WallNav.world_to_tile(base_position)
+	var r := perimeter_ring_radius()
+	var any := false
+	for n in get_tree().get_nodes_in_group("walls"):
+		if not (n is WallSegment):
+			continue
+		var w := n as WallSegment
+		if w.team != team:
+			continue
+		any = true
+		var d := maxi(absi(w.tile.x - base_tile.x), absi(w.tile.y - base_tile.y))
+		## Core = strictly inside R; band is R and R+1 (outer perimeter only).
+		if d < r:
+			return false
+		if d > r + 1:
+			return false
+	return any and walls_not_sealing()
 
 
 func _try_place_building(building_id: String, pos: Vector2) -> bool:

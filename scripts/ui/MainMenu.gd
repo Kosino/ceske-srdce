@@ -43,7 +43,7 @@ func _ready() -> void:
 		return
 	# Feature screenshots that need the map.
 	for flag in [
-		"--hud-shot", "--victory-shot", "--formation-shot", "--ai-shot", "--t31-shot",
+		"--hud-shot", "--victory-shot", "--formation-shot", "--ai-shot", "--t31-shot", "--t40-shot",
 		"--camera-shot", "--mines-shot", "--blacksmith-shot", "--stable-shot", "--castle-shot",
 		"--art-shot", "--walls-shot", "--art-v2-shot", "--monk-shot", "--university-shot",
 		"--siege-shot", "--farms-shot", "--reseed-shot", "--build-bar-shot", "--controls-shot",

@@ -147,6 +147,8 @@ func _ready() -> void:
 		await prepare_ai_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--t31-shot"):
 		await prepare_t31_ai_base_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--t40-shot"):
+		await prepare_t40_ai_ring_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--command-panel-shot"):
 		await prepare_command_panel_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--garrison-shot"):
@@ -1739,6 +1741,90 @@ func prepare_t31_ai_base_screenshot() -> void:
 	_save_shot("t31_ai_base.png", 0)
 
 
+## T-40: late-game AI base with perimeter wall ring (fog off).
+func prepare_t40_ai_ring_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	var fog := _ensure_fog_of_war()
+	fog.fog_enabled = false
+	var victory := get_node_or_null("VictoryController") as VictoryController
+	if victory:
+		victory.set_process(false)
+	var ai := get_node_or_null("SimpleEnemyAI") as SimpleEnemyAI
+	if ai == null:
+		push_error("[SHOT] no SimpleEnemyAI")
+		get_tree().quit(1)
+		return
+	ai.rng.seed = 4242 + ai.team * 7919
+	ai.timing_jitter = 1.0
+	Engine.time_scale = 120.0
+	var start_elapsed: float = ai._sim_elapsed
+	var wall_t0 := Time.get_ticks_msec()
+	var frames := 0
+	while frames < 12000:
+		await get_tree().process_frame
+		frames += 1
+		var ph := get_tree().get_first_node_in_group("player_town_hall") as DropOff
+		if ph != null and is_instance_valid(ph):
+			ph.hp = ph.max_hp
+		if (
+			ai._waves_launched >= 1
+			and ai._count_own_complete("watch_tower") >= 2
+			and ai._count_own_complete("stone_wall") >= 30
+			and ai.unfinished_fortification_count() <= 2
+			and ai.smoke_walls_on_perimeter_ring()
+		):
+			break
+		if ai._sim_elapsed - start_elapsed >= 900.0:
+			break
+		if Time.get_ticks_msec() - wall_t0 > 120000:
+			break
+	Engine.time_scale = 1.0
+	ai.set_process(false)
+	for n in get_tree().get_nodes_in_group("enemy_buildings"):
+		if n is Building and not (n as Building).is_complete:
+			var b := n as Building
+			if b.building_id == "stone_wall" or b.building_id == "watch_tower" or b.building_id == "palisade":
+				b._finish_construction()
+	for n in get_tree().get_nodes_in_group("walls"):
+		if n is WallSegment and (n as WallSegment).team == ai.team and not (n as WallSegment).is_complete:
+			(n as WallSegment)._finish_construction()
+	if ai._waves_launched >= 1 and ai._count_own_complete("stone_wall") < 30 and ai.stone >= 5:
+		var base_tile := WallNav.world_to_tile(ai.base_position)
+		for t in ai._tc_wall_tiles(base_tile):
+			if ai._count_own_complete("stone_wall") >= 48 or ai.stone < 5:
+				break
+			if ai._own_wall_on_tile(t):
+				continue
+			ai.stone -= 5
+			var seg: WallSegment = preload("res://scenes/buildings/WallSegment.tscn").instantiate() as WallSegment
+			seg.wall_kind = "stone_wall"
+			seg.team = ai.team
+			seg.tile = t
+			seg.position = WallNav.tile_center(t)
+			seg.build_cost = {"stone": 5}
+			seg.placed_cost = {"stone": 5}
+			seg.is_complete = true
+			seg.build_progress = 1.0
+			ai._units_parent.add_child(seg)
+			seg._on_construction_finished()
+			seg._refresh_label()
+	ai.print_ai_summary()
+	print(
+		"[SHOT] t40 ring_r=%d walls=%d ring_ok=%s"
+		% [ai.perimeter_ring_radius(), ai._count_own_buildings("stone_wall"), ai.smoke_walls_on_perimeter_ring()]
+	)
+	var cam := get_node_or_null("Camera2D") as Camera2D
+	if cam:
+		cam.position = ai.base_position + Vector2(-40, 20)
+		cam.zoom = Vector2(0.65, 0.65)
+	await get_tree().create_timer(0.5).timeout
+	await get_tree().process_frame
+	_save_shot("t40_ai_ring.png", 0)
+
+
 func _save_shot(filename: String, squad_n: int) -> void:
 	var img: Image = get_viewport().get_texture().get_image()
 	if img == null or img.get_width() < 2:
@@ -3295,8 +3381,9 @@ func _run_ai_economy_smoke() -> void:
 	var farms_ok := ai._count_farms() >= 4
 	var walls_ok := ai.walls_not_sealing()
 	var foundations_ok := peak_unfinished <= 2
+	var ring_ok := ai.smoke_walls_on_perimeter_ring()
 	print(
-		"[TEST] ai_economy vills=%d farms=%d age=%d waved=%s first_wave=%d stone=%d stone_ok=%s wave_ok=%s farms_ok=%s walls_not_sealing=%s foundations_peak=%d counter_ok=%s elapsed=%.0fs frames=%d"
+		"[TEST] ai_economy vills=%d farms=%d age=%d waved=%s first_wave=%d stone=%d stone_ok=%s wave_ok=%s farms_ok=%s walls_not_sealing=%s ring_ok=%s foundations_peak=%d counter_ok=%s elapsed=%.0fs frames=%d"
 		% [
 			ai._count_villagers(),
 			ai._count_farms(),
@@ -3308,13 +3395,14 @@ func _run_ai_economy_smoke() -> void:
 			wave_ok,
 			farms_ok,
 			walls_ok,
+			ring_ok,
 			peak_unfinished,
 			counter_ok,
 			ai._sim_elapsed,
 			frames,
 		]
 	)
-	ok = ok and counter_ok and stone_ok and wave_ok and farms_ok and walls_ok
+	ok = ok and counter_ok and stone_ok and wave_ok and farms_ok and walls_ok and ring_ok
 	if ok:
 		print("[TEST] PASS AI places building and launches wave")
 	else:
@@ -3324,6 +3412,14 @@ func _run_ai_economy_smoke() -> void:
 		print("[TEST] PASS ai wall foundations capped")
 	else:
 		print("[TEST] FAIL ai wall foundations capped")
+	print(
+		"[TEST] ai wall perimeter ring r=%d ring_ok=%s gap=%s"
+		% [ai.perimeter_ring_radius(), ring_ok, walls_ok]
+	)
+	if ring_ok:
+		print("[TEST] PASS ai wall perimeter ring")
+	else:
+		print("[TEST] FAIL ai wall perimeter ring")
 
 
 func _ensure_player_hall_after_ai_smoke(victory_node: VictoryController) -> void:
