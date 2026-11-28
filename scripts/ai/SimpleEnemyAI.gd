@@ -11,8 +11,7 @@ const WAVE_INTERVAL_SEC := 22.0 ## BalanceSim cadence
 const WAVE_INTERVAL_STANDARD := 240.0 ## ~4 min between waves
 const WAVE_FIRST_MIN_SEC := 360.0 ## first Standard wave not before minute 6
 const WAVE_FIRST_MIN_STANDARD := 6 ## Standard first wave ≥ this many units
-const EARLY_ARMY_SCREEN := 2 ## tiny screen before army-fill villager count
-const ARMY_FILL_VILLS := 6 ## start filling toward wave ≥6
+const EARLY_ARMY_SCREEN := 2 ## tiny screen while booming villagers
 const WAVE_RETREAT_LOSS := 0.60
 const THINK_INTERVAL := 0.45
 const START_FOOD := 800
@@ -29,7 +28,8 @@ const DEFAULT_SEED := 9001
 const STANDARD_TOWER_TARGET := 2
 const STANDARD_WALL_TARGET := 60 ## towers 250 + walls 300 → stone unspent = 200
 const WALLS_PER_THINK := 12
-const ECO_READY_VILLS := 12 ## smoke ≥12 vills
+const ECO_READY_VILLS := 12 ## boom to 12, then fill wave ≥6
+const AGE_UP_MIN_VILLS := 8 ## don't burn 500 food before eco is online
 
 ## Counter pick from TechData.unit_role roles (AoE rock-paper-scissors on main).
 ## many archers → cavalry / swordsmen; many cavalry → spearmen.
@@ -395,7 +395,7 @@ func _try_age_up() -> void:
 	if age >= _target_age():
 		return
 	## Standard: bank eco before the 500-food age click so wave/stone still fit in 10 min.
-	if not BalanceSim.active and age == 1 and _count_villagers() < ARMY_FILL_VILLS:
+	if not BalanceSim.active and age == 1 and _count_villagers() < AGE_UP_MIN_VILLS:
 		return
 	if _count_age_buildings(age) < AgeData.BUILDINGS_REQUIRED_TO_ADVANCE:
 		return
@@ -508,8 +508,17 @@ func _need_house() -> bool:
 func _farm_target() -> int:
 	if BalanceSim.active:
 		return 0 if strategy == BalanceSim.STRAT_RUSH else mini(2 + age, 4)
-	## Standard: grow farms with age toward a food eco.
+	## Standard: 2 farms until first wave (save wood for reseed); then grow.
+	if _waves_launched < 1:
+		return 2
 	return clampi(2 + (age - 1) * 2, 2, 8)
+
+
+func _wood_reserve() -> int:
+	## Keep enough wood to reseed so food eco doesn't die mid-wave.
+	if BalanceSim.active or _count_own_buildings("farm") < 1:
+		return 0
+	return Farm.RESEED_WOOD
 
 
 func _try_place_next_building() -> void:
@@ -563,7 +572,7 @@ func _try_place_next_building() -> void:
 		want_towers = true
 	elif BalanceSim.active and strategy == BalanceSim.STRAT_RUSH and age >= 2:
 		want_towers = true
-	## Towers before walls (stone spend); only 25 wood each.
+	## Towers before walls (stone spend). Allow dipping reseed wood — gather refills.
 	if want_towers and age >= 2 and _count_own_buildings("watch_tower") < STANDARD_TOWER_TARGET and stone >= 125 and wood >= 25:
 		var tower_i := _count_own_buildings("watch_tower")
 		var tower_off := Vector2(70, -50) if tower_i == 0 else Vector2(-70, 60)
@@ -591,11 +600,11 @@ func _try_place_next_building() -> void:
 func _try_place_stone_defenses() -> void:
 	if BalanceSim.active or age < 2 or _units_parent == null:
 		return
-	## Prefer towers first; if wood is too low for another tower, still spend on walls.
-	if _count_own_buildings("watch_tower") < STANDARD_TOWER_TARGET and wood >= 25:
+	## Always finish towers before walls so stone spend hits <300 (towers+walls).
+	if _count_own_buildings("watch_tower") < STANDARD_TOWER_TARGET:
 		return
 	## After early eco is online so stone spend doesn't fight villager boom.
-	if _count_villagers() < ARMY_FILL_VILLS:
+	if _count_villagers() < AGE_UP_MIN_VILLS:
 		return
 	var have := _count_own_buildings("stone_wall")
 	if have >= STANDARD_WALL_TARGET or stone < 5:
@@ -755,6 +764,9 @@ func _try_place_building(building_id: String, pos: Vector2) -> bool:
 
 
 func _try_blacksmith_research() -> void:
+	## Standard: don't burn food/gold before the first wave is out.
+	if not BalanceSim.active and _waves_launched < 1:
+		return
 	var smith := _own_blacksmith()
 	if smith == null or not smith.is_complete or smith.is_researching():
 		return
@@ -876,17 +888,17 @@ func _desired_gather_weights() -> Dictionary:
 	var w := {"food": 1.2, "wood": 1.0, "gold": 0.4, "stone": 0.0}
 	if food < 200 or (not age_researching and age < _target_age() and food < _food_reserve_for_age() + 100):
 		w["food"] = float(w["food"]) + 2.0
-	## Critical food: pull off wood/gold so army + villagers can train.
-	if food < 100:
+	## Reseed wood is mandatory — empty farms kill army training.
+	if wood < _wood_reserve() + 20 and _count_own_buildings("farm") > 0:
+		w["wood"] = 5.0
+	elif food < 100:
+		## Critical food: pull off wood/gold so army + villagers can train.
 		w["food"] = 6.0
-		w["wood"] = 0.4
+		w["wood"] = maxf(float(w["wood"]), 0.8)
 		w["gold"] = 0.2
 	elif wood < 150 or _need_house() or _count_own_buildings("farm") < _farm_target():
 		w["wood"] = float(w["wood"]) + 1.8
-	## Farms empty without reseed wood — only when food is not critical.
-	if food >= 80 and wood < Farm.RESEED_WOOD and _count_own_buildings("farm") > 0:
-		w["wood"] = float(w["wood"]) + 2.5
-	if age >= 2 and gold < 80 and food >= 100:
+	if age >= 2 and gold < 80 and food >= 100 and wood >= _wood_reserve():
 		w["gold"] = float(w["gold"]) + 1.2
 	## Only gather stone when a planned spend needs more than the stockpile.
 	var planned_stone := _planned_stone_need()
@@ -916,7 +928,7 @@ func _assign_builders() -> void:
 		not BalanceSim.active
 		and food < 100
 		and _own_military().size() < _wave_min_units()
-		and _count_villagers() >= ARMY_FILL_VILLS
+		and _count_villagers() >= ECO_READY_VILLS
 	):
 		return
 	var bgroup := "player_buildings" if team == 0 else "enemy_buildings"
@@ -1014,13 +1026,12 @@ func _try_train_villagers() -> void:
 	## Boom/FC: hold villagers until castle-age click is banked.
 	if BalanceSim.active and strategy != BalanceSim.STRAT_RUSH and age == 2 and food < 850:
 		return
-	## Standard: leave food for first-wave army; after the wave, resume villager boom.
+	## Standard: once eco-ready, leave ALL food for first-wave army (no villager drip).
 	if (
 		not BalanceSim.active
 		and _waves_launched < 1
-		and _count_villagers() >= ARMY_FILL_VILLS
+		and _count_villagers() >= ECO_READY_VILLS
 		and _own_military().size() < _wave_min_units()
-		and food >= 80
 	):
 		return
 	## Standard: prioritize eco to 12 vills — don't bank age food yet.
@@ -1036,8 +1047,8 @@ func _try_train_villagers() -> void:
 
 
 func _standard_army_cap() -> int:
-	## Tiny screen early; from ARMY_FILL_VILLS fill to wave size (≥6).
-	if _count_villagers() < ARMY_FILL_VILLS:
+	## Tiny screen until 12 vills; then fill to wave size (≥6).
+	if _count_villagers() < ECO_READY_VILLS:
 		return EARLY_ARMY_SCREEN
 	return _wave_min_units()
 
@@ -1048,17 +1059,12 @@ func _try_train_army() -> void:
 	var roll := rng.randf()
 	if _pop_used() >= _pop_cap_ready():
 		return
-	## Standard: small screen early; fill to wave size; after wave grow eco to 12 before more army.
+	## Standard: screen only until 12 vills; then fill wave; stop at min once fielded.
 	if not BalanceSim.active:
-		if _waves_launched >= 1 and _count_villagers() < ECO_READY_VILLS:
-			return
 		var army_n := _own_military().size()
 		var cap := _standard_army_cap()
 		if army_n >= cap:
-			if _count_villagers() < ARMY_FILL_VILLS:
-				return
-			if army_n >= _wave_min_units():
-				return
+			return
 	## Boom age 3: hold army while age-4 research is running.
 	if BalanceSim.active and strategy == BalanceSim.STRAT_BOOM and age == 3 and age_researching:
 		return
@@ -1250,7 +1256,7 @@ func _try_train_counter_unit(food_free: int, gold_free: int) -> bool:
 	var want := select_counter_unit(_enemy_role_counts())
 	_last_counter_pick = want
 	var army_cap := _standard_army_cap()
-	if _own_military().size() >= army_cap and _count_villagers() < ECO_READY_VILLS:
+	if _own_military().size() >= army_cap:
 		return false
 	## Force-fill toward army cap (screen early, wave size after eco).
 	var need_fill := _own_military().size() < army_cap

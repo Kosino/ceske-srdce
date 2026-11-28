@@ -3183,7 +3183,8 @@ func _run_ai_economy_smoke() -> void:
 		if ai.standard_smoke_ok():
 			ok = true
 			break
-		if ai._sim_elapsed - start_elapsed >= 600.0:
+		## 12 in-game minutes — eco→wave→stone needs a little headroom past 10.
+		if ai._sim_elapsed - start_elapsed >= 720.0:
 			ok = ai.standard_smoke_ok()
 			break
 	ai.print_ai_summary()
