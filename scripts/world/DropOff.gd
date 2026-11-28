@@ -208,11 +208,18 @@ func _complete_training() -> void:
 	# Ensure selectable after spawn (team groups from Unit._ready).
 	if villager.team == 0 and not villager.is_in_group("player_units"):
 		villager.add_to_group("player_units")
+	_apply_rally(villager)
 	print("[PROD] spawned villager at %s groups_ok=%s" % [str(villager.position), villager.is_in_group("player_units")])
 	NotificationManager.show_message("Vycvičen vesničan.")
 	queue_changed.emit()
 	if not queue.is_empty():
 		train_remaining = VILLAGER_TIME
+
+
+func _apply_rally(unit: Node) -> void:
+	var rally := RallyPointController.of(self)
+	if rally:
+		rally.apply_to_unit(unit)
 
 
 func _hp_fill_color() -> Color:

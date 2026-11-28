@@ -108,6 +108,7 @@ func _complete_training() -> void:
 	var parent := spawn_parent if spawn_parent else get_parent()
 	unit.position = global_position + Vector2(0, footprint.y * 0.5 + 24.0)
 	parent.add_child(unit)
+	_apply_rally(unit)
 	unit_spawned.emit(unit)
 	var label := str(UNIT_DEFS.get(unit_id, {}).get("label", unit_id))
 	print("[PROD] spawned %s at %s" % [unit_id, str(unit.position)])
@@ -119,6 +120,12 @@ func _complete_training() -> void:
 			train_remaining = 1.2
 		else:
 			train_remaining = float(UNIT_DEFS[next_id]["time"])
+
+
+func _apply_rally(unit: Node) -> void:
+	var rally := RallyPointController.of(self)
+	if rally:
+		rally.apply_to_unit(unit)
 
 
 func _instantiate_unit(unit_id: String) -> Node2D:

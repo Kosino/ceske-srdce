@@ -18,6 +18,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	if placer and placer.placing_type != "":
 		return
 
+	if event is InputEventKey and event.pressed and not event.echo:
+		if _handle_hotkey(event as InputEventKey):
+			get_viewport().set_input_as_handled()
+			return
+
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT:
@@ -40,6 +45,23 @@ func _unhandled_input(event: InputEvent) -> void:
 			queue_redraw()
 		else:
 			_update_building_hover(get_global_mouse_position())
+
+
+func _handle_hotkey(key: InputEventKey) -> bool:
+	var code := key.keycode
+	if code == KEY_NONE:
+		code = key.physical_keycode
+	if code >= KEY_1 and code <= KEY_9:
+		var slot := int(code - KEY_0)
+		if key.ctrl_pressed or key.meta_pressed:
+			SelectionManager.assign_control_group(slot)
+		else:
+			SelectionManager.select_control_group(slot)
+		return true
+	if code == KEY_PERIOD:
+		SelectionManager.select_next_idle_villager()
+		return true
+	return false
 
 
 func _draw() -> void:
@@ -141,9 +163,12 @@ func _box_select(world_rect: Rect2) -> void:
 
 
 func _issue_right_click_command() -> void:
-	if SelectionManager.selected_units.is_empty():
-		return
 	var world_pos := get_global_mouse_position()
+	# RMB with a training building selected (no units) → set rally point / gather rally.
+	if SelectionManager.selected_units.is_empty():
+		if _try_set_rally(world_pos):
+			return
+		return
 	var enemy := _find_enemy_at(world_pos)
 	if enemy:
 		SelectionManager.issue_attack(enemy)
@@ -179,6 +204,19 @@ func _issue_right_click_command() -> void:
 		NotificationManager.show_message("Oprava: %s" % repair.display_name)
 		return
 	SelectionManager.issue_move(world_pos)
+
+
+func _try_set_rally(world_pos: Vector2) -> bool:
+	var b := SelectionManager.selected_building
+	if b == null or not is_instance_valid(b) or not RallyPointController.can_host(b):
+		return false
+	var resource := _find_resource_at(world_pos)
+	if resource:
+		return SelectionManager.set_building_rally(resource.global_position, resource)
+	var farm := _find_farm_at(world_pos)
+	if farm:
+		return SelectionManager.set_building_rally(farm.global_position, farm)
+	return SelectionManager.set_building_rally(world_pos, null)
 
 
 func _has_selected_monk() -> bool:
