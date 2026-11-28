@@ -77,6 +77,7 @@ func _ready() -> void:
 		await _run_team_readability_smoke()
 		await _run_fog_of_war_smoke()
 		await _run_fog_polish_smoke()
+		await _run_fog_snapshot_smoke()
 		await _run_aoe_controls_smoke()
 		await _run_command_panel_context_smoke()
 		await _run_garrison_smoke()
@@ -133,6 +134,8 @@ func _ready() -> void:
 		await prepare_fog_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--fog-polish-shot"):
 		await prepare_fog_polish_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--fog-snapshot-shot"):
+		await prepare_fog_snapshot_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--formation-shot"):
 		await prepare_formation_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--ai-shot"):
@@ -1873,6 +1876,55 @@ func prepare_fog_polish_screenshot() -> void:
 		cam.center_at(PLAYER_TC_POS + Vector2(220, 40))
 	await get_tree().create_timer(0.4).timeout
 	_save_shot("t32_fog_polish.png", 0)
+
+
+## T-38: frozen ghost in explored grey (damaged HP) + live hut hidden.
+func prepare_fog_snapshot_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	var fog := _ensure_fog_of_war()
+	fog.fog_enabled = true
+	for n in get_tree().get_nodes_in_group("enemy_units"):
+		if n is Unit and is_instance_valid(n):
+			(n as Unit).position = Vector2(40, 40)
+	var scout: Villager = null
+	for n in get_tree().get_nodes_in_group("player_units"):
+		if n is Villager:
+			scout = n as Villager
+			break
+	var known_pos := PLAYER_TC_POS + Vector2(420, 40)
+	if scout:
+		scout.position = known_pos
+	await get_tree().physics_frame
+	fog.force_update()
+	var known_hut: Building = preload("res://scenes/buildings/House.tscn").instantiate() as Building
+	known_hut.team = 1
+	known_hut.is_complete = true
+	known_hut.position = known_pos
+	units.add_child(known_hut)
+	await get_tree().physics_frame
+	fog.force_update()
+	# Damage while in LOS so the ghost freezes a partial HP bar.
+	known_hut.hp = known_hut.max_hp * 0.45
+	known_hut.queue_redraw()
+	fog.force_update()
+	if scout:
+		scout.position = PLAYER_TC_POS + Vector2(40, 40)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	fog.force_update()
+	# Live building heals out of sight — ghost must keep the damaged snapshot.
+	known_hut.hp = known_hut.max_hp
+	known_hut.queue_redraw()
+	fog.force_update()
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	if cam:
+		cam.set_zoom_clamped(0.85)
+		cam.center_at(PLAYER_TC_POS + Vector2(220, 40))
+	await get_tree().create_timer(0.4).timeout
+	_save_shot("t38_fog_snapshot.png", 0)
 
 
 ## Headless/manual regression: own buildings must not take friendly damage.
@@ -5464,7 +5516,7 @@ func _run_fog_polish_smoke() -> void:
 		and not fog.is_enemy_building_revealed(grey_hut)
 	)
 
-	# Sight a hut outside TC LOS (8 tiles), then leave — last-known stays in explored grey.
+	# Sight a hut outside TC LOS (8 tiles), then leave — ghost stays in explored grey (not live).
 	var known_pos := PLAYER_TC_POS + Vector2(420, 80)
 	scout.position = known_pos
 	await get_tree().physics_frame
@@ -5485,13 +5537,16 @@ func _run_fog_polish_smoke() -> void:
 	await get_tree().physics_frame
 	fog.force_update()
 	var known_tile := fog.world_to_tile(known_pos)
+	var ghost_known := fog.find_ghost_at(known_pos)
 	var last_known_ok := (
 		seen_in_sight
 		and fog.tile_state(known_tile.x, known_tile.y) == FogOfWar.STATE_EXPLORED
-		and known_hut.visible
+		and not known_hut.visible
 		and fog.is_enemy_building_revealed(known_hut)
+		and ghost_known != null
+		and ghost_known.visible
 		and sc != null
-		and sc._find_enemy_at(known_hut.global_position) == known_hut
+		and sc._find_enemy_at(known_hut.global_position) == null
 	)
 
 	var building_unseen_hidden := unexplored_hidden and grey_new_hidden and last_known_ok
@@ -5505,6 +5560,144 @@ func _run_fog_polish_smoke() -> void:
 	else:
 		print("[TEST] FAIL fog polish (enemy_click_blocked, building_unseen_hidden)")
 	for n in [hidden_ai, unseen_hut, scout, grey_hut, known_hut]:
+		if n != null and is_instance_valid(n):
+			n.queue_free()
+	fog.force_update()
+	await get_tree().physics_frame
+
+
+## T-38: frozen HP/build ghost; destroyed memory; ghost not attackable (RMB → move).
+func _run_fog_snapshot_smoke() -> void:
+	await get_tree().physics_frame
+	var fog := _ensure_fog_of_war()
+	fog.fog_enabled = true
+	for n in get_tree().get_nodes_in_group("player_units"):
+		if n is Unit and is_instance_valid(n):
+			(n as Unit).position = PLAYER_TC_POS + Vector2(30, 30)
+	fog.force_update()
+	await get_tree().physics_frame
+
+	var sc := get_tree().get_first_node_in_group("selection_controller") as SelectionController
+	var scout: Villager = VILLAGER_SCENE.instantiate() as Villager
+	scout.team = 0
+	scout.contribute_population = false
+	# Far from T-32 polish hut at +(420,80) so find_ghost_at cannot collide.
+	var known_pos := PLAYER_TC_POS + Vector2(520, 200)
+	scout.position = known_pos
+	units.add_child(scout)
+	await get_tree().physics_frame
+	fog.force_update()
+
+	var hut: Building = preload("res://scenes/buildings/House.tscn").instantiate() as Building
+	hut.team = 1
+	hut.is_complete = true
+	hut.position = known_pos
+	units.add_child(hut)
+	await get_tree().physics_frame
+	fog.force_update()
+	var hp_seen := hut.max_hp * 0.4
+	hut.hp = hp_seen
+	hut.queue_redraw()
+	fog.force_update()
+	var seen_live := hut.visible and fog.is_world_visible(known_pos)
+
+	# Leave LOS — ghost freezes damaged HP; live hut hidden.
+	scout.position = PLAYER_TC_POS + Vector2(40, 40)
+	await get_tree().physics_frame
+	fog.force_update()
+	var ghost := fog.get_ghost_for_building(hut)
+	if ghost == null:
+		ghost = fog.find_ghost_at(known_pos, 24.0)
+	var frozen_ok := (
+		seen_live
+		and not hut.visible
+		and ghost != null
+		and ghost.visible
+		and is_equal_approx(ghost.snap_hp, hp_seen)
+	)
+	# Live hut "heals" out of sight — ghost must stay frozen.
+	hut.hp = hut.max_hp
+	hut.queue_redraw()
+	fog.force_update()
+	var still_frozen := ghost != null and is_instance_valid(ghost) and is_equal_approx(ghost.snap_hp, hp_seen)
+
+	# Ghost not selectable/attackable → RMB targeting returns null (move order).
+	var not_attackable := (
+		sc != null
+		and sc._find_enemy_at(known_pos) == null
+		and not fog.is_enemy_targetable(hut)
+	)
+
+	# Destroyed out of sight — orphan ghost remains until tile re-seen.
+	hut.die()
+	await get_tree().physics_frame
+	fog.force_update()
+	var orphan := fog.find_ghost_at(known_pos, 24.0)
+	var destroyed_ghost_ok := (
+		orphan != null
+		and orphan.visible
+		and orphan.is_destroyed_memory
+	)
+
+	# Re-scout the tile — destroyed memory clears.
+	scout.position = known_pos
+	await get_tree().physics_frame
+	fog.force_update()
+	var cleared := fog.find_ghost_at(known_pos, 24.0) == null and fog.is_world_visible(known_pos)
+
+	# Build-phase freeze: sight unfinished hut, leave, live progress advances.
+	var site_pos := PLAYER_TC_POS + Vector2(520, 320)
+	scout.position = site_pos
+	await get_tree().physics_frame
+	fog.force_update()
+	var site: Building = preload("res://scenes/buildings/House.tscn").instantiate() as Building
+	site.team = 1
+	site.is_complete = false
+	site.position = site_pos
+	units.add_child(site)
+	site.start_construction(30.0)
+	site.build_progress = 0.35
+	site.hp = site.max_hp * lerpf(0.1, 1.0, 0.35)
+	site.queue_redraw()
+	await get_tree().physics_frame
+	fog.force_update()
+	var site_seen := site.visible and fog.is_world_visible(site_pos)
+	scout.position = PLAYER_TC_POS + Vector2(40, 40)
+	await get_tree().physics_frame
+	fog.force_update()
+	site.build_progress = 0.9
+	site.hp = site.max_hp * lerpf(0.1, 1.0, 0.9)
+	site.queue_redraw()
+	fog.force_update()
+	var site_ghost := fog.get_ghost_for_building(site)
+	if site_ghost == null:
+		site_ghost = fog.find_ghost_at(site_pos, 24.0)
+	var build_freeze_ok := (
+		site_seen
+		and not site.visible
+		and site_ghost != null
+		and site_ghost.visible
+		and not site_ghost.snap_is_complete
+		and is_equal_approx(site_ghost.snap_build_progress, 0.35)
+	)
+
+	var snap_ok := (
+		frozen_ok
+		and still_frozen
+		and not_attackable
+		and destroyed_ghost_ok
+		and cleared
+		and build_freeze_ok
+	)
+	print(
+		"[TEST] fog snapshot frozen=%s still=%s no_atk=%s destroyed_ghost=%s cleared=%s build_freeze=%s"
+		% [frozen_ok, still_frozen, not_attackable, destroyed_ghost_ok, cleared, build_freeze_ok]
+	)
+	if snap_ok:
+		print("[TEST] PASS fog snapshot")
+	else:
+		print("[TEST] FAIL fog snapshot")
+	for n in [scout, site]:
 		if n != null and is_instance_valid(n):
 			n.queue_free()
 	fog.force_update()

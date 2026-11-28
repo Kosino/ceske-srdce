@@ -2,6 +2,7 @@ extends Node2D
 class_name FogOfWar
 ## AoE II-style fog: unexplored black, explored dark grey, in-sight clear.
 ## Soft-edged ImageTexture overlay (2× + blur + linear filter). AI ignores fog. F9 disables.
+## Enemy buildings out of LOS use BuildingGhost snapshots (frozen HP / build phase).
 
 
 const TILE := 40
@@ -26,8 +27,14 @@ var _sprite: Sprite2D
 var _accum: float = 0.0
 ## Enemy unit instance_id → last forced visibility (so we restore when fog off).
 var _enemy_vis: Dictionary = {}
-## Enemy buildings sighted at least once (last-known stays visible in explored grey).
+## Enemy buildings sighted at least once (last-known / ghost eligibility).
 var _seen_buildings: Dictionary = {}
+## Live building instance_id → BuildingGhost (hidden while in LOS; shown in grey).
+var _ghosts_by_source: Dictionary = {}
+## Orphan ghosts for buildings destroyed out of sight (cleared when tile is re-seen).
+var _orphan_ghosts: Dictionary = {} ## ghost instance_id → BuildingGhost
+## Connected destroyed handlers (instance_id → Callable) so we do not double-connect.
+var _destroy_hooks: Dictionary = {}
 
 
 func _ready() -> void:
@@ -119,7 +126,8 @@ func is_world_explored(world: Vector2) -> bool:
 	return tile_state(t.x, t.y) != STATE_UNEXPLORED
 
 
-## True when an enemy unit/building may be clicked / attacked / shown on minimap.
+## True when an enemy unit/building may be clicked / attacked.
+## Buildings under fog (ghost only) are NOT targetable — RMB becomes a move.
 func is_enemy_targetable(node: Node) -> bool:
 	if not fog_enabled:
 		return true
@@ -128,22 +136,53 @@ func is_enemy_targetable(node: Node) -> bool:
 	var n := node as Node2D
 	if node is Unit:
 		return is_world_visible(n.global_position)
-	# Buildings / TCs: in sight now, or last-known after first sighting in explored fog.
-	return is_enemy_building_revealed(n)
+	# Live buildings / TCs: only while currently in LOS (ghosts are not attackable).
+	return is_world_visible(n.global_position)
 
 
+## True when an enemy building is known to the player (LOS or ghost / last-known).
+## Used by minimap + reveal checks — does NOT imply attackable.
 func is_enemy_building_revealed(node: Node2D) -> bool:
 	if not fog_enabled:
 		return true
 	if node == null or not is_instance_valid(node):
 		return false
-	var id := node.get_instance_id()
 	if is_world_visible(node.global_position):
 		return true
-	# Last-known: once sighted, stay visible while the tile remains explored.
+	var id := node.get_instance_id()
 	if bool(_seen_buildings.get(id, false)) and is_world_explored(node.global_position):
 		return true
 	return false
+
+
+## Ghost at / near a world position (for smokes / click-move checks).
+func find_ghost_at(world: Vector2, radius: float = 48.0) -> BuildingGhost:
+	var best: BuildingGhost = null
+	var best_d: float = radius
+	for item in _iter_all_ghosts():
+		if not (item is BuildingGhost):
+			continue
+		var g := item as BuildingGhost
+		if g == null or not is_instance_valid(g) or not g.visible:
+			continue
+		var d: float = g.global_position.distance_to(world)
+		if d < best_d:
+			best_d = d
+			best = g
+	return best
+
+
+func has_ghost_at(world: Vector2, radius: float = 48.0) -> bool:
+	return find_ghost_at(world, radius) != null
+
+
+func get_ghost_for_building(node: Node2D) -> BuildingGhost:
+	if node == null or not is_instance_valid(node):
+		return null
+	var g: BuildingGhost = _ghosts_by_source.get(node.get_instance_id(), null) as BuildingGhost
+	if g != null and is_instance_valid(g):
+		return g
+	return null
 
 
 func sight_radius_px(node: Node) -> float:
@@ -194,6 +233,8 @@ func _rebuild() -> void:
 	_upload_texture()
 	_apply_enemy_unit_visibility(tree)
 	_apply_enemy_building_visibility(tree)
+	_prune_missing_source_ghosts()
+	_prune_orphan_ghosts()
 
 
 func _paint_sight(node: Node) -> void:
@@ -290,17 +331,126 @@ func _apply_enemy_building_visibility(tree: SceneTree) -> void:
 			if seen_ids.has(id):
 				continue
 			seen_ids[id] = true
-			if n is Building and not (n as Building).is_complete:
-				(n as CanvasItem).visible = false
-				continue
+			_ensure_destroy_hook(b)
 			# First sighting marks last-known; newly built in grey stays hidden until sighted.
 			if is_world_visible(b.global_position):
 				_seen_buildings[id] = true
 				(n as CanvasItem).visible = true
+				_capture_or_refresh_ghost(b, false)
 			elif bool(_seen_buildings.get(id, false)) and is_world_explored(b.global_position):
-				(n as CanvasItem).visible = true
+				# Live building stays hidden; show frozen ghost instead.
+				(n as CanvasItem).visible = false
+				_capture_or_refresh_ghost(b, true)
 			else:
 				(n as CanvasItem).visible = false
+				_hide_ghost_for_source(id)
+
+
+func _capture_or_refresh_ghost(node: Node2D, show_ghost: bool) -> void:
+	var id := node.get_instance_id()
+	var ghost: BuildingGhost = _ghosts_by_source.get(id, null) as BuildingGhost
+	if ghost == null or not is_instance_valid(ghost):
+		ghost = BuildingGhost.new()
+		ghost.name = "FogGhost_%d" % id
+		add_child(ghost)
+		_ghosts_by_source[id] = ghost
+	if show_ghost:
+		# Freeze once on the LOS→grey transition (or if snapshot missing); never live-update in fog.
+		if not ghost.has_snapshot or not ghost.visible:
+			ghost.capture_from(node)
+		ghost.visible = true
+	else:
+		# In LOS: keep snapshot fresh for the moment we leave; hide ghost.
+		ghost.capture_from(node)
+		ghost.visible = false
+
+
+func _hide_ghost_for_source(id: int) -> void:
+	var ghost: BuildingGhost = _ghosts_by_source.get(id, null) as BuildingGhost
+	if ghost != null and is_instance_valid(ghost):
+		ghost.visible = false
+
+
+func _ensure_destroy_hook(node: Node2D) -> void:
+	var id := node.get_instance_id()
+	if _destroy_hooks.has(id):
+		return
+	if not node.has_signal("destroyed"):
+		return
+	var cb := _on_enemy_building_destroyed.bind(id)
+	node.connect("destroyed", cb)
+	_destroy_hooks[id] = true
+
+
+func _on_enemy_building_destroyed(building: Node, source_id: int) -> void:
+	_destroy_hooks.erase(source_id)
+	_seen_buildings.erase(source_id)
+	var ghost: BuildingGhost = _ghosts_by_source.get(source_id, null) as BuildingGhost
+	_ghosts_by_source.erase(source_id)
+	if ghost == null or not is_instance_valid(ghost):
+		return
+	var pos := ghost.global_position
+	# If the player currently sees the tile, they watch it die — drop the ghost.
+	if not fog_enabled or is_world_visible(pos):
+		ghost.queue_free()
+		return
+	# Destroyed out of sight: keep frozen ghost until the tile is re-seen.
+	ghost.mark_destroyed_memory()
+	ghost.visible = true
+	_orphan_ghosts[ghost.get_instance_id()] = ghost
+
+
+func _prune_missing_source_ghosts() -> void:
+	## Buildings queue_free'd without die() (smoke cleanup) leave stale ghosts — drop them.
+	## Destroyed-out-of-sight memory only comes from the `destroyed` signal → orphan path.
+	var stale: Array = []
+	for id in _ghosts_by_source.keys():
+		if is_instance_id_valid(int(id)):
+			continue
+		stale.append(id)
+		var ghost: BuildingGhost = _ghosts_by_source[id] as BuildingGhost
+		if ghost != null and is_instance_valid(ghost):
+			ghost.queue_free()
+	for id in stale:
+		_ghosts_by_source.erase(id)
+		_destroy_hooks.erase(id)
+
+
+func _prune_orphan_ghosts() -> void:
+	var dead: Array = []
+	for gid in _orphan_ghosts.keys():
+		var ghost: BuildingGhost = _orphan_ghosts[gid] as BuildingGhost
+		if ghost == null or not is_instance_valid(ghost):
+			dead.append(gid)
+			continue
+		# Player re-scouts the tile → clear destroyed memory.
+		if is_world_visible(ghost.global_position):
+			ghost.queue_free()
+			dead.append(gid)
+	for gid in dead:
+		_orphan_ghosts.erase(gid)
+
+
+func _iter_all_ghosts() -> Array:
+	var out: Array = []
+	for id in _ghosts_by_source.keys():
+		var g: BuildingGhost = _ghosts_by_source[id] as BuildingGhost
+		if g != null and is_instance_valid(g):
+			out.append(g)
+	for gid in _orphan_ghosts.keys():
+		var g2: BuildingGhost = _orphan_ghosts[gid] as BuildingGhost
+		if g2 != null and is_instance_valid(g2):
+			out.append(g2)
+	return out
+
+
+func _clear_all_ghosts() -> void:
+	for g in _iter_all_ghosts():
+		if g != null and is_instance_valid(g):
+			g.queue_free()
+	_ghosts_by_source.clear()
+	_orphan_ghosts.clear()
+	_destroy_hooks.clear()
 
 
 func _reveal_all_enemies() -> void:
@@ -315,3 +465,4 @@ func _reveal_all_enemies() -> void:
 			if is_instance_valid(n) and n is CanvasItem:
 				(n as CanvasItem).visible = true
 	_enemy_vis.clear()
+	_clear_all_ghosts()
