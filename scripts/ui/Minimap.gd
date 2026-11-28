@@ -4,10 +4,7 @@ class_name Minimap
 
 
 const MAP_SIZE := Vector2(3000, 3000)
-const PLAYER_UNIT := Color(0.25, 0.9, 0.3)
-const ENEMY_UNIT := Color(0.95, 0.25, 0.2)
-const PLAYER_BUILD := Color(0.35, 0.75, 1.0)
-const ENEMY_BUILD := Color(1.0, 0.55, 0.2)
+## Team dots match TeamColors (player blue / AI red).
 const FOREST_COLOR := Color(0.08, 0.32, 0.12)
 const GOLD_COLOR := Color(0.92, 0.82, 0.2)
 const STONE_COLOR := Color(0.55, 0.55, 0.58)
@@ -41,10 +38,10 @@ func paint_minimap(surf: Control) -> void:
 	_draw_dots(surf, tree, "forest_resources", FOREST_COLOR, r, 1.6)
 	_draw_dots(surf, tree, "gold_mines", GOLD_COLOR, r, 2.4)
 	_draw_dots(surf, tree, "stone_mines", STONE_COLOR, r, 2.4)
-	_draw_building_squares(surf, tree, "player_buildings", PLAYER_BUILD, r)
-	_draw_building_squares(surf, tree, "enemy_buildings", ENEMY_BUILD, r)
-	_draw_dots(surf, tree, "player_units", PLAYER_UNIT, r, 2.5)
-	_draw_dots(surf, tree, "enemy_units", ENEMY_UNIT, r, 2.5)
+	_draw_building_squares(surf, tree, "player_buildings", TeamColors.minimap_build(0), r)
+	_draw_building_squares(surf, tree, "enemy_buildings", TeamColors.minimap_build(1), r)
+	_draw_dots(surf, tree, "player_units", TeamColors.minimap_unit(0), r, 2.5)
+	_draw_dots(surf, tree, "enemy_units", TeamColors.minimap_unit(1), r, 2.5)
 	_draw_camera_frame(surf, r)
 
 

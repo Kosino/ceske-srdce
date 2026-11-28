@@ -21,9 +21,6 @@ func _ready() -> void:
 	super._ready()
 	configure_facing_sprites("valecny_vuz")
 	add_to_group("soldiers")
-	if _visual:
-		_visual.modulate = Color(1, 1, 1, 1) if team == 0 else Color(1.0, 0.55, 0.55, 1.0)
-
 
 func _try_strike() -> void:
 	if _attack_timer > 0.0 or not is_instance_valid(attack_target):

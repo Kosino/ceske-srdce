@@ -80,6 +80,16 @@ func configure_facing_sprites(unit_key: String) -> void:
 		_visual.centered = true
 		_visual.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_apply_facing_texture()
+	_apply_team_visual()
+
+
+## Palette-swap team cloth/shields (AoE II style). Used after spawn and on convert.
+func _apply_team_visual() -> void:
+	if _visual == null:
+		_visual = get_node_or_null("Visual") as Sprite2D
+	if _visual == null:
+		return
+	TeamColors.apply(_visual, team)
 
 
 func _apply_facing_texture() -> void:
