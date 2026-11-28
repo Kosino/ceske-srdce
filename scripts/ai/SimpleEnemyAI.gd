@@ -544,8 +544,7 @@ func _try_place_next_building() -> void:
 	## Soft pop-cap house first (never block training) — only if no house already building.
 	var houses_building := _count_own_buildings("house") - _count_own_complete("house")
 	if houses_building < 1 and _pop_used() >= _pop_cap_ready() - POP_HEADROOM and wood >= 25:
-		var hi := _count_own_buildings("house")
-		_try_place_building("house", base_position + Vector2(-90, 80 + hi * 40))
+		_try_place_building("house", _house_preferred_pos(_count_own_buildings("house")))
 		return
 	## Core eco: mill early (Standard + sim boom/FC).
 	if (not BalanceSim.active or strategy != BalanceSim.STRAT_RUSH) and _count_own_buildings("mill") < 1 and wood >= 100:
@@ -558,19 +557,20 @@ func _try_place_next_building() -> void:
 	## Farms once mill is up.
 	if _count_own_complete("mill") >= 1 and _count_own_buildings("farm") < _farm_target() and wood >= 60:
 		var fi := _count_own_buildings("farm")
-		var farm_off := Vector2(-20 + (fi % 3) * 70, -160 - (fi / 3) * 70)
+		var farm_fp: Vector2 = BuildingPlacer.FOOTPRINTS.get("farm", Vector2(80, 80))
+		var farm_pitch := farm_fp.x + float(WallNav.TILE)
+		var farm_off := Vector2(-20 + (fi % 3) * farm_pitch, -160 - (fi / 3) * farm_pitch)
 		_try_place_building("farm", base_position + farm_off)
 		return
 	## Prefund houses toward villager target (one foundation at a time).
 	if houses_building < 1 and _need_house() and wood >= 25:
-		var hj := _count_own_buildings("house")
-		_try_place_building("house", base_position + Vector2(-90, 80 + hj * 40))
+		_try_place_building("house", _house_preferred_pos(_count_own_buildings("house")))
 		return
 	var house_target := 1 if BalanceSim.active else 2
 	if strategy == BalanceSim.STRAT_BOOM:
 		house_target = 2
 	if _count_own_buildings("house") < house_target and wood >= 25:
-		_try_place_building("house", base_position + Vector2(-90, 80 + _count_own_buildings("house") * 40))
+		_try_place_building("house", _house_preferred_pos(_count_own_buildings("house")))
 		return
 	## Fast-castle / boom: get two age-2 buildings ASAP (archery + blacksmith).
 	if age >= 2 and _count_own_buildings("archery_range") < 1 and wood >= 175:
@@ -583,7 +583,7 @@ func _try_place_next_building() -> void:
 		_try_place_building("stable", base_position + Vector2(120, -70))
 		return
 	if age >= 2 and _count_own_buildings("house") < 2 and wood >= 25:
-		_try_place_building("house", base_position + Vector2(-90, 120))
+		_try_place_building("house", _house_preferred_pos(_count_own_buildings("house")))
 		return
 	## Towers near base (Standard + BalanceSim rush) — spend stone instead of hoarding.
 	## Standard: after first wave so builders/wood stay on eco→army fill.
@@ -729,6 +729,8 @@ func _wall_tile_buildable(tile: Vector2i) -> bool:
 		if WallNav.world_to_tile(res.global_position) == tile:
 			return false
 	var pos := WallNav.tile_center(tile)
+	var wall_fp := Vector2(float(WallNav.TILE), float(WallNav.TILE))
+	var gap := float(WallNav.TILE)
 	var bgroup := "player_buildings" if team == 0 else "enemy_buildings"
 	for n in get_tree().get_nodes_in_group(bgroup):
 		if n == null or not is_instance_valid(n):
@@ -739,11 +741,10 @@ func _wall_tile_buildable(tile: Vector2i) -> bool:
 			var other := n as Building
 			if other.team != team:
 				continue
-			var min_dist := (other.footprint + Vector2(40, 40)).length() * 0.28
-			if pos.distance_to(other.global_position) < min_dist:
+			if not _aabbs_clear(pos, wall_fp, other.global_position, other.footprint, gap):
 				return false
 	if _hall != null and is_instance_valid(_hall):
-		if pos.distance_to(_hall.global_position) < 70.0:
+		if not _aabbs_clear(pos, wall_fp, _hall.global_position, Vector2(120, 120), gap):
 			return false
 	return true
 
@@ -775,7 +776,7 @@ func _tc_wall_tiles(base_tile: Vector2i) -> Array[Vector2i]:
 	return out
 
 
-## Watch towers on the enemy-facing arc of the perimeter.
+## Watch towers on the enemy-facing arc of the perimeter (inside ring, ≥1 tile from walls).
 func _tower_offset_toward_enemy(index: int) -> Vector2:
 	var dir := Vector2(-1.0, 0.0)
 	var enemy := _enemy_town_hall()
@@ -783,9 +784,13 @@ func _tower_offset_toward_enemy(index: int) -> Vector2:
 		var delta: Vector2 = enemy.global_position - base_position
 		if delta.length() > 1.0:
 			dir = delta.normalized()
-	var r_px := float(perimeter_ring_radius()) * float(WallNav.TILE) * 0.82
+	## Sit ≥2 tiles inside wall band so AABB + gap clears the perimeter segments.
+	var r_px := maxf(
+		float(perimeter_ring_radius()) * float(WallNav.TILE) * 0.65,
+		float(WallNav.TILE) * 3.0
+	)
 	var perp := Vector2(-dir.y, dir.x)
-	var lateral := 55.0 if index == 0 else -55.0
+	var lateral := float(WallNav.TILE) * 2.5 if index == 0 else float(WallNav.TILE) * -2.5
 	return dir * r_px + perp * lateral
 
 
@@ -919,7 +924,177 @@ func smoke_walls_on_perimeter_ring() -> bool:
 	return any and walls_not_sealing()
 
 
+## Smoke: no two own buildings have overlapping AABB footprints.
+func smoke_no_building_aabb_overlap() -> bool:
+	var owned: Array[Building] = []
+	var bgroup := "player_buildings" if team == 0 else "enemy_buildings"
+	for n in get_tree().get_nodes_in_group(bgroup):
+		if n == null or not is_instance_valid(n) or not (n is Building):
+			continue
+		var b := n as Building
+		if b.team != team:
+			continue
+		owned.append(b)
+	for i in range(owned.size()):
+		var a := owned[i]
+		var ha := a.footprint * 0.5
+		for j in range(i + 1, owned.size()):
+			var b2 := owned[j]
+			var hb := b2.footprint * 0.5
+			var dx := absf(a.global_position.x - b2.global_position.x)
+			var dy := absf(a.global_position.y - b2.global_position.y)
+			if dx < ha.x + hb.x and dy < ha.y + hb.y:
+				return false
+	return true
+
+
+## House row/cluster south of TC (inside ring) — never west gap / barracks pile-up.
+func _house_preferred_pos(index: int) -> Vector2:
+	var fp: Vector2 = BuildingPlacer.FOOTPRINTS.get("house", Vector2(56, 56))
+	## Sprite is 56×80 (taller than footprint) — pitch by sprite + ≥1 tile so roofs don't stack.
+	var pitch_x := fp.x + float(WallNav.TILE)
+	var pitch_y := 80.0 + float(WallNav.TILE)
+	var cols := 4
+	var col := index % cols
+	var row := int(index / cols)
+	## South of TC (y≈200 clears barracks at +90); keep x ≥ -20 so west egress stays open.
+	return base_position + Vector2(-20.0 + float(col) * pitch_x, 200.0 + float(row) * pitch_y)
+
+
+func _footprint_for(building_id: String) -> Vector2:
+	return BuildingPlacer.FOOTPRINTS.get(building_id, Vector2(72, 72)) as Vector2
+
+
+## True if site blocks the permanent western wall-gap / egress corridor.
+func _blocks_west_gap(pos: Vector2, footprint: Vector2) -> bool:
+	var base_tile := WallNav.world_to_tile(base_position)
+	var t := WallNav.world_to_tile(pos)
+	var half_tiles := int(ceili(footprint.x * 0.5 / float(WallNav.TILE)))
+	## Keep ≥3 tiles west of TC clear (matches open west ring + N/S gap).
+	return t.x + half_tiles <= base_tile.x - 3
+
+
+## AABB clearance: footprints must leave ≥1 tile (WallNav.TILE) between edges.
+func _aabbs_clear(pos_a: Vector2, fp_a: Vector2, pos_b: Vector2, fp_b: Vector2, gap: float) -> bool:
+	var dx := absf(pos_a.x - pos_b.x)
+	var dy := absf(pos_a.y - pos_b.y)
+	var need_x := fp_a.x * 0.5 + fp_b.x * 0.5 + gap
+	var need_y := fp_a.y * 0.5 + fp_b.y * 0.5 + gap
+	return dx >= need_x or dy >= need_y
+
+
+func _can_place_ai_building(building_id: String, pos: Vector2) -> bool:
+	var fp := _footprint_for(building_id)
+	var half := fp * 0.5
+	var gap := float(WallNav.TILE)
+	if pos.x - half.x < 0.0 or pos.y - half.y < 0.0:
+		return false
+	if pos.x + half.x > 3000.0 or pos.y + half.y > 3000.0:
+		return false
+	## Water / river tiles under footprint center (and near corners).
+	var check_tiles: Array[Vector2i] = [
+		WallNav.world_to_tile(pos),
+		WallNav.world_to_tile(pos + Vector2(-half.x, 0)),
+		WallNav.world_to_tile(pos + Vector2(half.x, 0)),
+		WallNav.world_to_tile(pos + Vector2(0, -half.y)),
+		WallNav.world_to_tile(pos + Vector2(0, half.y)),
+	]
+	for t in check_tiles:
+		if WaterNav.blocks_land(t):
+			return false
+	if building_id != "watch_tower" and _blocks_west_gap(pos, fp):
+		return false
+	## Resources: no overlap with node AABB (treat as ~1 tile).
+	var res_fp := Vector2(float(WallNav.TILE), float(WallNav.TILE))
+	for n in get_tree().get_nodes_in_group("resources"):
+		if n == null or not is_instance_valid(n) or not (n is ResourceNode):
+			continue
+		var res := n as ResourceNode
+		if res.is_depleted():
+			continue
+		if not _aabbs_clear(pos, fp, res.global_position, res_fp, gap):
+			return false
+	## Own walls / gates.
+	for n in get_tree().get_nodes_in_group("walls"):
+		if n == null or not is_instance_valid(n) or not (n is WallSegment):
+			continue
+		var w := n as WallSegment
+		if w.team != team:
+			continue
+		if not _aabbs_clear(pos, fp, w.global_position, w.footprint, gap):
+			return false
+	for n in get_tree().get_nodes_in_group("gates"):
+		if n == null or not is_instance_valid(n) or not (n is Gate):
+			continue
+		var g := n as Gate
+		if g.team != team:
+			continue
+		if not _aabbs_clear(pos, fp, g.global_position, g.footprint, gap):
+			return false
+	## Own buildings (incl. incomplete foundations).
+	var bgroup := "player_buildings" if team == 0 else "enemy_buildings"
+	for n in get_tree().get_nodes_in_group(bgroup):
+		if n == null or not is_instance_valid(n) or not (n is Building):
+			continue
+		var other := n as Building
+		if other.team != team:
+			continue
+		if other is WallSegment or other is Gate:
+			continue ## already checked via walls group
+		if not _aabbs_clear(pos, fp, other.global_position, other.footprint, gap):
+			return false
+	## Town hall / DropOff clearance.
+	if _hall != null and is_instance_valid(_hall):
+		var hall_fp := Vector2(120, 120)
+		if not _aabbs_clear(pos, fp, _hall.global_position, hall_fp, gap):
+			return false
+	## Prefer sites inside the wall ring (when radius known / planned).
+	if _cached_wall_ring_radius > 0:
+		var base_tile := WallNav.world_to_tile(base_position)
+		var bt := WallNav.world_to_tile(pos)
+		var d := maxi(absi(bt.x - base_tile.x), absi(bt.y - base_tile.y))
+		if building_id != "watch_tower" and d >= _cached_wall_ring_radius:
+			return false
+	return true
+
+
+## Expanding ring search around preferred: footprint + ≥1 tile gap, avoid west gap / water / resources.
+func _find_build_site(building_id: String, preferred: Vector2) -> Vector2:
+	if _can_place_ai_building(building_id, preferred):
+		return preferred
+	var fp := _footprint_for(building_id)
+	## Step by footprint+gap so candidates aren't denser than legal packing.
+	var step := maxf(fp.x, fp.y) + float(WallNav.TILE)
+	if building_id == "house":
+		step = maxf(step, 80.0 + float(WallNav.TILE))
+	## Prefer SE / south / east offsets first (western egress stays open).
+	var order: Array[Vector2i] = [
+		Vector2i(1, 0), Vector2i(1, 1), Vector2i(0, 1), Vector2i(-1, 1),
+		Vector2i(1, -1), Vector2i(0, -1), Vector2i(-1, 0), Vector2i(-1, -1),
+	]
+	for ring in range(1, 12):
+		for o in order:
+			var cand := preferred + Vector2(float(o.x * ring) * step, float(o.y * ring) * step)
+			cand = WallNav.tile_center(WallNav.world_to_tile(cand))
+			if _can_place_ai_building(building_id, cand):
+				return cand
+		## Fill remaining ring cells (not just 8 compass points).
+		for dx in range(-ring, ring + 1):
+			for dy in range(-ring, ring + 1):
+				if maxi(absi(dx), absi(dy)) != ring:
+					continue
+				var cand2 := preferred + Vector2(float(dx) * step, float(dy) * step)
+				cand2 = WallNav.tile_center(WallNav.world_to_tile(cand2))
+				if _can_place_ai_building(building_id, cand2):
+					return cand2
+	return Vector2.INF
+
+
 func _try_place_building(building_id: String, pos: Vector2) -> bool:
+	var site := _find_build_site(building_id, pos)
+	if site == Vector2.INF:
+		return false
+	pos = site
 	var building: Building = null
 	match building_id:
 		"house":
