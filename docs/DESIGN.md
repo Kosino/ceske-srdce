@@ -118,7 +118,7 @@ Resources → Stavění → Produkce jednotek → Combat → Postup věků
 
 Měřítko: 1 dlaždice = 40 px. Vesničan nese 10 jednotek suroviny. Start: 200 J, 200 D, 100 Z, 0 K.
 Těžba za sekundu na vesničana: dřevo 0.40, jídlo z keřů 0.30, farma 0.33, zlato/kámen = dřevo × 0.9 (0.36).
-Farma (T-19): po dostavbě stav `sown` se zásobou 175 jídla; sklizeň → `ripe`; po vyčerpání `empty` a zemědělec přestane. **Reseed (znovuosetí) — deferred** (zatím bez auto-obnovy).
+Farma (T-19/T-25): po dostavbě stav `sown` se zásobou 175 jídla; sklizeň → `ripe`; po vyčerpání `empty`. **Znovuosití 60 D** (tlačítko „Znovu osít“ / auto zemědělec po sklizni); bez dřeva idle u farmy + notifikace.
 
 | Jednotka | Cena | Čas | HP | Útok | Dosah | Rychlost | Zbroj (M/P) |
 |----------|------|-----|----|------|-------|----------|-------------|

@@ -41,6 +41,7 @@ var _siege_buttons: Dictionary = {} # unit_id -> Button
 var _unique_button: Button
 var _monk_button: Button
 var _market_button: Button
+var _farm_reseed_button: Button
 var _build_scroll: ScrollContainer
 var _build_row: GridContainer
 var _tech_row: HBoxContainer
@@ -50,6 +51,7 @@ var _siege_row: HBoxContainer
 var _unique_row: HBoxContainer
 var _monk_row: HBoxContainer
 var _market_row: HBoxContainer
+var _farm_reseed_row: HBoxContainer
 var _research_refresh_accum: float = 0.0
 var _smith_connected: Blacksmith = null
 var _uni_connected: University = null
@@ -90,6 +92,7 @@ func _process(delta: float) -> void:
 	_refresh_research_button()
 	_refresh_build_costs()
 	_refresh_all_tech_buttons()
+	_refresh_farm_reseed_button()
 	# Keep SelectionInfo research timer fresh while research building selected.
 	var sel := SelectionManager.selected_building
 	if sel is Blacksmith or sel is University:
@@ -259,8 +262,14 @@ func _refresh_context_ui() -> void:
 	_ensure_market_row()
 	if _market_row:
 		_market_row.visible = is_market
+	var is_farm := b is Farm and (b as Farm).is_complete
+	_ensure_farm_reseed_row()
+	if _farm_reseed_row:
+		_farm_reseed_row.visible = is_farm
+	if is_farm:
+		_refresh_farm_reseed_button()
 
-	var show_train := b != null and is_instance_valid(b) and not is_smith and not is_university
+	var show_train := b != null and is_instance_valid(b) and not is_smith and not is_university and not is_farm
 	if train_row:
 		train_row.visible = show_train
 	if not show_train:
@@ -821,3 +830,62 @@ func _on_market_trade_pressed() -> void:
 		NotificationManager.show_message("Vyber Tržiště.")
 		return
 	mkt.trade_wood_for_gold(100)
+
+
+func _ensure_farm_reseed_row() -> void:
+	if command_vbox == null:
+		return
+	if command_vbox.has_node("FarmReseedRow"):
+		_farm_reseed_row = command_vbox.get_node_or_null("FarmReseedRow") as HBoxContainer
+		_farm_reseed_button = (
+			_farm_reseed_row.get_node_or_null("ReseedFarm") as Button if _farm_reseed_row else null
+		)
+		return
+	_farm_reseed_row = HBoxContainer.new()
+	_farm_reseed_row.name = "FarmReseedRow"
+	_farm_reseed_row.visible = false
+	command_vbox.add_child(_farm_reseed_row)
+	_farm_reseed_button = Button.new()
+	_farm_reseed_button.name = "ReseedFarm"
+	_farm_reseed_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_farm_reseed_button.pressed.connect(_on_farm_reseed_pressed)
+	_farm_reseed_row.add_child(_farm_reseed_button)
+	_refresh_farm_reseed_button()
+
+
+func _refresh_farm_reseed_button(_a = null, _b = null) -> void:
+	if _farm_reseed_button == null:
+		return
+	var cost_txt := CivData.format_cost(Farm.RESEED_COST)
+	_farm_reseed_button.text = "Znovu osít\n%s" % cost_txt
+	var farm := SelectionManager.selected_building as Farm
+	if farm == null or not farm.is_complete:
+		_farm_reseed_button.disabled = true
+		_farm_reseed_button.tooltip_text = "Vyber farmu"
+		return
+	if not farm.can_reseed():
+		_farm_reseed_button.disabled = true
+		_farm_reseed_button.tooltip_text = "Farma ještě není prázdná"
+		return
+	var can_pay := GameManager.can_afford(Farm.RESEED_COST)
+	_farm_reseed_button.disabled = not can_pay
+	_farm_reseed_button.tooltip_text = (
+		cost_txt if can_pay else "Nedostatek surovin"
+	)
+
+
+func _on_farm_reseed_pressed() -> void:
+	var farm := SelectionManager.selected_building as Farm
+	if farm == null:
+		NotificationManager.show_message("Vyber farmu.")
+		return
+	if not farm.can_reseed():
+		NotificationManager.show_message("Farma ještě není prázdná.")
+		_refresh_farm_reseed_button()
+		return
+	farm.try_reseed(0, true)
+	_refresh_farm_reseed_button()
+
+
+func get_farm_reseed_button() -> Button:
+	return _farm_reseed_button

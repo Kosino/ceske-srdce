@@ -46,7 +46,7 @@ func _ready() -> void:
 		"--hud-shot", "--victory-shot", "--formation-shot", "--ai-shot",
 		"--camera-shot", "--mines-shot", "--blacksmith-shot", "--stable-shot", "--castle-shot",
 		"--art-shot", "--walls-shot", "--art-v2-shot", "--monk-shot", "--university-shot",
-		"--siege-shot", "--farms-shot", "--build-bar-shot", "--team-shot", "--walk-shot",
+		"--siege-shot", "--farms-shot", "--reseed-shot", "--build-bar-shot", "--team-shot", "--walk-shot",
 		"--walk-v2-shot"
 	]:
 		if args.has(flag):
