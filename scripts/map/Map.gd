@@ -34,6 +34,7 @@ func _ready() -> void:
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	_spawn_core_demo()
+	_ensure_fog_of_war()
 	# Fáze 5 AI vs AI balance suite (or one-game sim-smoke).
 	if BalanceSim.active:
 		await _run_balance_sim_game()
@@ -74,6 +75,7 @@ func _ready() -> void:
 		await _run_team_recolour_smoke()
 		await _run_walk_cycle_smoke()
 		await _run_team_readability_smoke()
+		await _run_fog_of_war_smoke()
 		await _run_balance_harness_smoke()
 		print("[TEST] all headless smokes finished")
 		get_tree().quit(0)
@@ -118,13 +120,15 @@ func _ready() -> void:
 		await prepare_walk_v2_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--team-read-shot"):
 		await prepare_team_read_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--fog-shot"):
+		await prepare_fog_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--formation-shot"):
 		await prepare_formation_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--ai-shot"):
 		await prepare_ai_screenshot()
 	else:
 		await _sample_windowed_fps()
-	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 debug.")
+	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 debug. F9 fog.")
 
 
 ## T-28: player (blue) vs AI (red) archer/spearman — idle + walk, underfoot team markers.
@@ -1474,6 +1478,49 @@ func _spawn_core_demo() -> void:
 
 	map_generator = MapGenerator.new()
 	map_generator.generate(units, MAP_SEED, PLAYER_TC_POS, ENEMY_TC_POS, _dirt_tiles)
+
+
+func _ensure_fog_of_war() -> FogOfWar:
+	var existing := get_node_or_null("FogOfWar") as FogOfWar
+	if existing:
+		return existing
+	var fog := FogOfWar.new()
+	add_child(fog)
+	return fog
+
+
+## T-29: fog edge — clear near TC, black unexplored corner, AI unit out of sight.
+func prepare_fog_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	var fog := _ensure_fog_of_war()
+	fog.fog_enabled = true
+	for n in get_tree().get_nodes_in_group("enemy_units"):
+		if n is Unit and is_instance_valid(n):
+			(n as Unit).position = Vector2(40, 40)
+	var scout: Villager = null
+	for n in get_tree().get_nodes_in_group("player_units"):
+		if n is Villager:
+			scout = n as Villager
+			break
+	if scout:
+		scout.position = PLAYER_TC_POS + Vector2(180, 40)
+	var hidden_ai: Soldier = SOLDIER_SCENE.instantiate() as Soldier
+	hidden_ai.team = 1
+	hidden_ai.contribute_population = false
+	hidden_ai.position = PLAYER_TC_POS + Vector2(520, 0)
+	units.add_child(hidden_ai)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	fog.force_update()
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	if cam:
+		cam.set_zoom_clamped(1.0)
+		cam.center_at(PLAYER_TC_POS + Vector2(120, 40))
+	await get_tree().create_timer(0.4).timeout
+	_save_shot("t29_fog.png", 0)
 
 
 ## Headless/manual regression: own buildings must not take friendly damage.
@@ -4240,6 +4287,70 @@ func _run_audio_manager_smoke() -> void:
 		print("[TEST] PASS audio manager (paths + headless silent)")
 	else:
 		print("[TEST] FAIL audio manager (paths + headless silent)")
+
+
+## T-29: TC tile visible; map corner unexplored; AI out of LOS hidden; explored persists after move.
+func _run_fog_of_war_smoke() -> void:
+	await get_tree().physics_frame
+	var fog := _ensure_fog_of_war()
+	fog.fog_enabled = true
+	# Pull every player sight source home so leftover smoke units cannot keep a far tile lit.
+	for n in get_tree().get_nodes_in_group("player_units"):
+		if n is Unit and is_instance_valid(n):
+			(n as Unit).position = PLAYER_TC_POS + Vector2(30, 30)
+	fog.force_update()
+	await get_tree().physics_frame
+
+	var tc_tile := fog.world_to_tile(PLAYER_TC_POS)
+	var near_tc_visible := fog.tile_state(tc_tile.x, tc_tile.y) == FogOfWar.STATE_VISIBLE
+	var corner_unexplored := fog.tile_state(0, 0) == FogOfWar.STATE_UNEXPLORED
+
+	var ai: Soldier = SOLDIER_SCENE.instantiate() as Soldier
+	ai.team = 1
+	ai.contribute_population = false
+	ai.position = PLAYER_TC_POS + Vector2(700, 0)
+	units.add_child(ai)
+	await get_tree().physics_frame
+	fog.force_update()
+	var ai_hidden := not ai.visible and not fog.is_world_visible(ai.global_position)
+
+	# Far south of both TCs — only the scout can reveal it, then leave.
+	var scout: Villager = VILLAGER_SCENE.instantiate() as Villager
+	scout.team = 0
+	scout.contribute_population = false
+	var explore_pos := Vector2(200, 2600)
+	scout.position = explore_pos
+	units.add_child(scout)
+	await get_tree().physics_frame
+	fog.force_update()
+	var explore_tile := fog.world_to_tile(explore_pos)
+	var was_visible := fog.tile_state(explore_tile.x, explore_tile.y) == FogOfWar.STATE_VISIBLE
+	scout.position = PLAYER_TC_POS + Vector2(40, 40)
+	await get_tree().physics_frame
+	fog.force_update()
+	var after_state := fog.tile_state(explore_tile.x, explore_tile.y)
+	var stayed_explored := after_state == FogOfWar.STATE_EXPLORED
+
+	var fog_ok := (
+		near_tc_visible
+		and corner_unexplored
+		and ai_hidden
+		and was_visible
+		and stayed_explored
+	)
+	print(
+		"[TEST] fog near_tc=%s corner=%s ai_hidden=%s explored_persist=%s (was_vis=%s after=%d)"
+		% [near_tc_visible, corner_unexplored, ai_hidden, stayed_explored, was_visible, after_state]
+	)
+	if fog_ok:
+		print("[TEST] PASS fog of war (visible / unexplored / hide / persist)")
+	else:
+		print("[TEST] FAIL fog of war (visible / unexplored / hide / persist)")
+	for n in [ai, scout]:
+		if n != null and is_instance_valid(n):
+			n.queue_free()
+	fog.force_update()
+	await get_tree().physics_frame
 
 
 ## Harness smoke: civ pairs + report writer (no full suite).

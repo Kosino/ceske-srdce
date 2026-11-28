@@ -13,6 +13,7 @@ func _ready() -> void:
 	attack_range = 36.0
 	attack_cooldown = 0.8
 	can_attack = true
+	sight_range = 4.0 * 40.0
 	super._ready()
 	configure_facing_sprites("spearman")
 	add_to_group("soldiers")

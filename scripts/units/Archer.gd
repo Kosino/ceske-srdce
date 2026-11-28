@@ -15,6 +15,7 @@ func _ready() -> void:
 	attack_cooldown = 1.0
 	can_attack = true
 	attack_type = "pierce"
+	sight_range = 6.0 * 40.0
 	super._ready()
 	configure_facing_sprites("archer")
 	add_to_group("soldiers")
