@@ -78,6 +78,7 @@ func _ready() -> void:
 		await _run_fog_of_war_smoke()
 		await _run_fog_polish_smoke()
 		await _run_aoe_controls_smoke()
+		await _run_command_panel_context_smoke()
 		await _run_balance_harness_smoke()
 		print("[TEST] all headless smokes finished")
 		get_tree().quit(0)
@@ -132,6 +133,8 @@ func _ready() -> void:
 		await prepare_formation_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--ai-shot"):
 		await prepare_ai_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--command-panel-shot"):
+		await prepare_command_panel_screenshot()
 	else:
 		await _sample_windowed_fps()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 debug. F9 fog.")
@@ -805,6 +808,44 @@ func prepare_farms_screenshot() -> void:
 	await get_tree().create_timer(0.5).timeout
 	await get_tree().process_frame
 	_save_shot("t19_farms.png", 0)
+
+
+## T-33: farm selected — SelectionInfo stock/state, reseed button, no formation row.
+func prepare_command_panel_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	GameManager.current_age = 1
+	GameManager.wood = 200
+	GameManager.food = 300
+	var origin := Vector2(1020, 700)
+	var mill: Mill = preload("res://scenes/buildings/Mill.tscn").instantiate() as Mill
+	mill.team = 0
+	mill.is_complete = true
+	mill.position = origin
+	units.add_child(mill)
+	var farm: Farm = preload("res://scenes/buildings/Farm.tscn").instantiate() as Farm
+	farm.team = 0
+	farm.is_complete = true
+	farm.amount_remaining = Farm.STOCKPILE
+	farm.farm_state = "sown"
+	farm.position = origin + Vector2(20, 95)
+	units.add_child(farm)
+	farm.set_farm_state("sown")
+	await get_tree().create_timer(0.2).timeout
+	SelectionManager.clear_selection()
+	SelectionManager.select_building(farm)
+	var panel := _find_command_panel()
+	if panel:
+		panel._refresh_context_ui()
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	if cam:
+		cam.set_zoom_clamped(1.25)
+		cam.center_at(origin + Vector2(10, 60))
+	await get_tree().create_timer(0.45).timeout
+	await get_tree().process_frame
+	_save_shot("t33_command_panel.png", 0)
 
 
 ## T-25: empty farm + Znovu osít command button (60 wood).
@@ -4508,6 +4549,153 @@ func _run_aoe_controls_smoke() -> void:
 	for n in [a, b]:
 		if is_instance_valid(n):
 			n.queue_free()
+	await get_tree().physics_frame
+
+
+## T-33: farm selection hides formations; SelectionInfo stock/state; reseed gate; Vesničan label.
+func _run_command_panel_context_smoke() -> void:
+	await get_tree().physics_frame
+	GameManager.current_age = 1
+	GameManager.wood = 200
+	GameManager.food = 200
+
+	var panel := _find_command_panel()
+	var sel := get_node_or_null("UI/SelectionInfo") as SelectionInfo
+	var panel_ok: bool = panel != null
+	var sel_ok: bool = sel != null and sel.label != null
+
+	# Units selected → formation row visible.
+	var soldier: Soldier = null
+	for n in get_tree().get_nodes_in_group("player_units"):
+		if n is Soldier:
+			soldier = n as Soldier
+			break
+	if soldier == null:
+		soldier = SOLDIER_SCENE.instantiate() as Soldier
+		soldier.team = 0
+		soldier.contribute_population = false
+		soldier.position = PLAYER_TC_POS + Vector2(-60, 50)
+		units.add_child(soldier)
+		await get_tree().physics_frame
+	SelectionManager.select_building(null)
+	SelectionManager.select_single(soldier)
+	await get_tree().process_frame
+	if panel:
+		panel._refresh_context_ui()
+	await get_tree().process_frame
+	var form_units_ok: bool = panel != null and panel.is_formation_row_visible()
+
+	# Farm selected → hide formations; info shows stock + sow state (not training).
+	var farm: Farm = preload("res://scenes/buildings/Farm.tscn").instantiate() as Farm
+	farm.team = 0
+	farm.is_complete = true
+	farm.build_progress = 1.0
+	farm.hp = farm.max_hp
+	farm.amount_remaining = Farm.STOCKPILE
+	farm.farm_state = "sown"
+	farm.position = PLAYER_TC_POS + Vector2(220, 120)
+	units.add_child(farm)
+	farm._show_final_visual()
+	farm._apply_farm_sprite()
+	await get_tree().physics_frame
+	SelectionManager.clear_selection()
+	SelectionManager.select_building(farm)
+	await get_tree().process_frame
+	if panel:
+		panel._refresh_context_ui()
+	await get_tree().process_frame
+	var form_hidden_ok: bool = panel != null and not panel.is_formation_row_visible()
+	var info_txt: String = sel.label.text if sel and sel.label else ""
+	var info_ok: bool = (
+		"Zásoba" in info_txt
+		and "stav" in info_txt
+		and "osetá" in info_txt
+		and not ("Trénink" in info_txt)
+	)
+
+	# Reseed disabled while sown (even with wood); tooltip includes cost.
+	var btn: Button = panel.get_farm_reseed_button() if panel else null
+	var tip: String = btn.tooltip_text if btn else ""
+	var reseed_sown_ok: bool = (
+		btn != null
+		and btn.visible
+		and btn.get_parent() != null
+		and (btn.get_parent() as CanvasItem).visible
+		and btn.disabled
+		and (("60" in tip) or ("D" in tip))
+	)
+
+	# Empty + wood ≥ 60 → enabled; empty + wood 0 → disabled; tooltip keeps cost.
+	farm.harvest(farm.amount_remaining)
+	await get_tree().process_frame
+	if panel:
+		panel._refresh_farm_reseed_button()
+	await get_tree().process_frame
+	tip = btn.tooltip_text if btn else ""
+	var empty_wood_ok: bool = (
+		btn != null and not btn.disabled and (("60" in tip) or ("D" in tip))
+	)
+	GameManager.wood = 0
+	if panel:
+		panel._refresh_farm_reseed_button()
+	await get_tree().process_frame
+	tip = btn.tooltip_text if btn else ""
+	var empty_broke_ok: bool = (
+		btn != null and btn.disabled and (("60" in tip) or ("D" in tip))
+	)
+	GameManager.wood = 200
+
+	# Vesničan button full label (spawn hall — prior smokes may have freed the demo TC).
+	SelectionManager.select_building(null)
+	var hall: DropOff = null
+	for n in get_tree().get_nodes_in_group("player_town_hall"):
+		if n is DropOff and is_instance_valid(n):
+			hall = n as DropOff
+			break
+	var spawned_hall := false
+	if hall == null:
+		hall = DROPOFF_SCENE.instantiate() as DropOff
+		hall.team = 0
+		hall.position = PLAYER_TC_POS + Vector2(60, -100)
+		hall.spawn_parent = units
+		units.add_child(hall)
+		spawned_hall = true
+		await get_tree().physics_frame
+	var vesn_ok: bool = false
+	if hall and panel:
+		SelectionManager.select_building(hall)
+		await get_tree().process_frame
+		panel._refresh_context_ui()
+		await get_tree().process_frame
+		var vesn: Button = panel.get_train_villager_button()
+		var row_vis: bool = panel.train_row != null and panel.train_row.visible
+		vesn_ok = (
+			vesn != null
+			and vesn.visible
+			and row_vis
+			and vesn.text == "Vesničan"
+			and "Vesničan" in vesn.tooltip_text
+		)
+
+	var all_ok: bool = (
+		panel_ok and sel_ok and form_units_ok and form_hidden_ok and info_ok
+		and reseed_sown_ok and empty_wood_ok and empty_broke_ok and vesn_ok
+	)
+	print(
+		"[TEST] command_panel form_units=%s form_hid=%s info=%s reseed_sown=%s empty_wood=%s empty_broke=%s vesn=%s"
+		% [form_units_ok, form_hidden_ok, info_ok, reseed_sown_ok, empty_wood_ok, empty_broke_ok, vesn_ok]
+	)
+	if all_ok:
+		print("[TEST] PASS command panel context")
+	else:
+		print("[TEST] FAIL command panel context")
+
+	SelectionManager.select_building(null)
+	SelectionManager.clear_selection()
+	if farm != null and is_instance_valid(farm):
+		farm.queue_free()
+	if spawned_hall and hall != null and is_instance_valid(hall):
+		hall.queue_free()
 	await get_tree().physics_frame
 
 
