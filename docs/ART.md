@@ -96,6 +96,7 @@ AoE II-style team colour via `assets/shaders/team_recolour.gdshader` + `TeamColo
 - Player → `TeamColors.PLAYER` (same blue); AI → `TeamColors.AI` (red `188, 42, 36`). Constants live in one place for more teams later.
 - Applied on unit/building/`DropOff` visuals. Sprites **with** team-blue use the palette-swap shader and modulate WHITE. Sprites **without** team-blue (detected at texture load, cached) keep the previous soft AI tint for the AI team — units `Color(1.0, 0.55, 0.55)`, buildings/`DropOff` `Color(0.75, 0.45, 0.45)` — so enemies stay readable until artists paint team indices. Minimap unit/building dots use the same blue/red.
 - Screenshot: `docs/screenshots/t18_team_colours.png`.
+- **T-28:** Walk frame swaps preserve T-18 modulate/material (tint applies idle + moving). Soft tint alone is weak on archer/spearman (no team-blue in idle or walk sheets), so every unit also draws a small AoE-style underfoot oval in team colour (player blue / AI red). Oval fits inside the selection ring (`TEAM_MARKER_RX=8` < ring `r=14`). Screenshot: `docs/screenshots/t28_team_read.png`.
 
 ### Art debt (no team pixels yet — do not hand-paint)
 

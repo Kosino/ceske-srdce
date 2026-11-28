@@ -73,6 +73,7 @@ func _ready() -> void:
 		await _run_audio_manager_smoke()
 		await _run_team_recolour_smoke()
 		await _run_walk_cycle_smoke()
+		await _run_team_readability_smoke()
 		await _run_balance_harness_smoke()
 		print("[TEST] all headless smokes finished")
 		get_tree().quit(0)
@@ -115,6 +116,8 @@ func _ready() -> void:
 		await prepare_walk_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--walk-v2-shot"):
 		await prepare_walk_v2_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--team-read-shot"):
+		await prepare_team_read_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--formation-shot"):
 		await prepare_formation_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--ai-shot"):
@@ -122,6 +125,133 @@ func _ready() -> void:
 	else:
 		await _sample_windowed_fps()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 debug.")
+
+
+## T-28: player (blue) vs AI (red) archer/spearman — idle + walk, underfoot team markers.
+func prepare_team_read_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	for n in get_tree().get_nodes_in_group("player_town_hall"):
+		if n is Node2D:
+			(n as Node2D).visible = false
+			(n as Node2D).position = Vector2(-4000, -4000)
+	for n in get_tree().get_nodes_in_group("enemy_town_hall"):
+		if n is Node2D:
+			(n as Node2D).visible = false
+			(n as Node2D).position = Vector2(-4000, -4000)
+	for n in get_tree().get_nodes_in_group("units"):
+		if n is Unit and is_instance_valid(n):
+			(n as Unit).visible = false
+			(n as Unit).position = Vector2(-5000, -5000)
+	var origin := Vector2(980, 720)
+	var arch_p: Archer = ARCHER_SCENE.instantiate() as Archer
+	arch_p.team = 0
+	arch_p.contribute_population = false
+	arch_p.position = origin + Vector2(-120, -20)
+	units.add_child(arch_p)
+	var arch_e: Archer = ARCHER_SCENE.instantiate() as Archer
+	arch_e.team = 1
+	arch_e.contribute_population = false
+	arch_e.position = origin + Vector2(-40, -20)
+	units.add_child(arch_e)
+	var spear_p: Spearman = preload("res://scenes/units/Spearman.tscn").instantiate() as Spearman
+	spear_p.team = 0
+	spear_p.contribute_population = false
+	spear_p.position = origin + Vector2(50, -20)
+	units.add_child(spear_p)
+	var spear_e: Spearman = preload("res://scenes/units/Spearman.tscn").instantiate() as Spearman
+	spear_e.team = 1
+	spear_e.contribute_population = false
+	spear_e.position = origin + Vector2(140, -20)
+	units.add_child(spear_e)
+	# Bottom row: mid-walk (feature in action).
+	var arch_pw: Archer = ARCHER_SCENE.instantiate() as Archer
+	arch_pw.team = 0
+	arch_pw.contribute_population = false
+	arch_pw.position = origin + Vector2(-120, 70)
+	units.add_child(arch_pw)
+	var arch_ew: Archer = ARCHER_SCENE.instantiate() as Archer
+	arch_ew.team = 1
+	arch_ew.contribute_population = false
+	arch_ew.position = origin + Vector2(-40, 70)
+	units.add_child(arch_ew)
+	var spear_pw: Spearman = preload("res://scenes/units/Spearman.tscn").instantiate() as Spearman
+	spear_pw.team = 0
+	spear_pw.contribute_population = false
+	spear_pw.position = origin + Vector2(50, 70)
+	units.add_child(spear_pw)
+	var spear_ew: Spearman = preload("res://scenes/units/Spearman.tscn").instantiate() as Spearman
+	spear_ew.team = 1
+	spear_ew.contribute_population = false
+	spear_ew.position = origin + Vector2(140, 70)
+	units.add_child(spear_ew)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	if cam:
+		cam.set_zoom_clamped(2.3)
+		cam.center_at(origin + Vector2(10, 20))
+	await get_tree().create_timer(0.35).timeout
+	var all_units: Array = [arch_p, arch_e, spear_p, spear_e, arch_pw, arch_ew, spear_pw, spear_ew]
+	for u in all_units:
+		if u == null:
+			continue
+		u.set_process(false)
+		u.set_physics_process(false)
+		if u.navigation_agent:
+			u.navigation_agent.avoidance_enabled = false
+			if u.navigation_agent.velocity_computed.is_connected(u._on_velocity_computed):
+				u.navigation_agent.velocity_computed.disconnect(u._on_velocity_computed)
+		if u._visual == null:
+			u._visual = u.get_node_or_null("Visual") as Sprite2D
+	# Top row idle facing; bottom row mid-stride walk.
+	for u in [arch_p, arch_e, spear_p, spear_e]:
+		u._facing = "right" if u.team == 0 else "left"
+		u.velocity = Vector2.ZERO
+		u._apply_facing_texture()
+		if u._visual:
+			u._visual.scale = Vector2(3.0, 3.0)
+			u._anchor_sprite_to_feet()
+		u.queue_redraw()
+	arch_pw._facing = "right"
+	arch_pw._walk_frame = 1
+	arch_pw.velocity = Vector2(80, 0)
+	arch_ew._facing = "left"
+	arch_ew._walk_frame = 2
+	arch_ew.velocity = Vector2(-80, 0)
+	spear_pw._facing = "right"
+	spear_pw._walk_frame = 2
+	spear_pw.velocity = Vector2(80, 0)
+	spear_ew._facing = "left"
+	spear_ew._walk_frame = 1
+	spear_ew.velocity = Vector2(-80, 0)
+	for u in [arch_pw, arch_ew, spear_pw, spear_ew]:
+		if u.has_walk_sheet():
+			u._apply_walk_frame()
+			u._visual.scale = Vector2(3.0, 3.0)
+			u._anchor_sprite_to_feet()
+		else:
+			u._apply_facing_texture()
+		u.queue_redraw()
+	# Select one player unit so selection ring + team oval coexist without colliding.
+	arch_p.set_selected(true)
+	if cam:
+		cam.set_zoom_clamped(2.5)
+		cam.center_at(origin + Vector2(10, 25))
+	await get_tree().process_frame
+	await get_tree().process_frame
+	print(
+		"[SHOT] team-read arch_tint=%s spear_tint=%s marker_p=%s marker_e=%s"
+		% [
+			arch_e._visual.modulate if arch_e._visual else Color.BLACK,
+			spear_e._visual.modulate if spear_e._visual else Color.BLACK,
+			arch_p.team_marker_color(),
+			arch_e.team_marker_color(),
+		]
+	)
+	_save_shot("t28_team_read.png", 0)
 
 
 ## T-27: archer + spearman mid-walk (walk-v2 sheets) + idle facing.
@@ -3932,6 +4062,118 @@ func _run_walk_cycle_smoke() -> void:
 	else:
 		print("[TEST] FAIL walk cycle (frame change + idle + AI modulate)")
 	for n in [vill, sol_ai, archer, spear, monk]:
+		if n != null and is_instance_valid(n):
+			n.queue_free()
+	await get_tree().physics_frame
+
+
+## T-28: AI archer/spearman differ from player in team colour (idle + moving) + underfoot marker.
+func _run_team_readability_smoke() -> void:
+	await get_tree().physics_frame
+	var arch_p: Archer = ARCHER_SCENE.instantiate() as Archer
+	arch_p.team = 0
+	arch_p.contribute_population = false
+	arch_p.position = PLAYER_TC_POS + Vector2(140, 140)
+	units.add_child(arch_p)
+	var arch_e: Archer = ARCHER_SCENE.instantiate() as Archer
+	arch_e.team = 1
+	arch_e.contribute_population = false
+	arch_e.position = PLAYER_TC_POS + Vector2(200, 140)
+	units.add_child(arch_e)
+	var spear_p: Spearman = preload("res://scenes/units/Spearman.tscn").instantiate() as Spearman
+	spear_p.team = 0
+	spear_p.contribute_population = false
+	spear_p.position = PLAYER_TC_POS + Vector2(260, 140)
+	units.add_child(spear_p)
+	var spear_e: Spearman = preload("res://scenes/units/Spearman.tscn").instantiate() as Spearman
+	spear_e.team = 1
+	spear_e.contribute_population = false
+	spear_e.position = PLAYER_TC_POS + Vector2(320, 140)
+	units.add_child(spear_e)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+
+	# Idle: AI soft tint + underfoot marker colour differ from player.
+	var idle_arch_ok := false
+	var idle_spear_ok := false
+	if arch_p._visual and arch_e._visual:
+		idle_arch_ok = (
+			arch_p._visual.modulate.is_equal_approx(Color.WHITE)
+			and arch_e._visual.modulate.is_equal_approx(TeamColors.AI_TINT_UNIT)
+			and not arch_p.team_marker_color().is_equal_approx(arch_e.team_marker_color())
+			and arch_p.team_marker_color().is_equal_approx(
+				Color(TeamColors.PLAYER.r, TeamColors.PLAYER.g, TeamColors.PLAYER.b, Unit.TEAM_MARKER_ALPHA)
+			)
+			and arch_e.team_marker_color().is_equal_approx(
+				Color(TeamColors.AI.r, TeamColors.AI.g, TeamColors.AI.b, Unit.TEAM_MARKER_ALPHA)
+			)
+		)
+	if spear_p._visual and spear_e._visual:
+		idle_spear_ok = (
+			spear_p._visual.modulate.is_equal_approx(Color.WHITE)
+			and spear_e._visual.modulate.is_equal_approx(TeamColors.AI_TINT_UNIT)
+			and not spear_p.team_marker_color().is_equal_approx(spear_e.team_marker_color())
+			and spear_e.team_marker_color().is_equal_approx(
+				Color(TeamColors.AI.r, TeamColors.AI.g, TeamColors.AI.b, Unit.TEAM_MARKER_ALPHA)
+			)
+		)
+
+	# Moving: walk frames advance; AI tint + marker still differ from player.
+	var move_arch_ok := false
+	var move_spear_ok := false
+	arch_e.velocity = Vector2(60, 0)
+	arch_e._update_facing_from_velocity()
+	for _i in range(8):
+		arch_e._update_walk_animation(0.05)
+	arch_p.velocity = Vector2(60, 0)
+	arch_p._update_facing_from_velocity()
+	for _j in range(8):
+		arch_p._update_walk_animation(0.05)
+	if arch_p._visual and arch_e._visual:
+		move_arch_ok = (
+			arch_p.has_walk_sheet()
+			and arch_e.has_walk_sheet()
+			and arch_p.is_walk_animating()
+			and arch_e.is_walk_animating()
+			and arch_p._visual.modulate.is_equal_approx(Color.WHITE)
+			and arch_e._visual.modulate.is_equal_approx(TeamColors.AI_TINT_UNIT)
+			and not arch_p.team_marker_color().is_equal_approx(arch_e.team_marker_color())
+		)
+	spear_e.velocity = Vector2(0, 60)
+	spear_e._update_facing_from_velocity()
+	for _k in range(8):
+		spear_e._update_walk_animation(0.05)
+	spear_p.velocity = Vector2(0, 60)
+	spear_p._update_facing_from_velocity()
+	for _m in range(8):
+		spear_p._update_walk_animation(0.05)
+	if spear_p._visual and spear_e._visual:
+		move_spear_ok = (
+			spear_p.has_walk_sheet()
+			and spear_e.has_walk_sheet()
+			and spear_p.is_walk_animating()
+			and spear_e.is_walk_animating()
+			and spear_p._visual.modulate.is_equal_approx(Color.WHITE)
+			and spear_e._visual.modulate.is_equal_approx(TeamColors.AI_TINT_UNIT)
+			and not spear_p.team_marker_color().is_equal_approx(spear_e.team_marker_color())
+		)
+
+	# Selection ring radius stays outside team marker (no collide).
+	var ring_ok := (
+		Unit.TEAM_MARKER_RX < Unit.SELECTION_RING_RADIUS
+		and Unit.TEAM_MARKER_RY < Unit.SELECTION_RING_RADIUS
+	)
+
+	var all_ok := idle_arch_ok and idle_spear_ok and move_arch_ok and move_spear_ok and ring_ok
+	print(
+		"[TEST] team_read idle_arch=%s idle_spear=%s move_arch=%s move_spear=%s ring=%s"
+		% [idle_arch_ok, idle_spear_ok, move_arch_ok, move_spear_ok, ring_ok]
+	)
+	if all_ok:
+		print("[TEST] PASS team readability (AI archer/spearman idle+move colour)")
+	else:
+		print("[TEST] FAIL team readability (AI archer/spearman idle+move colour)")
+	for n in [arch_p, arch_e, spear_p, spear_e]:
 		if n != null and is_instance_valid(n):
 			n.queue_free()
 	await get_tree().physics_frame
