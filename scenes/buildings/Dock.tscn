@@ -1,0 +1,24 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/buildings/Dock.gd" id="1_dock"]
+[ext_resource type="Texture2D" path="res://assets/sprites/buildings/dock.png" id="2_tex"]
+[ext_resource type="Script" path="res://scripts/buildings/RallyPointController.gd" id="3_rally"]
+
+[node name="Dock" type="Node2D"]
+script = ExtResource("1_dock")
+
+[node name="Visual" type="Sprite2D" parent="."]
+texture_filter = 1
+texture = ExtResource("2_tex")
+centered = true
+
+[node name="Label" type="Label" parent="."]
+offset_left = -48.0
+offset_top = 32.0
+offset_right = 48.0
+offset_bottom = 56.0
+horizontal_alignment = 1
+text = "Přístaviště"
+
+[node name="RallyPoint" type="Node2D" parent="."]
+script = ExtResource("3_rally")

@@ -25,6 +25,7 @@ const BUILDING_UNLOCK_AGE := {
 	"lumber_camp": 1,
 	"mining_camp": 1,
 	"mill": 1,
+	"dock": 1,
 	"farm": 1,
 	"barracks": 1,
 	"palisade": 1,
@@ -43,6 +44,7 @@ const BUILDING_UNLOCK_AGE := {
 
 const UNIT_UNLOCK_AGE := {
 	"villager": 1,
+	"fishing_boat": 1,
 	"soldier": 1,
 	"spearman": 2,
 	"archer": 2,

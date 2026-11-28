@@ -26,6 +26,8 @@ signal died(unit: Unit)
 @export var sight_range: float = 200.0
 ## When false, population was already reserved (e.g. production queue).
 @export var contribute_population: bool = true
+## Water-only unit (fishing boat). Uses WaterNav boat pathing.
+@export var is_watercraft: bool = false
 
 ## Walk sheet: 4 cols (frames) × 4 rows (down, left, right, up). Missing → idle only.
 const WALK_DIRS: Array[String] = ["down", "left", "right", "up"]
@@ -314,17 +316,34 @@ func set_movement_target(target: Vector2) -> void:
 	_move_goal = target
 	_wall_waypoints.clear()
 	var tree := get_tree()
-	if tree and not WallNav.occupancy_map(tree).is_empty():
-		if not WallNav.path_exists(global_position, target, team, tree):
-			if can_attack:
+	if is_watercraft:
+		if WaterNav.has_water():
+			if not WaterNav.path_exists_boat(global_position, target):
+				stop_movement()
+				return
+			var boat_path: Array[Vector2] = WaterNav.find_path_boat(global_position, target)
+			if not boat_path.is_empty():
+				_wall_waypoints = boat_path
+				if navigation_agent:
+					navigation_agent.target_position = _wall_waypoints[0]
+				return
+		if navigation_agent:
+			navigation_agent.target_position = target
+		return
+	# Land units: tile A* only when walls exist or the straight line crosses deep water.
+	# Keeps formation slot targets on NavigationAgent when pathing is open ground.
+	var walls := tree != null and not WallNav.occupancy_map(tree).is_empty()
+	var needs_detour := walls or _land_line_hits_water(global_position, target)
+	if needs_detour:
+		if not WaterNav.path_exists_land(global_position, target, team, tree):
+			if can_attack and walls:
 				var wall := WallNav.nearest_blocking_segment(global_position, target, team, tree)
 				if wall:
 					command_attack(wall)
 					return
-			# No path and cannot attack — stop.
 			stop_movement()
 			return
-		var path := WallNav.find_path(global_position, target, team, tree)
+		var path: Array[Vector2] = WaterNav.find_path_land(global_position, target, team, tree)
 		if not path.is_empty():
 			_wall_waypoints = path
 			if navigation_agent:
@@ -332,6 +351,17 @@ func set_movement_target(target: Vector2) -> void:
 			return
 	if navigation_agent:
 		navigation_agent.target_position = target
+
+
+func _land_line_hits_water(from: Vector2, to: Vector2) -> bool:
+	if not WaterNav.has_water():
+		return false
+	if WaterNav.blocks_land(WaterNav.world_to_tile(to)):
+		return true
+	for t in WallNav.line_tiles(WaterNav.world_to_tile(from), WaterNav.world_to_tile(to)):
+		if WaterNav.blocks_land(t):
+			return true
+	return false
 
 
 func stop_movement() -> void:

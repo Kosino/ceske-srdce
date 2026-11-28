@@ -47,7 +47,10 @@ func _refresh(_units: Array = []) -> void:
 	if units.is_empty():
 		label.text = "Výběr: nic\nLMB výběr / box · RMB pohyb/útok"
 		return
-	var counts := {"soldier": 0, "spearman": 0, "archer": 0, "villager": 0, "monk": 0, "other": 0}
+	var counts := {
+		"soldier": 0, "spearman": 0, "archer": 0, "villager": 0,
+		"monk": 0, "fishing_boat": 0, "other": 0
+	}
 	for u in units:
 		if u is Soldier:
 			counts["soldier"] += 1
@@ -59,6 +62,8 @@ func _refresh(_units: Array = []) -> void:
 			counts["villager"] += 1
 		elif u is Monk:
 			counts["monk"] += 1
+		elif u is FishingBoat:
+			counts["fishing_boat"] += 1
 		else:
 			counts["other"] += 1
 	var parts: PackedStringArray = []
@@ -72,6 +77,8 @@ func _refresh(_units: Array = []) -> void:
 		parts.append("%d vesničan" % counts["villager"])
 	if counts["monk"] > 0:
 		parts.append("%d mnich" % counts["monk"])
+	if counts["fishing_boat"] > 0:
+		parts.append("%d rybářská loď" % counts["fishing_boat"])
 	if counts["other"] > 0:
 		parts.append("%d jiní" % counts["other"])
 	label.text = "Výběr: %s\nFormace: %s" % [
@@ -111,6 +118,8 @@ func _building_info_line(b: Node) -> String:
 		return "Obchod / směna"
 	if b is Mill:
 		return "Sklad jídla"
+	if b is Dock:
+		return (b as Dock).get_queue_summary()
 	if b is LumberCamp:
 		return "Sklad dřeva"
 	if b is MiningCamp:

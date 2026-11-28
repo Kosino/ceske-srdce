@@ -9,10 +9,13 @@ const TEX_TREE_PINE := preload("res://assets/sprites/resources/tree_pine.png")
 const TEX_BERRY := preload("res://assets/sprites/resources/berry_bush.png")
 const TEX_GOLD := preload("res://assets/sprites/resources/gold_mine.png")
 const TEX_STONE := preload("res://assets/sprites/resources/stone_mine.png")
+const TEX_FISH := preload("res://assets/sprites/resources/fish_school.png")
 
 @export var resource_type: String = "wood"
 @export var amount_remaining: int = 200
 @export var gather_radius: float = 28.0
+## Fish school on water — food for fishing boats only.
+@export var is_fish_school: bool = false
 
 @onready var visual: Sprite2D = $Visual
 @onready var label: Label = $Label
@@ -31,12 +34,19 @@ func _ready() -> void:
 		"stone":
 			add_to_group("stone_mines")
 		"food":
-			add_to_group("berry_bushes")
+			if is_fish_school:
+				add_to_group("fish_schools")
+			else:
+				add_to_group("berry_bushes")
 	if label:
 		label.visible = false
 		label.text = ""
 	_apply_resource_sprite()
 	_ensure_hover_area()
+
+
+func is_fish() -> bool:
+	return is_fish_school
 
 
 func _ensure_hover_area() -> void:
@@ -88,16 +98,19 @@ func _apply_resource_sprite() -> void:
 	if visual == null:
 		return
 	var tex: Texture2D
-	match resource_type:
-		"food":
-			tex = TEX_BERRY
-		"gold":
-			tex = TEX_GOLD
-		"stone":
-			tex = TEX_STONE
-		_:
-			var h := int(round(global_position.x * 0.05) + round(global_position.y * 0.05))
-			tex = TEX_TREE_OAK if h % 2 == 0 else TEX_TREE_PINE
+	if is_fish_school:
+		tex = TEX_FISH
+	else:
+		match resource_type:
+			"food":
+				tex = TEX_BERRY
+			"gold":
+				tex = TEX_GOLD
+			"stone":
+				tex = TEX_STONE
+			_:
+				var h := int(round(global_position.x * 0.05) + round(global_position.y * 0.05))
+				tex = TEX_TREE_OAK if h % 2 == 0 else TEX_TREE_PINE
 	visual.texture = tex
 	visual.centered = true
 	visual.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -123,6 +136,8 @@ func harvest(amount: int) -> int:
 
 
 func czech_type_name() -> String:
+	if is_fish_school:
+		return "Jídlo (hejno ryb)"
 	match resource_type:
 		"wood":
 			return "Dřevo"
