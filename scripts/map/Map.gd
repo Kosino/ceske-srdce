@@ -1678,50 +1678,63 @@ func prepare_t31_ai_base_screenshot() -> void:
 	var start_elapsed: float = ai._sim_elapsed
 	var wall_t0 := Time.get_ticks_msec()
 	var frames := 0
-	while frames < 8000:
+	while frames < 12000:
 		await get_tree().process_frame
 		frames += 1
 		var ph := get_tree().get_first_node_in_group("player_town_hall") as DropOff
 		if ph != null and is_instance_valid(ph):
 			ph.hp = ph.max_hp
-		## Wave first; defenses follow. Bound wall-clock for slow GL drivers.
+		## Later game: most walls finished, ≤2 scaffolds, no 0% label maze.
 		if (
 			ai._waves_launched >= 1
-			and ai._count_own_buildings("watch_tower") >= 2
-			and ai._count_own_buildings("stone_wall") >= 40
+			and ai._count_own_complete("watch_tower") >= 2
+			and ai._count_own_complete("stone_wall") >= 40
+			and ai.unfinished_fortification_count() <= 2
 		):
 			break
-		if ai._sim_elapsed - start_elapsed >= 720.0:
+		if ai._sim_elapsed - start_elapsed >= 900.0:
 			break
-		if Time.get_ticks_msec() - wall_t0 > 90000:
+		if Time.get_ticks_msec() - wall_t0 > 120000:
 			break
 	Engine.time_scale = 1.0
 	ai.set_process(false)
-	## Ensure towers+walls visible even if wall-clock cut the sim short.
-	while (
-		ai._waves_launched >= 1
-		and ai._count_own_buildings("watch_tower") < 2
-		and ai.stone >= 125
-		and ai.wood >= 25
-	):
-		ai._try_place_next_building()
-	var guard := 0
-	while ai._waves_launched >= 1 and ai._count_own_buildings("stone_wall") < 48 and ai.stone >= 5 and guard < 20:
-		ai._try_place_stone_defenses()
-		guard += 1
-	## Non-headless shot: finish AI foundations so walls/towers read complete (no 0% spam).
+	## Finish any leftover scaffolds, then top up the ring as already-complete (no 0% labels).
 	for n in get_tree().get_nodes_in_group("enemy_buildings"):
 		if n is Building and not (n as Building).is_complete:
-			(n as Building)._finish_construction()
+			var b := n as Building
+			if b.building_id == "stone_wall" or b.building_id == "watch_tower" or b.building_id == "palisade":
+				b._finish_construction()
 	for n in get_tree().get_nodes_in_group("walls"):
 		if n is WallSegment and (n as WallSegment).team == ai.team and not (n as WallSegment).is_complete:
 			(n as WallSegment)._finish_construction()
+	if ai._waves_launched >= 1 and ai._count_own_complete("stone_wall") < 40 and ai.stone >= 5:
+		var base_tile := WallNav.world_to_tile(ai.base_position)
+		for t in ai._tc_wall_tiles(base_tile):
+			if ai._count_own_complete("stone_wall") >= 48 or ai.stone < 5:
+				break
+			if ai._own_wall_on_tile(t):
+				continue
+			if absi(t.x - base_tile.x) <= 1 and absi(t.y - base_tile.y) <= 1:
+				continue
+			ai.stone -= 5
+			var seg: WallSegment = preload("res://scenes/buildings/WallSegment.tscn").instantiate() as WallSegment
+			seg.wall_kind = "stone_wall"
+			seg.team = ai.team
+			seg.tile = t
+			seg.position = WallNav.tile_center(t)
+			seg.build_cost = {"stone": 5}
+			seg.placed_cost = {"stone": 5}
+			seg.is_complete = true
+			seg.build_progress = 1.0
+			ai._units_parent.add_child(seg)
+			seg._on_construction_finished()
+			seg._refresh_label()
 	ai.print_ai_summary()
 	var cam := get_node_or_null("Camera2D") as Camera2D
 	if cam:
 		cam.position = ai.base_position + Vector2(-40, 20)
 		cam.zoom = Vector2(0.75, 0.75)
-	await get_tree().create_timer(0.4).timeout
+	await get_tree().create_timer(0.5).timeout
 	await get_tree().process_frame
 	_save_shot("t31_ai_base.png", 0)
 
@@ -3237,6 +3250,7 @@ func _run_ai_economy_smoke() -> void:
 	## Deterministic RNG; do not wipe buildings/age already earned during prior smokes.
 	ai.rng.seed = 4242 + ai.team * 7919
 	ai.timing_jitter = 1.0
+	ai._smoke_max_unfinished_fortifications = 0
 	## Counter-selection (TechData.unit_role table) — pure, no scene units required.
 	var pick_arch := ai.select_counter_unit({"archer": 10, "cavalry": 1, "infantry": 2})
 	var pick_cav := ai.select_counter_unit({"archer": 1, "cavalry": 10, "infantry": 2})
@@ -3245,11 +3259,14 @@ func _run_ai_economy_smoke() -> void:
 	var start_elapsed: float = ai._sim_elapsed
 	Engine.time_scale = 80.0
 	var ok := false
+	var peak_unfinished := 0
 	## Headless frames can have tiny wall deltas; allow many iterations for +10 min.
 	var frames := 0
 	while frames < 40000:
 		await get_tree().process_frame
 		frames += 1
+		peak_unfinished = maxi(peak_unfinished, ai.unfinished_fortification_count())
+		peak_unfinished = maxi(peak_unfinished, ai.smoke_max_unfinished_fortifications())
 		## Keep player TC alive so later victory/defeat smokes still have a hall.
 		var ph := get_tree().get_first_node_in_group("player_town_hall") as DropOff
 		if ph != null and is_instance_valid(ph):
@@ -3277,8 +3294,9 @@ func _run_ai_economy_smoke() -> void:
 	var wave_ok := ai._first_wave_count >= 6
 	var farms_ok := ai._count_farms() >= 4
 	var walls_ok := ai.walls_not_sealing()
+	var foundations_ok := peak_unfinished <= 2
 	print(
-		"[TEST] ai_economy vills=%d farms=%d age=%d waved=%s first_wave=%d stone=%d stone_ok=%s wave_ok=%s farms_ok=%s walls_not_sealing=%s counter_ok=%s elapsed=%.0fs frames=%d"
+		"[TEST] ai_economy vills=%d farms=%d age=%d waved=%s first_wave=%d stone=%d stone_ok=%s wave_ok=%s farms_ok=%s walls_not_sealing=%s foundations_peak=%d counter_ok=%s elapsed=%.0fs frames=%d"
 		% [
 			ai._count_villagers(),
 			ai._count_farms(),
@@ -3290,6 +3308,7 @@ func _run_ai_economy_smoke() -> void:
 			wave_ok,
 			farms_ok,
 			walls_ok,
+			peak_unfinished,
 			counter_ok,
 			ai._sim_elapsed,
 			frames,
@@ -3300,6 +3319,11 @@ func _run_ai_economy_smoke() -> void:
 		print("[TEST] PASS AI places building and launches wave")
 	else:
 		print("[TEST] FAIL AI places building and launches wave")
+	print("[TEST] ai wall foundations capped peak=%d ok=%s" % [peak_unfinished, foundations_ok])
+	if foundations_ok:
+		print("[TEST] PASS ai wall foundations capped")
+	else:
+		print("[TEST] FAIL ai wall foundations capped")
 
 
 func _ensure_player_hall_after_ai_smoke(victory_node: VictoryController) -> void:

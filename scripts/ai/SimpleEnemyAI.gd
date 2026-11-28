@@ -27,7 +27,9 @@ const POP_HEADROOM := 2
 const DEFAULT_SEED := 9001
 const STANDARD_TOWER_TARGET := 2
 const STANDARD_WALL_TARGET := 60 ## towers 250 + walls 300 → stone unspent = 200
-const WALLS_PER_THINK := 12
+const WALLS_PER_THINK := 2 ## AoE feel: never spam foundations
+const MAX_UNFINISHED_FORTIFICATIONS := 2 ## wall + tower scaffolds in flight
+const FOUNDATION_STALE_SEC := 60.0 ## cancel/refund if untouched this long
 const ECO_READY_VILLS := 12 ## boom to 12, then fill wave ≥6
 const AGE_UP_MIN_VILLS := 8 ## don't burn 500 food before eco is online
 
@@ -96,6 +98,10 @@ var _wave_start_size: int = 0
 var _first_wave_count: int = 0
 var _retreating: bool = false
 var _last_counter_pick: String = ""
+## instance_id -> sim time when wall/tower foundation was placed (stale cancel).
+var _foundation_born_at: Dictionary = {}
+## Peak unfinished wall+tower foundations (smoke: must stay ≤ MAX).
+var _smoke_max_unfinished_fortifications: int = 0
 
 
 func _ready() -> void:
@@ -153,6 +159,8 @@ func configure_sim(sim_seed: int, jitter: float, strat: String = BalanceSim.STRA
 	_first_wave_count = 0
 	_retreating = false
 	_last_counter_pick = ""
+	_foundation_born_at.clear()
+	_smoke_max_unfinished_fortifications = 0
 	print("[AI] team=%d strategy=%s" % [team, strategy])
 
 
@@ -183,6 +191,8 @@ func configure_standard(sim_seed: int, jitter: float = 1.0) -> void:
 	_first_wave_count = 0
 	_retreating = false
 	_last_counter_pick = ""
+	_foundation_born_at.clear()
+	_smoke_max_unfinished_fortifications = 0
 	print("[AI] team=%d standard seed=%d" % [team, sim_seed])
 
 
@@ -339,6 +349,8 @@ func _sim_can_wave() -> bool:
 
 
 func _tick_economy() -> void:
+	_cancel_stale_foundations()
+	_note_unfinished_fortification_peak()
 	_assign_gatherers()
 	_try_reseed_farms()
 	_try_age_up()
@@ -349,6 +361,7 @@ func _tick_economy() -> void:
 	_try_train_army()
 	_try_blacksmith_research()
 	_try_university_research()
+	_note_unfinished_fortification_peak()
 
 
 ## Stone needed for planned spends (towers / walls / castle / uni techs). 0 → don't gather.
@@ -575,8 +588,15 @@ func _try_place_next_building() -> void:
 		want_towers = true
 	elif BalanceSim.active and strategy == BalanceSim.STRAT_RUSH and age >= 2:
 		want_towers = true
-	## Towers before walls (stone spend). Allow dipping reseed wood — gather refills.
-	if want_towers and age >= 2 and _count_own_buildings("watch_tower") < STANDARD_TOWER_TARGET and stone >= 125 and wood >= 25:
+	## Towers before walls (stone spend). Cap unfinished scaffolds (AoE feel).
+	if (
+		want_towers
+		and age >= 2
+		and _count_own_buildings("watch_tower") < STANDARD_TOWER_TARGET
+		and stone >= 125
+		and wood >= 25
+		and _fortification_foundation_room() > 0
+	):
 		var tower_i := _count_own_buildings("watch_tower")
 		var tower_off := Vector2(70, -50) if tower_i == 0 else Vector2(-70, 60)
 		_try_place_building("watch_tower", base_position + tower_off)
@@ -615,11 +635,15 @@ func _try_place_stone_defenses() -> void:
 	var have := _count_own_buildings("stone_wall")
 	if have >= STANDARD_WALL_TARGET or stone < 5:
 		return
+	var room := _fortification_foundation_room()
+	if room <= 0:
+		return
 	var base_tile := WallNav.world_to_tile(base_position)
 	var placed := 0
 	var headless := DisplayServer.get_name() == "headless"
+	var place_budget := mini(WALLS_PER_THINK, room)
 	for t in _tc_wall_tiles(base_tile):
-		if placed >= WALLS_PER_THINK or have >= STANDARD_WALL_TARGET or stone < 5:
+		if placed >= place_budget or have >= STANDARD_WALL_TARGET or stone < 5:
 			break
 		if _own_wall_on_tile(t):
 			continue
@@ -634,19 +658,25 @@ func _try_place_stone_defenses() -> void:
 		seg.position = WallNav.tile_center(t)
 		seg.build_cost = {"stone": 5}
 		seg.placed_cost = {"stone": 5}
-		## Headless: finish instantly so smokes aren't blocked by wall builders.
+		## Headless: place unfinished (cap check), note peak, then finish instantly.
+		seg.is_complete = false
+		_units_parent.add_child(seg)
 		if headless:
-			seg.is_complete = true
-			seg.build_progress = 1.0
-			_units_parent.add_child(seg)
+			_track_foundation(seg)
+			_note_unfinished_fortification_peak()
+			seg._finish_construction()
+			_untrack_foundation(seg)
 		else:
-			seg.is_complete = false
-			_units_parent.add_child(seg)
-			seg.start_construction(float(BuildingPlacer.BUILD_TIMES.get("stone_wall", 8.0)))
+			## Shorter than player 8s so 2-at-a-time scaffolds finish before the next pair.
+			seg.start_construction(4.0)
+			_track_foundation(seg)
+			_note_unfinished_fortification_peak()
 		have += 1
 		placed += 1
 	if placed > 0:
-		print("[AI] team=%d placing stone_wall x%d near TC (have=%d stone=%d)" % [team, placed, have, stone])
+		print("[AI] team=%d placing stone_wall x%d near TC (have=%d stone=%d unfinished=%d)" % [
+			team, placed, have, stone, unfinished_fortification_count()
+		])
 
 
 func _tc_wall_tiles(base_tile: Vector2i) -> Array[Vector2i]:
@@ -677,6 +707,96 @@ func _own_wall_on_tile(tile: Vector2i) -> bool:
 		if n is WallSegment and (n as WallSegment).team == team and (n as WallSegment).tile == tile:
 			return true
 	return false
+
+
+## Incomplete wall + watch_tower foundations for this team (AoE scaffold count).
+func unfinished_fortification_count() -> int:
+	var n := 0
+	var bgroup := "player_buildings" if team == 0 else "enemy_buildings"
+	for node in get_tree().get_nodes_in_group(bgroup):
+		if not (node is Building):
+			continue
+		var b := node as Building
+		if b.team != team or b.is_complete:
+			continue
+		if b.building_id == "stone_wall" or b.building_id == "palisade" or b.building_id == "watch_tower":
+			n += 1
+	return n
+
+
+func smoke_max_unfinished_fortifications() -> int:
+	return _smoke_max_unfinished_fortifications
+
+
+func _fortification_foundation_room() -> int:
+	return maxi(0, MAX_UNFINISHED_FORTIFICATIONS - unfinished_fortification_count())
+
+
+func _note_unfinished_fortification_peak() -> void:
+	_smoke_max_unfinished_fortifications = maxi(
+		_smoke_max_unfinished_fortifications, unfinished_fortification_count()
+	)
+
+
+func _track_foundation(b: Building) -> void:
+	if b == null or not is_instance_valid(b):
+		return
+	_foundation_born_at[b.get_instance_id()] = _sim_elapsed
+	if not b.construction_finished.is_connected(_on_foundation_finished):
+		b.construction_finished.connect(_on_foundation_finished)
+
+
+func _untrack_foundation(b: Building) -> void:
+	if b == null:
+		return
+	_foundation_born_at.erase(b.get_instance_id())
+	if b.construction_finished.is_connected(_on_foundation_finished):
+		b.construction_finished.disconnect(_on_foundation_finished)
+
+
+func _on_foundation_finished(b: Building) -> void:
+	_untrack_foundation(b)
+
+
+## Cancel wall/tower scaffolds with no progress after FOUNDATION_STALE_SEC; refund cost.
+func _cancel_stale_foundations() -> void:
+	if BalanceSim.active:
+		return
+	var bgroup := "player_buildings" if team == 0 else "enemy_buildings"
+	var doomed: Array[Building] = []
+	for node in get_tree().get_nodes_in_group(bgroup):
+		if not (node is Building):
+			continue
+		var b := node as Building
+		if b.team != team or b.is_complete:
+			continue
+		if b.building_id != "stone_wall" and b.building_id != "palisade" and b.building_id != "watch_tower":
+			continue
+		var id := b.get_instance_id()
+		if not _foundation_born_at.has(id):
+			_foundation_born_at[id] = _sim_elapsed
+			continue
+		var age_sec: float = _sim_elapsed - float(_foundation_born_at[id])
+		## Untouched = no meaningful build progress yet.
+		if age_sec >= FOUNDATION_STALE_SEC and b.build_progress < 0.05 and b.builder_count() <= 0:
+			doomed.append(b)
+	for b in doomed:
+		_refund_and_cancel_foundation(b)
+
+
+func _refund_and_cancel_foundation(b: Building) -> void:
+	if b == null or not is_instance_valid(b):
+		return
+	var cost: Dictionary = b.placed_cost
+	if cost.is_empty() and b.building_id in BuildingPlacer.COSTS:
+		cost = BuildingPlacer.COSTS[b.building_id]
+	food += int(cost.get("food", 0))
+	wood += int(cost.get("wood", 0))
+	gold += int(cost.get("gold", 0))
+	stone += int(cost.get("stone", 0))
+	_untrack_foundation(b)
+	print("[AI] team=%d cancel stale %s refund=%s" % [team, b.building_id, str(cost)])
+	b.queue_free()
 
 
 ## Smoke / nav: path from TC through west gap to a nearby resource (or west point).
@@ -742,9 +862,12 @@ func _try_place_building(building_id: String, pos: Vector2) -> bool:
 		"watch_tower":
 			if stone < 125 or wood < 25:
 				return false
+			if _fortification_foundation_room() <= 0:
+				return false
 			stone -= 125
 			wood -= 25
 			building = TOWER_SCENE.instantiate() as Building
+			building.placed_cost = {"stone": 125, "wood": 25}
 		"mill":
 			if wood < 100:
 				return false
@@ -777,6 +900,8 @@ func _try_place_building(building_id: String, pos: Vector2) -> bool:
 		(building as Monastery).spawn_parent = _units_parent
 	elif building is WatchTower:
 		(building as WatchTower).spawn_parent = _units_parent
+		_track_foundation(building)
+		_note_unfinished_fortification_peak()
 	print("[AI] team=%d placing %s at %s" % [team, building_id, str(pos)])
 	return true
 
@@ -956,9 +1081,9 @@ func _assign_builders() -> void:
 		var b := n as Building
 		if b.is_complete or b.builder_count() >= 2:
 			continue
-		## Walls/towers: at most one builder so farms stay staffed.
+		## Fortification scaffolds: up to 2 builders so the ≤2-in-flight cap clears quickly.
 		if b is WallSegment or b is WatchTower:
-			if b.builder_count() >= 1:
+			if b.builder_count() >= 2:
 				continue
 		for vn in get_tree().get_nodes_in_group("villagers"):
 			if not (vn is Villager):
