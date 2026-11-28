@@ -41,7 +41,8 @@ var _siege_buttons: Dictionary = {} # unit_id -> Button
 var _unique_button: Button
 var _monk_button: Button
 var _market_button: Button
-var _build_row: HBoxContainer
+var _build_scroll: ScrollContainer
+var _build_row: GridContainer
 var _tech_row: HBoxContainer
 var _uni_tech_row: HBoxContainer
 var _cavalry_row: HBoxContainer
@@ -52,10 +53,20 @@ var _market_row: HBoxContainer
 var _research_refresh_accum: float = 0.0
 var _smith_connected: Blacksmith = null
 var _uni_connected: University = null
+## Scene-authored insets; width locked, height grows only for a compact scroll viewport.
+var _panel_left: float = 0.0
+var _panel_top: float = 0.0
+var _panel_bottom_inset: float = 0.0
+var _panel_width: float = 0.0
 
 
 func _ready() -> void:
 	add_to_group("hud_command_panel")
+	clip_contents = true
+	_panel_left = offset_left
+	_panel_top = offset_top
+	_panel_bottom_inset = offset_bottom
+	_panel_width = offset_right - offset_left
 	SelectionManager.selection_changed.connect(_on_context_changed)
 	SelectionManager.building_selection_changed.connect(_on_building_changed)
 	SelectionManager.formation_changed.connect(_refresh_formation_buttons)
@@ -125,34 +136,88 @@ func _ensure_formation_row() -> void:
 
 
 func _ensure_build_row() -> void:
-	if command_vbox == null or command_vbox.has_node("BuildRow"):
-		_build_row = command_vbox.get_node_or_null("BuildRow") as HBoxContainer
+	if command_vbox == null:
 		return
-	_build_row = HBoxContainer.new()
+	if command_vbox.has_node("BuildScroll"):
+		_build_scroll = command_vbox.get_node_or_null("BuildScroll") as ScrollContainer
+		_build_row = _build_scroll.get_node_or_null("BuildRow") as GridContainer if _build_scroll else null
+		if _build_row:
+			for def in BUILD_BUTTONS:
+				var bid: String = def["id"]
+				_build_buttons[bid] = _build_row.get_node_or_null("Build_%s" % bid) as Button
+		return
+	# AoE-style: grid inside a scroll viewport so the panel stays bottom-left compact.
+	_build_scroll = ScrollContainer.new()
+	_build_scroll.name = "BuildScroll"
+	_build_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_build_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_build_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_build_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	_build_scroll.visible = false
+	_build_row = GridContainer.new()
 	_build_row.name = "BuildRow"
-	_build_row.add_theme_constant_override("separation", 4)
-	_build_row.visible = false
+	_build_row.columns = 4
+	_build_row.add_theme_constant_override("h_separation", 4)
+	_build_row.add_theme_constant_override("v_separation", 4)
+	_build_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_build_scroll.add_child(_build_row)
+	_build_scroll.resized.connect(_fit_build_grid_width)
 	# Insert before TrainRow.
 	var train_i := train_row.get_index() if train_row else command_vbox.get_child_count()
-	command_vbox.add_child(_build_row)
-	command_vbox.move_child(_build_row, train_i)
+	command_vbox.add_child(_build_scroll)
+	command_vbox.move_child(_build_scroll, train_i)
 	for def in BUILD_BUTTONS:
 		var bid: String = def["id"]
 		var btn := Button.new()
 		btn.name = "Build_%s" % bid
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.clip_text = true
+		btn.add_theme_font_size_override("font_size", 12)
 		btn.pressed.connect(_on_build_pressed.bind(bid))
 		_build_row.add_child(btn)
 		_build_buttons[bid] = btn
 	_refresh_build_costs()
 
 
+func _fit_build_grid_width() -> void:
+	if _build_scroll == null or _build_row == null:
+		return
+	var w := _build_scroll.size.x
+	var vbar := _build_scroll.get_v_scroll_bar()
+	if vbar and vbar.visible:
+		w -= vbar.size.x
+	_build_row.custom_minimum_size.x = maxf(w, 0.0)
+
+
+## Lock scene width; size height from content with a compact scroll viewport for builds.
+func _sync_panel_to_content() -> void:
+	offset_left = _panel_left
+	offset_right = _panel_left + _panel_width
+	offset_bottom = _panel_bottom_inset
+	if _build_scroll and _build_scroll.visible and _build_row and _build_row.get_child_count() > 0:
+		var btn := _build_row.get_child(0) as Control
+		var row_h := btn.get_combined_minimum_size().y if btn else 0.0
+		var sep := float(_build_row.get_theme_constant("v_separation"))
+		# ~3 visible rows; remaining buildings scroll (derived from button metrics).
+		_build_scroll.custom_minimum_size = Vector2(0.0, row_h * 3.0 + sep * 2.0)
+		var ms := get_combined_minimum_size()
+		offset_top = _panel_bottom_inset - ms.y
+	else:
+		if _build_scroll:
+			_build_scroll.custom_minimum_size = Vector2.ZERO
+		offset_top = _panel_top
+
+
 func _refresh_context_ui() -> void:
 	var villager_sel := SelectionManager.has_selected_villager()
+	if _build_scroll:
+		_build_scroll.visible = villager_sel
 	if _build_row:
 		_build_row.visible = villager_sel
 	if villager_sel:
 		_refresh_build_costs()
+	# Defer so GridContainer min-size includes freshly shown buttons.
+	call_deferred("_sync_panel_to_content")
 
 	var b := SelectionManager.selected_building
 	var is_smith := b is Blacksmith and (b as Blacksmith).is_complete
@@ -513,7 +578,12 @@ func get_uni_tech_button(tech_id: String) -> Button:
 
 
 func is_build_row_visible() -> bool:
-	return _build_row != null and _build_row.visible
+	return _build_scroll != null and _build_scroll.visible and _build_row != null and _build_row.visible
+
+
+## Visible build-bar control (scroll viewport) for layout smoke / overlap checks.
+func get_build_bar_control() -> Control:
+	return _build_scroll
 
 func is_tech_row_visible() -> bool:
 	return _tech_row != null and _tech_row.visible
