@@ -167,8 +167,12 @@ func issue_attack(target: Node2D) -> void:
 		AudioManager.play_sfx("command")
 
 
-func issue_gather(resource: ResourceNode) -> void:
-	if resource == null or not is_instance_valid(resource) or resource.is_depleted():
+func issue_gather(resource: Node2D) -> void:
+	if resource == null or not is_instance_valid(resource):
+		return
+	if not resource.has_method("is_depleted") or resource.call("is_depleted"):
+		return
+	if resource is Farm and not (resource as Farm).is_complete:
 		return
 	var any := false
 	for u in selected_units:

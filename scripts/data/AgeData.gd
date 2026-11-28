@@ -25,6 +25,7 @@ const BUILDING_UNLOCK_AGE := {
 	"lumber_camp": 1,
 	"mining_camp": 1,
 	"mill": 1,
+	"farm": 1,
 	"barracks": 1,
 	"palisade": 1,
 	"gate": 1,
