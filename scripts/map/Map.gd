@@ -110,6 +110,8 @@ func _ready() -> void:
 		await prepare_team_colours_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--walk-shot"):
 		await prepare_walk_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--walk-v2-shot"):
+		await prepare_walk_v2_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--formation-shot"):
 		await prepare_formation_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--ai-shot"):
@@ -117,6 +119,108 @@ func _ready() -> void:
 	else:
 		await _sample_windowed_fps()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 debug.")
+
+
+## T-27: archer + spearman mid-walk (walk-v2 sheets) + idle facing.
+func prepare_walk_v2_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	for n in get_tree().get_nodes_in_group("player_town_hall"):
+		if n is Node2D:
+			(n as Node2D).visible = false
+			(n as Node2D).position = Vector2(-4000, -4000)
+	for n in get_tree().get_nodes_in_group("enemy_town_hall"):
+		if n is Node2D:
+			(n as Node2D).visible = false
+			(n as Node2D).position = Vector2(-4000, -4000)
+	for n in get_tree().get_nodes_in_group("units"):
+		if n is Unit and is_instance_valid(n):
+			(n as Unit).visible = false
+			(n as Unit).position = Vector2(-5000, -5000)
+	var origin := Vector2(980, 720)
+	var idle_arch: Archer = ARCHER_SCENE.instantiate() as Archer
+	idle_arch.team = 0
+	idle_arch.contribute_population = false
+	idle_arch.position = origin + Vector2(-100, 0)
+	units.add_child(idle_arch)
+	var arch: Archer = ARCHER_SCENE.instantiate() as Archer
+	arch.team = 0
+	arch.contribute_population = false
+	arch.position = origin + Vector2(-20, 0)
+	units.add_child(arch)
+	var spear: Spearman = preload("res://scenes/units/Spearman.tscn").instantiate() as Spearman
+	spear.team = 0
+	spear.contribute_population = false
+	spear.position = origin + Vector2(70, 0)
+	units.add_child(spear)
+	var spear_ai: Spearman = preload("res://scenes/units/Spearman.tscn").instantiate() as Spearman
+	spear_ai.team = 1
+	spear_ai.contribute_population = false
+	spear_ai.position = origin + Vector2(160, 0)
+	units.add_child(spear_ai)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	idle_arch.velocity = Vector2.ZERO
+	idle_arch._facing = "down"
+	idle_arch._apply_facing_texture()
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	if cam:
+		cam.set_zoom_clamped(2.2)
+		cam.center_at(origin + Vector2(20, -8))
+	await get_tree().create_timer(0.35).timeout
+	for u in [idle_arch, arch, spear, spear_ai]:
+		if u == null:
+			continue
+		u.set_process(false)
+		u.set_physics_process(false)
+		if u.navigation_agent:
+			u.navigation_agent.avoidance_enabled = false
+			if u.navigation_agent.velocity_computed.is_connected(u._on_velocity_computed):
+				u.navigation_agent.velocity_computed.disconnect(u._on_velocity_computed)
+	idle_arch._facing = "right"
+	idle_arch.velocity = Vector2.ZERO
+	idle_arch._apply_facing_texture()
+	if idle_arch._visual:
+		idle_arch._visual.scale = Vector2(3.0, 3.0)
+		idle_arch._anchor_sprite_to_feet()
+	arch._facing = "right"
+	arch._walk_frame = 1
+	arch.velocity = Vector2(80, 0)
+	spear._facing = "right"
+	spear._walk_frame = 2
+	spear.velocity = Vector2(80, 0)
+	spear_ai._facing = "left"
+	spear_ai._walk_frame = 1
+	spear_ai.velocity = Vector2(-80, 0)
+	for u in [arch, spear, spear_ai]:
+		if u == null:
+			continue
+		if u._visual == null:
+			u._visual = u.get_node_or_null("Visual") as Sprite2D
+		if u.has_walk_sheet():
+			u._apply_walk_frame()
+			u._visual.scale = Vector2(3.0, 3.0)
+			u._anchor_sprite_to_feet()
+		else:
+			u._apply_facing_texture()
+	if cam:
+		cam.set_zoom_clamped(2.4)
+		cam.center_at(origin + Vector2(30, -12))
+	await get_tree().process_frame
+	await get_tree().process_frame
+	print(
+		"[SHOT] walk-v2 archer_sheet=%s spear_sheet=%s a_hframes=%d a_frame=%d s_frame=%d"
+		% [
+			str(arch.has_walk_sheet()),
+			str(spear.has_walk_sheet()),
+			arch._visual.hframes if arch._visual else -1,
+			arch._visual.frame if arch._visual else -1,
+			spear._visual.frame if spear._visual else -1,
+		]
+	)
+	_save_shot("t27_walk_v2.png", 0)
 
 
 ## T-17: villager + soldier mid-walk (walk sheet frames) + idle facing.
@@ -3442,7 +3546,8 @@ func _run_team_recolour_smoke() -> void:
 	await get_tree().physics_frame
 
 
-## T-17: moving unit changes walk frame; idle uses idle sprite; AI modulate survives frame change.
+## T-17/T-27: moving unit changes walk frame; idle uses idle sprite; AI modulate survives frame change.
+## T-27: archer + spearman walk sheets advance frames; units without a sheet keep idle facing (fallback).
 func _run_walk_cycle_smoke() -> void:
 	await get_tree().physics_frame
 	var vill: Villager = VILLAGER_SCENE.instantiate() as Villager
@@ -3460,11 +3565,27 @@ func _run_walk_cycle_smoke() -> void:
 	archer.contribute_population = false
 	archer.position = PLAYER_TC_POS + Vector2(260, 120)
 	units.add_child(archer)
+	var spear: Spearman = preload("res://scenes/units/Spearman.tscn").instantiate() as Spearman
+	spear.team = 0
+	spear.contribute_population = false
+	spear.position = PLAYER_TC_POS + Vector2(320, 120)
+	units.add_child(spear)
+	var monk: Monk = preload("res://scenes/units/Monk.tscn").instantiate() as Monk
+	monk.team = 0
+	monk.contribute_population = false
+	monk.position = PLAYER_TC_POS + Vector2(380, 120)
+	units.add_child(monk)
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 
-	var sheet_ok: bool = vill.has_walk_sheet() and sol_ai.has_walk_sheet()
-	var fallback_ok: bool = not archer.has_walk_sheet()
+	var sheet_ok: bool = (
+		vill.has_walk_sheet()
+		and sol_ai.has_walk_sheet()
+		and archer.has_walk_sheet()
+		and spear.has_walk_sheet()
+	)
+	# Idle fallback: unit without a walk sheet stays on static facing while "moving".
+	var fallback_ok: bool = not monk.has_walk_sheet()
 	var idle_tex: Texture2D = vill._facing_textures.get("down") as Texture2D
 	var idle_ok: bool = (
 		vill._visual != null
@@ -3518,18 +3639,54 @@ func _run_walk_cycle_smoke() -> void:
 		and mod_after.is_equal_approx(mod_before)
 		and mod_after.is_equal_approx(TeamColors.AI_TINT_UNIT)
 	)
-	# Archer without sheet stays on static facing while "moving".
+
+	# T-27: archer + spearman advance walk frames while moving.
+	var archer_frame_before: int = archer.walk_frame()
 	archer.velocity = Vector2(60, 0)
 	archer._update_facing_from_velocity()
-	archer._update_walk_animation(0.2)
-	var archer_fallback_ok: bool = (
-		not archer.has_walk_sheet()
-		and not archer.is_walk_animating()
-		and archer._visual.texture != null
-		and archer._visual.hframes == 1
-		and archer._facing_textures.has(archer._facing)
-		and archer._visual.texture == archer._facing_textures[archer._facing]
+	var archer_saw_change: bool = false
+	for _a in range(5):
+		archer._update_walk_animation(0.05)
+		if archer.walk_frame() != archer_frame_before:
+			archer_saw_change = true
+	var archer_walk_ok: bool = (
+		archer.has_walk_sheet()
+		and archer.is_walk_animating()
+		and archer._visual.texture == archer._walk_sheet
+		and archer._visual.hframes == Unit.WALK_FRAME_COUNT
+		and archer_saw_change
+		and archer.walk_frame() != archer_frame_before
 	)
+	var spear_frame_before: int = spear.walk_frame()
+	spear.velocity = Vector2(60, 0)
+	spear._update_facing_from_velocity()
+	var spear_saw_change: bool = false
+	for _s in range(5):
+		spear._update_walk_animation(0.05)
+		if spear.walk_frame() != spear_frame_before:
+			spear_saw_change = true
+	var spear_walk_ok: bool = (
+		spear.has_walk_sheet()
+		and spear.is_walk_animating()
+		and spear._visual.texture == spear._walk_sheet
+		and spear._visual.hframes == Unit.WALK_FRAME_COUNT
+		and spear_saw_change
+		and spear.walk_frame() != spear_frame_before
+	)
+
+	# Monk without sheet stays on static facing while "moving".
+	monk.velocity = Vector2(60, 0)
+	monk._update_facing_from_velocity()
+	monk._update_walk_animation(0.2)
+	var monk_fallback_ok: bool = (
+		not monk.has_walk_sheet()
+		and not monk.is_walk_animating()
+		and monk._visual.texture != null
+		and monk._visual.hframes == 1
+		and monk._facing_textures.has(monk._facing)
+		and monk._visual.texture == monk._facing_textures[monk._facing]
+	)
+	fallback_ok = fallback_ok and monk_fallback_ok
 
 	var all_ok: bool = (
 		sheet_ok
@@ -3539,18 +3696,28 @@ func _run_walk_cycle_smoke() -> void:
 		and back_idle_ok
 		and left_sheet_ok
 		and modulate_ok
-		and archer_fallback_ok
+		and archer_walk_ok
+		and spear_walk_ok
 		and tex_before != null
 	)
 	print(
-		"[TEST] walk sheet=%s fallback=%s idle=%s moved=%s back_idle=%s modulate=%s archer=%s"
-		% [sheet_ok, fallback_ok, idle_ok, moved_ok, back_idle_ok, modulate_ok, archer_fallback_ok]
+		"[TEST] walk sheet=%s fallback=%s idle=%s moved=%s back_idle=%s modulate=%s archer=%s spear=%s"
+		% [
+			sheet_ok,
+			fallback_ok,
+			idle_ok,
+			moved_ok,
+			back_idle_ok,
+			modulate_ok,
+			archer_walk_ok,
+			spear_walk_ok,
+		]
 	)
 	if all_ok:
 		print("[TEST] PASS walk cycle (frame change + idle + AI modulate)")
 	else:
 		print("[TEST] FAIL walk cycle (frame change + idle + AI modulate)")
-	for n in [vill, sol_ai, archer]:
+	for n in [vill, sol_ai, archer, spear, monk]:
 		if n != null and is_instance_valid(n):
 			n.queue_free()
 	await get_tree().physics_frame
