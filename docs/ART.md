@@ -127,8 +127,31 @@ No `gen_*` procedural drawing. Screenshot: `docs/screenshots/t17_walk.png`.
 - Walk figures a few px narrower than idle fronts (villager ~21 vs ~26 px wide in the down row).
 - A few olive pixels on the axe head (quantize / foliage thresholds).
 
+## T-27 walk-v2 (archer + spearman)
+
+Same engine contract and PR #10 pipeline as walk-v1. `Unit.gd` auto-loads
+`res://assets/sprites/units/{unit_key}_walk.png` when present (keys `archer`, `spearman`) —
+no gameplay logic changes for this import.
+
+| File | Size | Notes |
+|---|---|---|
+| `assets/sprites/units/archer_walk.png` | 128×160 | walk-v2 (PR #10 pipeline) |
+| `assets/sprites/units/spearman_walk.png` | 128×160 | walk-v2 (PR #10 pipeline) |
+
+Import source branch: `art/walk-v2` @ `6571e66`
+(`art_import/sprites_walk_v2.tar.gz` sha256 `94d986afd7adaf570e1b8d4a45bf27f0764d121fde7c55188d9fd42f4cb2dfbf`).
+No `gen_*` procedural drawing. Screenshot: `docs/screenshots/t27_walk_v2.png`.
+
+### Art debt (walk-v2)
+
+- Spearman spear is **diagonal** (tip ≈ helmet height) while idle holds it **vertical** above the head
+  (idle is 45 px tall, over the 40 px cell) — silhouette changes when he starts walking; body size now matches idle.
+- Spearman faces quantize to warm yellow/orange; helmet darker than idle's light grey.
+- Archer is ~**2 px slimmer** than idle (19 vs 21 px in down row; front frames 38 px tall); bow string dotted
+  (same as idle); a couple of stray red pixels on the bow in down/up frame 2; side frames 0 and 3 are both wide strides.
+
 ## What this pack does not include
 
-- Walk-cycle sheets for units beyond villager + soldier (others idle-only).
+- Walk-cycle sheets for units beyond villager, soldier, archer, and spearman (others idle-only).
 - Dedicated trebuchet unpacked / firing frames (T-23 uses packed art + subtle deploy cue).
 - Full team-blue coverage on every unit/building (see art debt above).
