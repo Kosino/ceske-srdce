@@ -10,6 +10,8 @@ const WAVE_MIN_UNITS := 2
 const WAVE_INTERVAL_SEC := 22.0 ## BalanceSim cadence
 const WAVE_INTERVAL_STANDARD := 240.0 ## ~4 min between waves
 const WAVE_FIRST_MIN_SEC := 360.0 ## first Standard wave not before minute 6
+const WAVE_FIRST_MIN_STANDARD := 6 ## Standard first wave ≥ this many units
+const EARLY_ARMY_SCREEN := 2 ## tiny screen while booming villagers
 const WAVE_RETREAT_LOSS := 0.60
 const THINK_INTERVAL := 0.45
 const START_FOOD := 800
@@ -23,6 +25,21 @@ const TC_POP_BONUS := 5
 const HOUSE_POP_BONUS := 5
 const POP_HEADROOM := 2
 const DEFAULT_SEED := 9001
+const STANDARD_TOWER_TARGET := 2
+const STANDARD_WALL_TARGET := 60 ## towers 250 + walls 300 → stone unspent = 200
+const WALLS_PER_THINK := 2 ## AoE feel: never spam foundations
+const MAX_UNFINISHED_FORTIFICATIONS := 2 ## wall + tower scaffolds in flight
+const FOUNDATION_STALE_SEC := 60.0 ## cancel/refund if untouched this long
+const ECO_READY_VILLS := 12 ## boom to 12, then fill wave ≥6
+const AGE_UP_MIN_VILLS := 8 ## don't burn 500 food before eco is online
+
+## Counter pick from TechData.unit_role roles (AoE rock-paper-scissors on main).
+## many archers → cavalry / swordsmen; many cavalry → spearmen.
+const COUNTER_TABLE := {
+	"archer": ["light_cavalry", "soldier"],
+	"cavalry": ["spearman"],
+	"infantry": ["archer", "soldier"],
+}
 
 const HOUSE_SCENE := preload("res://scenes/buildings/House.tscn")
 const BARRACKS_SCENE := preload("res://scenes/buildings/Barracks.tscn")
@@ -34,6 +51,7 @@ const MONASTERY_SCENE := preload("res://scenes/buildings/Monastery.tscn")
 const UNIVERSITY_SCENE := preload("res://scenes/buildings/University.tscn")
 const SIEGE_WORKSHOP_SCENE := preload("res://scenes/buildings/SiegeWorkshop.tscn")
 const TOWER_SCENE := preload("res://scenes/buildings/WatchTower.tscn")
+const WALL_SCENE := preload("res://scenes/buildings/WallSegment.tscn")
 const MILL_SCENE := preload("res://scenes/buildings/Mill.tscn")
 const FARM_SCENE := preload("res://scenes/buildings/Farm.tscn")
 const VILLAGER_SCENE := preload("res://scenes/units/Villager.tscn")
@@ -77,7 +95,13 @@ var _units_parent: Node2D
 var _bootstrapped: bool = false
 var _wave_roster: Array = []
 var _wave_start_size: int = 0
+var _first_wave_count: int = 0
 var _retreating: bool = false
+var _last_counter_pick: String = ""
+## instance_id -> sim time when wall/tower foundation was placed (stale cancel).
+var _foundation_born_at: Dictionary = {}
+## Peak unfinished wall+tower foundations (smoke: must stay ≤ MAX).
+var _smoke_max_unfinished_fortifications: int = 0
 
 
 func _ready() -> void:
@@ -132,7 +156,11 @@ func configure_sim(sim_seed: int, jitter: float, strat: String = BalanceSim.STRA
 	_sim_elapsed = 0.0
 	_wave_roster.clear()
 	_wave_start_size = 0
+	_first_wave_count = 0
 	_retreating = false
+	_last_counter_pick = ""
+	_foundation_born_at.clear()
+	_smoke_max_unfinished_fortifications = 0
 	print("[AI] team=%d strategy=%s" % [team, strategy])
 
 
@@ -160,7 +188,11 @@ func configure_standard(sim_seed: int, jitter: float = 1.0) -> void:
 	_sim_elapsed = 0.0
 	_wave_roster.clear()
 	_wave_start_size = 0
+	_first_wave_count = 0
 	_retreating = false
+	_last_counter_pick = ""
+	_foundation_born_at.clear()
+	_smoke_max_unfinished_fortifications = 0
 	print("[AI] team=%d standard seed=%d" % [team, sim_seed])
 
 
@@ -189,15 +221,14 @@ func _wave_interval() -> float:
 func _wave_min_units() -> int:
 	if BalanceSim.active:
 		return WAVE_MIN_UNITS
+	## Standard: first wave ≥6; later waves grow with age.
 	match age:
-		1:
-			return 2
-		2:
-			return 4
+		1, 2:
+			return WAVE_FIRST_MIN_STANDARD
 		3:
-			return 6
+			return WAVE_FIRST_MIN_STANDARD + 2
 		_:
-			return 8
+			return WAVE_FIRST_MIN_STANDARD + 4
 
 
 func _bootstrap_base() -> void:
@@ -277,11 +308,11 @@ func _tick_wave(dt: float) -> void:
 		can_wave = false
 	if not _wave_ready and can_wave and army.size() >= min_u:
 		_wave_ready = true
-		## Standard: first launch as soon as ready after minute 6; BalanceSim keeps partial wait.
+		## Standard: launch immediately once army ≥ min after minute 6; BalanceSim keeps partial wait.
 		if BalanceSim.active:
 			_wave_timer = _wave_interval() * 0.35
 		else:
-			_wave_timer = _wave_interval()
+			_wave_timer = _wave_interval() ## saturates the wait check below
 	if _wave_ready and _wave_timer >= _wave_interval() and army.size() >= min_u and not _retreating:
 		_launch_wave(army)
 
@@ -318,15 +349,45 @@ func _sim_can_wave() -> bool:
 
 
 func _tick_economy() -> void:
+	_cancel_stale_foundations()
+	_note_unfinished_fortification_peak()
 	_assign_gatherers()
 	_try_reseed_farms()
 	_try_age_up()
 	_try_place_next_building()
+	_try_place_stone_defenses()
 	_assign_builders()
 	_try_train_villagers()
 	_try_train_army()
 	_try_blacksmith_research()
 	_try_university_research()
+	_note_unfinished_fortification_peak()
+
+
+## Stone needed for planned spends (towers / walls / castle / uni techs). 0 → don't gather.
+func _planned_stone_need() -> int:
+	var need := 0
+	var tower_target := 0
+	## Standard: don't pull stone gatherers until the first wave is out.
+	var std_defenses := not BalanceSim.active and age >= 2 and _waves_launched >= 1
+	if std_defenses:
+		tower_target = STANDARD_TOWER_TARGET
+	elif BalanceSim.active and strategy == BalanceSim.STRAT_RUSH and age >= 2:
+		tower_target = 2
+	var towers_have := _count_own_buildings("watch_tower")
+	if towers_have < tower_target:
+		need += (tower_target - towers_have) * 125
+	if std_defenses:
+		var walls_have := _count_own_buildings("stone_wall")
+		if walls_have < STANDARD_WALL_TARGET:
+			need += (STANDARD_WALL_TARGET - walls_have) * 5
+	if age >= 3 and _count_own_buildings("castle") < 1:
+		need += 650
+	if age >= 4 and not GameManager.has_tech(team, TechData.MASONRY):
+		need += int(TechData.tech_def(TechData.MASONRY).get("cost", {}).get("stone", 0))
+	elif age >= 4 and not GameManager.has_tech(team, TechData.TOWER_ENGINE):
+		need += int(TechData.tech_def(TechData.TOWER_ENGINE).get("cost", {}).get("stone", 0))
+	return need
 
 
 func _target_age() -> int:
@@ -347,6 +408,9 @@ func _try_age_up() -> void:
 	if age_researching or age >= AgeData.MAX_AGE:
 		return
 	if age >= _target_age():
+		return
+	## Standard: bank eco before the 500-food age click so wave/stone still fit in 10 min.
+	if not BalanceSim.active and age == 1 and _count_villagers() < AGE_UP_MIN_VILLS:
 		return
 	if _count_age_buildings(age) < AgeData.BUILDINGS_REQUIRED_TO_ADVANCE:
 		return
@@ -459,8 +523,17 @@ func _need_house() -> bool:
 func _farm_target() -> int:
 	if BalanceSim.active:
 		return 0 if strategy == BalanceSim.STRAT_RUSH else mini(2 + age, 4)
-	## Standard: grow farms with age toward a food eco.
-	return clampi(2 + (age - 1) * 2, 2, 8)
+	## Standard: after mill, keep ≥4 farms so food eco doesn't starve.
+	if _count_own_complete("mill") < 1:
+		return 0
+	return clampi(maxi(4, 2 + (age - 1) * 2), 4, 8)
+
+
+func _wood_reserve() -> int:
+	## Keep enough wood to reseed so food eco doesn't die mid-wave.
+	if BalanceSim.active or _count_own_buildings("farm") < 1:
+		return 0
+	return Farm.RESEED_WOOD
 
 
 func _try_place_next_building() -> void:
@@ -508,13 +581,21 @@ func _try_place_next_building() -> void:
 	if age >= 2 and _count_own_buildings("house") < 2 and wood >= 25:
 		_try_place_building("house", base_position + Vector2(-90, 120))
 		return
+	## Towers near base (Standard + BalanceSim rush) — spend stone instead of hoarding.
+	## Standard: after first wave so builders/wood stay on eco→army fill.
+	var want_towers := false
+	if not BalanceSim.active and age >= 2 and _waves_launched >= 1:
+		want_towers = true
+	elif BalanceSim.active and strategy == BalanceSim.STRAT_RUSH and age >= 2:
+		want_towers = true
+	## Towers before walls (stone spend). Cap unfinished scaffolds (AoE feel).
 	if (
-		age >= 2
-		and strategy == BalanceSim.STRAT_RUSH
-		and BalanceSim.active
-		and _count_own_buildings("watch_tower") < 2
+		want_towers
+		and age >= 2
+		and _count_own_buildings("watch_tower") < STANDARD_TOWER_TARGET
 		and stone >= 125
 		and wood >= 25
+		and _fortification_foundation_room() > 0
 	):
 		var tower_i := _count_own_buildings("watch_tower")
 		var tower_off := Vector2(70, -50) if tower_i == 0 else Vector2(-70, 60)
@@ -536,6 +617,198 @@ func _try_place_next_building() -> void:
 		if wood >= 200:
 			_try_place_building("siege_workshop", base_position + Vector2(160, -120))
 			return
+
+
+## Standard: stone walls at TC (spend starting stone; no gather until need exceeds stockpile).
+func _try_place_stone_defenses() -> void:
+	if BalanceSim.active or age < 2 or _units_parent == null:
+		return
+	## After first wave — walls must not starve army training / food eco.
+	if _waves_launched < 1:
+		return
+	## Always finish towers before walls so stone spend hits <300 (towers+walls).
+	if _count_own_buildings("watch_tower") < STANDARD_TOWER_TARGET:
+		return
+	## After early eco is online so stone spend doesn't fight villager boom.
+	if _count_villagers() < AGE_UP_MIN_VILLS:
+		return
+	var have := _count_own_buildings("stone_wall")
+	if have >= STANDARD_WALL_TARGET or stone < 5:
+		return
+	var room := _fortification_foundation_room()
+	if room <= 0:
+		return
+	var base_tile := WallNav.world_to_tile(base_position)
+	var placed := 0
+	var headless := DisplayServer.get_name() == "headless"
+	var place_budget := mini(WALLS_PER_THINK, room)
+	for t in _tc_wall_tiles(base_tile):
+		if placed >= place_budget or have >= STANDARD_WALL_TARGET or stone < 5:
+			break
+		if _own_wall_on_tile(t):
+			continue
+		## Skip TC footprint (≈2×2 tiles around hall).
+		if absi(t.x - base_tile.x) <= 1 and absi(t.y - base_tile.y) <= 1:
+			continue
+		stone -= 5
+		var seg: WallSegment = WALL_SCENE.instantiate() as WallSegment
+		seg.wall_kind = "stone_wall"
+		seg.team = team
+		seg.tile = t
+		seg.position = WallNav.tile_center(t)
+		seg.build_cost = {"stone": 5}
+		seg.placed_cost = {"stone": 5}
+		## Headless: place unfinished (cap check), note peak, then finish instantly.
+		seg.is_complete = false
+		_units_parent.add_child(seg)
+		if headless:
+			_track_foundation(seg)
+			_note_unfinished_fortification_peak()
+			seg._finish_construction()
+			_untrack_foundation(seg)
+		else:
+			## Shorter than player 8s so 2-at-a-time scaffolds finish before the next pair.
+			seg.start_construction(4.0)
+			_track_foundation(seg)
+			_note_unfinished_fortification_peak()
+		have += 1
+		placed += 1
+	if placed > 0:
+		print("[AI] team=%d placing stone_wall x%d near TC (have=%d stone=%d unfinished=%d)" % [
+			team, placed, have, stone, unfinished_fortification_count()
+		])
+
+
+func _tc_wall_tiles(base_tile: Vector2i) -> Array[Vector2i]:
+	## Rings N/E/S only — permanent west corridor so villagers can reach resources.
+	var out: Array[Vector2i] = []
+	var seen := {}
+	for r in [3, 4, 5, 6]:
+		for i in range(-r, r + 1):
+			## 3-tile-wide west gap: skip westernmost columns on N/S runs.
+			var skip_west_ns: bool = i <= (-r + 1)
+			var candidates: Array[Vector2i] = []
+			if not skip_west_ns:
+				candidates.append(Vector2i(base_tile.x + i, base_tile.y - r)) ## north
+				candidates.append(Vector2i(base_tile.x + i, base_tile.y + r)) ## south
+			candidates.append(Vector2i(base_tile.x + r, base_tile.y + i)) ## east (full)
+			## Never place west ring — egress for gatherers + army.
+			for t in candidates:
+				var key := "%d:%d" % [t.x, t.y]
+				if seen.has(key):
+					continue
+				seen[key] = true
+				out.append(t)
+	return out
+
+
+func _own_wall_on_tile(tile: Vector2i) -> bool:
+	for n in get_tree().get_nodes_in_group("walls"):
+		if n is WallSegment and (n as WallSegment).team == team and (n as WallSegment).tile == tile:
+			return true
+	return false
+
+
+## Incomplete wall + watch_tower foundations for this team (AoE scaffold count).
+func unfinished_fortification_count() -> int:
+	var n := 0
+	var bgroup := "player_buildings" if team == 0 else "enemy_buildings"
+	for node in get_tree().get_nodes_in_group(bgroup):
+		if not (node is Building):
+			continue
+		var b := node as Building
+		if b.team != team or b.is_complete:
+			continue
+		if b.building_id == "stone_wall" or b.building_id == "palisade" or b.building_id == "watch_tower":
+			n += 1
+	return n
+
+
+func smoke_max_unfinished_fortifications() -> int:
+	return _smoke_max_unfinished_fortifications
+
+
+func _fortification_foundation_room() -> int:
+	return maxi(0, MAX_UNFINISHED_FORTIFICATIONS - unfinished_fortification_count())
+
+
+func _note_unfinished_fortification_peak() -> void:
+	_smoke_max_unfinished_fortifications = maxi(
+		_smoke_max_unfinished_fortifications, unfinished_fortification_count()
+	)
+
+
+func _track_foundation(b: Building) -> void:
+	if b == null or not is_instance_valid(b):
+		return
+	_foundation_born_at[b.get_instance_id()] = _sim_elapsed
+	if not b.construction_finished.is_connected(_on_foundation_finished):
+		b.construction_finished.connect(_on_foundation_finished)
+
+
+func _untrack_foundation(b: Building) -> void:
+	if b == null:
+		return
+	_foundation_born_at.erase(b.get_instance_id())
+	if b.construction_finished.is_connected(_on_foundation_finished):
+		b.construction_finished.disconnect(_on_foundation_finished)
+
+
+func _on_foundation_finished(b: Building) -> void:
+	_untrack_foundation(b)
+
+
+## Cancel wall/tower scaffolds with no progress after FOUNDATION_STALE_SEC; refund cost.
+func _cancel_stale_foundations() -> void:
+	if BalanceSim.active:
+		return
+	var bgroup := "player_buildings" if team == 0 else "enemy_buildings"
+	var doomed: Array[Building] = []
+	for node in get_tree().get_nodes_in_group(bgroup):
+		if not (node is Building):
+			continue
+		var b := node as Building
+		if b.team != team or b.is_complete:
+			continue
+		if b.building_id != "stone_wall" and b.building_id != "palisade" and b.building_id != "watch_tower":
+			continue
+		var id := b.get_instance_id()
+		if not _foundation_born_at.has(id):
+			_foundation_born_at[id] = _sim_elapsed
+			continue
+		var age_sec: float = _sim_elapsed - float(_foundation_born_at[id])
+		## Untouched = no meaningful build progress yet.
+		if age_sec >= FOUNDATION_STALE_SEC and b.build_progress < 0.05 and b.builder_count() <= 0:
+			doomed.append(b)
+	for b in doomed:
+		_refund_and_cancel_foundation(b)
+
+
+func _refund_and_cancel_foundation(b: Building) -> void:
+	if b == null or not is_instance_valid(b):
+		return
+	var cost: Dictionary = b.placed_cost
+	if cost.is_empty() and b.building_id in BuildingPlacer.COSTS:
+		cost = BuildingPlacer.COSTS[b.building_id]
+	food += int(cost.get("food", 0))
+	wood += int(cost.get("wood", 0))
+	gold += int(cost.get("gold", 0))
+	stone += int(cost.get("stone", 0))
+	_untrack_foundation(b)
+	print("[AI] team=%d cancel stale %s refund=%s" % [team, b.building_id, str(cost)])
+	b.queue_free()
+
+
+## Smoke / nav: path from TC through west gap to a nearby resource (or west point).
+func walls_not_sealing() -> bool:
+	var from := base_position
+	var to := base_position + Vector2(-320, 0)
+	var res := _nearest_resource_of_type(base_position, "wood")
+	if res == null:
+		res = _nearest_resource(base_position)
+	if res != null:
+		to = res.global_position
+	return WallNav.path_exists(from, to, team, get_tree())
 
 
 func _try_place_building(building_id: String, pos: Vector2) -> bool:
@@ -589,9 +862,12 @@ func _try_place_building(building_id: String, pos: Vector2) -> bool:
 		"watch_tower":
 			if stone < 125 or wood < 25:
 				return false
+			if _fortification_foundation_room() <= 0:
+				return false
 			stone -= 125
 			wood -= 25
 			building = TOWER_SCENE.instantiate() as Building
+			building.placed_cost = {"stone": 125, "wood": 25}
 		"mill":
 			if wood < 100:
 				return false
@@ -624,11 +900,16 @@ func _try_place_building(building_id: String, pos: Vector2) -> bool:
 		(building as Monastery).spawn_parent = _units_parent
 	elif building is WatchTower:
 		(building as WatchTower).spawn_parent = _units_parent
+		_track_foundation(building)
+		_note_unfinished_fortification_peak()
 	print("[AI] team=%d placing %s at %s" % [team, building_id, str(pos)])
 	return true
 
 
 func _try_blacksmith_research() -> void:
+	## Standard: don't burn food/gold before the first wave is out.
+	if not BalanceSim.active and _waves_launched < 1:
+		return
 	var smith := _own_blacksmith()
 	if smith == null or not smith.is_complete or smith.is_researching():
 		return
@@ -690,6 +971,7 @@ func _assign_gatherers() -> void:
 	var weights := _desired_gather_weights()
 	var counts := {"food": 0, "wood": 0, "gold": 0, "stone": 0}
 	var idle: Array = []
+	var food_critical := food < 100
 	for n in get_tree().get_nodes_in_group("villagers"):
 		if not (n is Villager):
 			continue
@@ -700,6 +982,10 @@ func _assign_gatherers() -> void:
 			continue
 		if v.state == Villager.State.HARVESTING or v.state == Villager.State.MOVE_TO_RESOURCE or v.state == Villager.State.MOVE_TO_DROPOFF:
 			var rtype := _villager_resource_type(v)
+			## Pull non-food gatherers onto farms when stockpile is empty.
+			if food_critical and rtype != "food" and v.carried_amount <= 0:
+				idle.append(v)
+				continue
 			if counts.has(rtype):
 				counts[rtype] = int(counts[rtype]) + 1
 			continue
@@ -707,7 +993,7 @@ func _assign_gatherers() -> void:
 			continue
 		idle.append(v)
 	for v in idle:
-		var need_type := _most_needed_resource(weights, counts)
+		var need_type := "food" if food_critical else _most_needed_resource(weights, counts)
 		var res := _nearest_resource_of_type(v.global_position, need_type)
 		if res == null and need_type != "wood":
 			res = _nearest_resource_of_type(v.global_position, "wood")
@@ -742,16 +1028,26 @@ func _resource_type_of(res: Node) -> String:
 
 
 func _desired_gather_weights() -> Dictionary:
-	var w := {"food": 1.2, "wood": 1.0, "gold": 0.4, "stone": 0.25}
+	var w := {"food": 1.2, "wood": 1.0, "gold": 0.4, "stone": 0.0}
 	if food < 200 or (not age_researching and age < _target_age() and food < _food_reserve_for_age() + 100):
 		w["food"] = float(w["food"]) + 2.0
-	if wood < 150 or _need_house() or _count_own_buildings("farm") < _farm_target():
+	## Reseed wood is mandatory — empty farms kill army training.
+	if wood < _wood_reserve() + 20 and _count_own_buildings("farm") > 0:
+		w["wood"] = 5.0
+	elif food < 100:
+		## Critical food: pull off wood/gold so army + villagers can train.
+		w["food"] = 6.0
+		w["wood"] = maxf(float(w["wood"]), 0.8)
+		w["gold"] = 0.2
+	elif wood < 150 or _need_house() or _count_own_buildings("farm") < _farm_target():
 		w["wood"] = float(w["wood"]) + 1.8
-	if age >= 2 and gold < 80:
+	if age >= 2 and gold < 80 and food >= 100 and wood >= _wood_reserve():
 		w["gold"] = float(w["gold"]) + 1.2
-	if age >= 3 and stone < 200:
-		w["stone"] = float(w["stone"]) + 1.0
-	if _count_own_complete("mill") >= 1:
+	## Only gather stone when a planned spend needs more than the stockpile.
+	var planned_stone := _planned_stone_need()
+	if planned_stone > stone:
+		w["stone"] = 2.0 + float(planned_stone - stone) / 200.0
+	if _count_own_complete("mill") >= 1 and food >= 100:
 		w["food"] = float(w["food"]) + 0.8
 	return w
 
@@ -770,6 +1066,14 @@ func _most_needed_resource(weights: Dictionary, counts: Dictionary) -> String:
 
 
 func _assign_builders() -> void:
+	## Keep gatherers on food when the first wave still needs units.
+	if (
+		not BalanceSim.active
+		and food < 100
+		and _own_military().size() < _wave_min_units()
+		and _count_villagers() >= ECO_READY_VILLS
+	):
+		return
 	var bgroup := "player_buildings" if team == 0 else "enemy_buildings"
 	for n in get_tree().get_nodes_in_group(bgroup):
 		if not (n is Building):
@@ -777,6 +1081,10 @@ func _assign_builders() -> void:
 		var b := n as Building
 		if b.is_complete or b.builder_count() >= 2:
 			continue
+		## Fortification scaffolds: up to 2 builders so the ≤2-in-flight cap clears quickly.
+		if b is WallSegment or b is WatchTower:
+			if b.builder_count() >= 2:
+				continue
 		for vn in get_tree().get_nodes_in_group("villagers"):
 			if not (vn is Villager):
 				continue
@@ -804,6 +1112,9 @@ func _count_farms() -> int:
 func _food_reserve_for_age() -> int:
 	if age_researching or age >= _target_age():
 		return 0
+	## Standard: don't bank next-age food until first wave (≥6) is fielded.
+	if not BalanceSim.active and (_waves_launched < 1 or _own_military().size() < _wave_min_units()):
+		return 0
 	## Boom: train a couple uniques, then bank hard for age 4.
 	if strategy == BalanceSim.STRAT_BOOM and age == 3 and _unique_trained < 2:
 		return 0
@@ -818,6 +1129,8 @@ func _food_reserve_for_age() -> int:
 
 func _gold_reserve_for_age() -> int:
 	if age_researching or age >= _target_age():
+		return 0
+	if not BalanceSim.active and (_waves_launched < 1 or _own_military().size() < _wave_min_units()):
 		return 0
 	if strategy == BalanceSim.STRAT_BOOM and age == 3 and _unique_trained < 2:
 		return 0
@@ -856,10 +1169,18 @@ func _try_train_villagers() -> void:
 	## Boom/FC: hold villagers until castle-age click is banked.
 	if BalanceSim.active and strategy != BalanceSim.STRAT_RUSH and age == 2 and food < 850:
 		return
-	## Standard: keep training villagers even while banking age food (half reserve).
+	## Standard: once eco-ready, leave ALL food for first-wave army (no villager drip).
+	if (
+		not BalanceSim.active
+		and _waves_launched < 1
+		and _count_villagers() >= ECO_READY_VILLS
+		and _own_military().size() < _wave_min_units()
+	):
+		return
+	## Standard: prioritize eco to 12 vills — don't bank age food yet.
 	var food_gate := _food_reserve_for_age()
-	if not BalanceSim.active and _count_villagers() < 12:
-		food_gate = food_gate / 2
+	if not BalanceSim.active and _count_villagers() < ECO_READY_VILLS:
+		food_gate = 0
 	if food - food_gate < 50:
 		return
 	if _hall.queue.size() >= 2:
@@ -868,15 +1189,25 @@ func _try_train_villagers() -> void:
 	_hall.ai_enqueue_villager()
 
 
+func _standard_army_cap() -> int:
+	## Tiny screen until 12 vills; then fill to wave size (≥6).
+	if _count_villagers() < ECO_READY_VILLS:
+		return EARLY_ARMY_SCREEN
+	return _wave_min_units()
+
+
 func _try_train_army() -> void:
 	var food_free := food - _food_reserve_for_age()
 	var gold_free := gold - _gold_reserve_for_age()
 	var roll := rng.randf()
 	if _pop_used() >= _pop_cap_ready():
 		return
-	## Standard: finish eco before pouring food into army.
-	if not BalanceSim.active and _count_villagers() < 12 and _own_military().size() >= _wave_min_units():
-		return
+	## Standard: screen only until 12 vills; then fill wave; stop at min once fielded.
+	if not BalanceSim.active:
+		var army_n := _own_military().size()
+		var cap := _standard_army_cap()
+		if army_n >= cap:
+			return
 	## Boom age 3: hold army while age-4 research is running.
 	if BalanceSim.active and strategy == BalanceSim.STRAT_BOOM and age == 3 and age_researching:
 		return
@@ -992,7 +1323,11 @@ func _try_train_army() -> void:
 			gold -= 20
 			barracks_pre.ai_enqueue_unit("soldier")
 		return
-	## Standard + rush feudal: barracks / archery by age (primary army).
+	## Standard: counter player composition (TechData.unit_role table).
+	if not BalanceSim.active and age >= 1:
+		if _try_train_counter_unit(food_free, gold_free):
+			return
+	## BalanceSim rush feudal: barracks / archery by age (primary army).
 	if age >= 2:
 		var range_b := _own_archery()
 		if range_b != null and range_b.is_complete and range_b.queue.size() < 3:
@@ -1024,6 +1359,93 @@ func _try_train_army() -> void:
 			gold -= 20
 			barracks.ai_enqueue_unit("soldier")
 			_feudal_trained += 1
+
+
+## Pure counter pick for smoke + training. Uses COUNTER_TABLE / TechData roles.
+## Age/building gates happen in `_try_train_counter_unit`, not here.
+func select_counter_unit(enemy_roles: Dictionary) -> String:
+	var archers := int(enemy_roles.get("archer", 0))
+	var cavalry := int(enemy_roles.get("cavalry", 0))
+	var infantry := int(enemy_roles.get("infantry", 0))
+	var dominant := "infantry"
+	var best := infantry
+	if archers > best:
+		best = archers
+		dominant = "archer"
+	if cavalry > best:
+		best = cavalry
+		dominant = "cavalry"
+	if best <= 0:
+		return "soldier"
+	var picks: Array = COUNTER_TABLE.get(dominant, ["soldier"])
+	if picks.is_empty():
+		return "soldier"
+	return str(picks[0])
+
+
+func _enemy_role_counts() -> Dictionary:
+	var counts := {"archer": 0, "cavalry": 0, "infantry": 0, "siege": 0, "monk": 0}
+	var eg := "player_units" if team == 1 else "enemy_units"
+	for n in get_tree().get_nodes_in_group(eg):
+		if not (n is Unit) or n is Villager:
+			continue
+		var role := TechData.unit_role(n as Unit)
+		if counts.has(role):
+			counts[role] = int(counts[role]) + 1
+	return counts
+
+
+func _try_train_counter_unit(food_free: int, gold_free: int) -> bool:
+	var want := select_counter_unit(_enemy_role_counts())
+	_last_counter_pick = want
+	var army_cap := _standard_army_cap()
+	if _own_military().size() >= army_cap:
+		return false
+	## Force-fill toward army cap (screen early, wave size after eco).
+	var need_fill := _own_military().size() < army_cap
+	## Age-gate feudal counters.
+	if want in ["light_cavalry", "spearman", "archer"] and age < 2:
+		want = "soldier"
+	match want:
+		"light_cavalry":
+			var stable := _own_stable()
+			if stable != null and stable.is_complete and stable.queue.size() < 2 and food_free >= 80:
+				food -= 80
+				stable.ai_enqueue_unit("light_cavalry")
+				_feudal_trained += 1
+				return true
+			## Fall through to soldier if no stable yet.
+			want = "soldier"
+		"spearman":
+			var barracks_s := _own_barracks()
+			if barracks_s != null and barracks_s.is_complete and barracks_s.queue.size() < 3:
+				if food_free >= 35 and wood >= 25:
+					food -= 35
+					wood -= 25
+					barracks_s.ai_enqueue_unit("spearman")
+					_feudal_trained += 1
+					return true
+			want = "soldier"
+		"archer":
+			var range_a := _own_archery()
+			if range_a != null and range_a.is_complete and range_a.queue.size() < 3:
+				if wood >= 25 and gold_free >= 45:
+					wood -= 25
+					gold -= 45
+					range_a.ai_enqueue_unit("archer")
+					_feudal_trained += 1
+					return true
+			want = "soldier"
+	if want == "soldier" or need_fill:
+		var barracks := _own_barracks()
+		if barracks != null and barracks.is_complete and barracks.queue.size() < 3 and food_free >= 60 and gold_free >= 20:
+			food -= 60
+			gold -= 20
+			barracks.ai_enqueue_unit("soldier")
+			_feudal_trained += 1
+			_last_counter_pick = "soldier"
+			return true
+	return false
 
 
 func _can_afford(cost: Dictionary) -> bool:
@@ -1076,8 +1498,12 @@ func _launch_wave(army: Array) -> void:
 				(u as Unit).command_move(enemy_base)
 			count += 1
 	_wave_start_size = count
+	if _waves_launched == 1:
+		_first_wave_count = count
 	wave_launched.emit(count)
-	print("[AI] team=%d wave count=%d target=%s" % [team, count, target.name if target else "none"])
+	print("[AI] team=%d wave count=%d first=%d target=%s" % [
+		team, count, _first_wave_count, target.name if target else "none"
+	])
 
 
 func _check_wave_retreat() -> void:
@@ -1298,18 +1724,21 @@ func has_launched_wave() -> bool:
 
 func print_ai_summary() -> void:
 	print(
-		"[AI] summary team=%d age=%d villagers=%d farms=%d waves=%d army=%d food=%d wood=%d gold=%d stone=%d elapsed=%.0fs retreating=%s"
+		"[AI] summary team=%d age=%d villagers=%d farms=%d waves=%d first_wave=%d army=%d food=%d wood=%d gold=%d stone=%d towers=%d walls=%d elapsed=%.0fs retreating=%s"
 		% [
 			team,
 			age,
 			_count_villagers(),
 			_count_farms(),
 			_waves_launched,
+			_first_wave_count,
 			_own_military().size(),
 			food,
 			wood,
 			gold,
 			stone,
+			_count_own_buildings("watch_tower"),
+			_count_own_buildings("stone_wall"),
 			_sim_elapsed,
 			str(_retreating),
 		]
@@ -1319,7 +1748,10 @@ func print_ai_summary() -> void:
 func standard_smoke_ok() -> bool:
 	return (
 		_count_villagers() >= 12
-		and _count_farms() >= 1
+		and _count_farms() >= 4
 		and age >= 2
 		and _waves_launched >= 1
+		and _first_wave_count >= WAVE_FIRST_MIN_STANDARD
+		and stone < 300
+		and walls_not_sealing()
 	)
