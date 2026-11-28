@@ -25,8 +25,6 @@ const GROUP_DOUBLE_TAP_MS := 350
 
 ## Idle villager hotkey cycle (`.` / HUD button).
 var _idle_cycle_index: int = 0
-var _idle_poll_accum: float = 0.0
-var _last_idle_count: int = -1
 
 
 func set_formation(kind: String) -> void:
@@ -246,17 +244,6 @@ func _add(unit: Node) -> void:
 	selected_units.append(unit)
 	if unit.has_method("set_selected"):
 		unit.set_selected(true)
-
-
-func _process(delta: float) -> void:
-	_idle_poll_accum += delta
-	if _idle_poll_accum < 0.25:
-		return
-	_idle_poll_accum = 0.0
-	var n := count_idle_villagers()
-	if n != _last_idle_count:
-		_last_idle_count = n
-		idle_villager_count_changed.emit(n)
 
 
 ## Ctrl+1–9: save current unit selection into a control group.
