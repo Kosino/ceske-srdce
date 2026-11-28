@@ -71,6 +71,7 @@ func _ready() -> void:
 		await _run_farm_plots_smoke()
 		await _run_audio_manager_smoke()
 		await _run_team_recolour_smoke()
+		await _run_walk_cycle_smoke()
 		await _run_balance_harness_smoke()
 		print("[TEST] all headless smokes finished")
 		get_tree().quit(0)
@@ -105,6 +106,8 @@ func _ready() -> void:
 		await prepare_farms_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--team-shot"):
 		await prepare_team_colours_screenshot()
+	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--walk-shot"):
+		await prepare_walk_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--formation-shot"):
 		await prepare_formation_screenshot()
 	elif not Engine.is_editor_hint() and OS.get_cmdline_user_args().has("--ai-shot"):
@@ -112,6 +115,84 @@ func _ready() -> void:
 	else:
 		await _sample_windowed_fps()
 	NotificationManager.show_message("Start: Radnice + vesničané + zdroje. F3 debug.")
+
+
+## T-17: villager + soldier mid-walk (walk sheet frames) + idle facing.
+func prepare_walk_screenshot() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	var debug := get_node_or_null("DebugPanel")
+	if debug:
+		debug.visible = false
+	for n in get_tree().get_nodes_in_group("player_town_hall"):
+		if n is Node2D:
+			(n as Node2D).visible = false
+			(n as Node2D).position = Vector2(-4000, -4000)
+	for n in get_tree().get_nodes_in_group("enemy_town_hall"):
+		if n is Node2D:
+			(n as Node2D).visible = false
+			(n as Node2D).position = Vector2(-4000, -4000)
+	# Clear demo units so the shot shows only walk/idle subjects.
+	for n in get_tree().get_nodes_in_group("units"):
+		if n is Unit and is_instance_valid(n):
+			(n as Unit).visible = false
+			(n as Unit).position = Vector2(-5000, -5000)
+	var origin := Vector2(980, 720)
+	var idle: Villager = VILLAGER_SCENE.instantiate() as Villager
+	idle.team = 0
+	idle.contribute_population = false
+	idle.position = origin + Vector2(-90, 0)
+	units.add_child(idle)
+	var vill: Villager = VILLAGER_SCENE.instantiate() as Villager
+	vill.team = 0
+	vill.contribute_population = false
+	vill.position = origin
+	units.add_child(vill)
+	var sol: Soldier = SOLDIER_SCENE.instantiate() as Soldier
+	sol.team = 1
+	sol.contribute_population = false
+	sol.position = origin + Vector2(90, 0)
+	units.add_child(sol)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	# Keep idle villager stopped on facing sprite.
+	idle.state = Villager.State.IDLE
+	idle._facing = "down"
+	idle.velocity = Vector2.ZERO
+	idle._apply_facing_texture()
+	# Villager IDLE calls stop_movement each tick — park walkers in MOVING.
+	vill.state = Villager.State.MOVING
+	var cam := get_node_or_null("Camera2D") as RTSCamera
+	if cam:
+		cam.set_zoom_clamped(2.2)
+		cam.center_at(origin + Vector2(0, -8))
+	await get_tree().create_timer(0.35).timeout
+	# Force mid-walk visuals immediately before capture (feature in action).
+	for u in [vill, sol]:
+		if u == null:
+			continue
+		u.set_process(false)
+		u.set_physics_process(false)
+		if u._visual == null:
+			u._visual = u.get_node_or_null("Visual") as Sprite2D
+		u._facing = "right"
+		u._walk_frame = 2
+		u.velocity = Vector2(80, 0)
+		if u.has_walk_sheet():
+			u._apply_walk_frame()
+		else:
+			u._apply_facing_texture()
+	print(
+		"[SHOT] walk sheet_v=%s vis=%s active=%s hframes=%d frame=%d tex=%s"
+		% [
+			str(vill.has_walk_sheet()),
+			str(vill._visual != null),
+			str(vill.is_walk_animating()),
+			vill._visual.hframes if vill._visual else -1,
+			vill._visual.frame if vill._visual else -1,
+			vill._visual.texture.resource_path if vill._visual and vill._visual.texture else "?",
+		]
+	)
+	_save_shot("t17_walk.png", 0)
 
 
 ## Player (blue) vs AI (red) side-by-side — T-18 team recolour.
@@ -3256,6 +3337,120 @@ func _run_team_recolour_smoke() -> void:
 	else:
 		print("[TEST] FAIL team recolour (shader + player/AI params)")
 	for n in [kn_p, kn_e, sol_e, mkt_p, mkt_e]:
+		if n != null and is_instance_valid(n):
+			n.queue_free()
+	await get_tree().physics_frame
+
+
+## T-17: moving unit changes walk frame; idle uses idle sprite; AI modulate survives frame change.
+func _run_walk_cycle_smoke() -> void:
+	await get_tree().physics_frame
+	var vill: Villager = VILLAGER_SCENE.instantiate() as Villager
+	vill.team = 0
+	vill.contribute_population = false
+	vill.position = PLAYER_TC_POS + Vector2(140, 120)
+	units.add_child(vill)
+	var sol_ai: Soldier = SOLDIER_SCENE.instantiate() as Soldier
+	sol_ai.team = 1
+	sol_ai.contribute_population = false
+	sol_ai.position = PLAYER_TC_POS + Vector2(200, 120)
+	units.add_child(sol_ai)
+	var archer: Archer = ARCHER_SCENE.instantiate() as Archer
+	archer.team = 0
+	archer.contribute_population = false
+	archer.position = PLAYER_TC_POS + Vector2(260, 120)
+	units.add_child(archer)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+
+	var sheet_ok: bool = vill.has_walk_sheet() and sol_ai.has_walk_sheet()
+	var fallback_ok: bool = not archer.has_walk_sheet()
+	var idle_tex: Texture2D = vill._facing_textures.get("down") as Texture2D
+	var idle_ok: bool = (
+		vill._visual != null
+		and idle_tex != null
+		and vill._visual.texture == idle_tex
+		and not vill.is_walk_animating()
+	)
+
+	# Drive walk animation without relying on nav avoidance callbacks.
+	var frame_before: int = vill.walk_frame()
+	var tex_before: Texture2D = vill._visual.texture
+	vill.velocity = Vector2(80, 0)
+	vill._update_facing_from_velocity()
+	var saw_frame_change: bool = false
+	# 5 × 0.05s @ 8 FPS → 2 frame advances (avoid wrapping back to frame_before).
+	for _i in range(5):
+		vill._update_walk_animation(0.05)
+		if vill.walk_frame() != frame_before:
+			saw_frame_change = true
+	var moved_ok: bool = (
+		vill.has_walk_sheet()
+		and vill.is_walk_animating()
+		and vill._visual.texture == vill._walk_sheet
+		and vill._visual.hframes == Unit.WALK_FRAME_COUNT
+		and saw_frame_change
+		and vill.walk_frame() != frame_before
+		and vill._visual.frame >= 0
+	)
+	var idle_tex_after_move: Texture2D = vill._facing_textures.get(vill._facing) as Texture2D
+	vill.velocity = Vector2.ZERO
+	vill._update_walk_animation(0.05)
+	var back_idle_ok: bool = (
+		not vill.is_walk_animating()
+		and vill._visual.texture == idle_tex_after_move
+		and vill._visual.hframes == 1
+		and vill.walk_frame() == 0
+	)
+	# Texture object identity may differ after swap; ensure we left the sheet.
+	var left_sheet_ok: bool = vill._visual.texture != vill._walk_sheet
+
+	# AI tint must survive walk frame changes (T-18).
+	var mod_before: Color = sol_ai._visual.modulate
+	sol_ai.velocity = Vector2(0, 80)
+	sol_ai._update_facing_from_velocity()
+	for _j in range(16):
+		sol_ai._update_walk_animation(0.05)
+	var mod_after: Color = sol_ai._visual.modulate
+	var modulate_ok: bool = (
+		sol_ai.has_walk_sheet()
+		and sol_ai.is_walk_animating()
+		and mod_after.is_equal_approx(mod_before)
+		and mod_after.is_equal_approx(TeamColors.AI_TINT_UNIT)
+	)
+	# Archer without sheet stays on static facing while "moving".
+	archer.velocity = Vector2(60, 0)
+	archer._update_facing_from_velocity()
+	archer._update_walk_animation(0.2)
+	var archer_fallback_ok: bool = (
+		not archer.has_walk_sheet()
+		and not archer.is_walk_animating()
+		and archer._visual.texture != null
+		and archer._visual.hframes == 1
+		and archer._facing_textures.has(archer._facing)
+		and archer._visual.texture == archer._facing_textures[archer._facing]
+	)
+
+	var all_ok: bool = (
+		sheet_ok
+		and fallback_ok
+		and idle_ok
+		and moved_ok
+		and back_idle_ok
+		and left_sheet_ok
+		and modulate_ok
+		and archer_fallback_ok
+		and tex_before != null
+	)
+	print(
+		"[TEST] walk sheet=%s fallback=%s idle=%s moved=%s back_idle=%s modulate=%s archer=%s"
+		% [sheet_ok, fallback_ok, idle_ok, moved_ok, back_idle_ok, modulate_ok, archer_fallback_ok]
+	)
+	if all_ok:
+		print("[TEST] PASS walk cycle (frame change + idle + AI modulate)")
+	else:
+		print("[TEST] FAIL walk cycle (frame change + idle + AI modulate)")
+	for n in [vill, sol_ai, archer]:
 		if n != null and is_instance_valid(n):
 			n.queue_free()
 	await get_tree().physics_frame

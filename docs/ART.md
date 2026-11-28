@@ -105,8 +105,25 @@ Sprites without distinguishable `(40, 86, 160)` team indices (shader is a no-op 
 - **Buildings:** town_center, house, lumber_camp, mill, farm, barracks, archery_range, blacksmith, stable, castle, monastery, university, siege_workshop, walls/gates/towers, construction_site
 - **Has team blue today:** knight (shield), market (awning/banner)
 
+## T-17 walk-cycle (villager + soldier)
+
+Code in `Unit.gd`: optional walk sheet `assets/sprites/units/{unit}_walk.png`
+(4 columns × 4 rows: frames × down/left/right/up). Idle = existing static facing PNGs.
+Units without a walk sheet keep the static facing sprite. Frame swaps do **not** reset
+`modulate` / shader material (T-18 palette-swap + AI tint preserved).
+
+| File | Size | Notes |
+|---|---|---|
+| `assets/sprites/units/villager_walk.png` | 128×160 (32×40 cells) | **placeholder** solid fill + border until `art/walk-v1` |
+| `assets/sprites/units/soldier_walk.png` | 128×160 (32×40 cells) | **placeholder** solid fill + border until `art/walk-v1` |
+
+Finished walk art should arrive via branch `art/walk-v1` (`art_import/`) using the PR #10
+pipeline (magenta key → defringe → crop → NN scale → shared 32-colour palette). No `gen_*`
+procedural sprite drawing; do not slide/deform idle frames as “animation”.
+Screenshot: `docs/screenshots/t17_walk.png`.
+
 ## What this pack does not include
 
-- Walk-cycle frames (only one pose per facing).
+- Finished walk-cycle pixel art (villager/soldier use temporary placeholders; other units idle-only).
 - Dedicated trebuchet unpacked / firing frames (T-23 uses packed art + subtle deploy cue).
 - Full team-blue coverage on every unit/building (see art debt above).
