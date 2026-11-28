@@ -177,38 +177,43 @@ func prepare_walk_screenshot() -> void:
 			u.navigation_agent.avoidance_enabled = false
 			if u.navigation_agent.velocity_computed.is_connected(u._on_velocity_computed):
 				u.navigation_agent.velocity_computed.disconnect(u._on_velocity_computed)
-	idle._facing = "down"
+	idle._facing = "right"
 	idle.velocity = Vector2.ZERO
 	idle._apply_facing_texture()
 	if idle._visual:
-		idle._visual.scale = Vector2(3.5, 3.5)
+		idle._visual.scale = Vector2(3.0, 3.0)
 		idle._anchor_sprite_to_feet()
+	# Mid-stride walk frames (feature in action); AI soldier keeps T-18 tint.
+	vill._facing = "right"
+	vill._walk_frame = 1
+	vill.velocity = Vector2(80, 0)
+	sol._facing = "right"
+	sol._walk_frame = 2
+	sol.velocity = Vector2(80, 0)
 	for u in [vill, sol]:
 		if u == null:
 			continue
 		if u._visual == null:
 			u._visual = u.get_node_or_null("Visual") as Sprite2D
-		u._facing = "right"
-		u._walk_frame = 2
-		u.velocity = Vector2(80, 0)
 		if u.has_walk_sheet():
 			u._apply_walk_frame()
-			# Scale placeholders so walk sheet cells read clearly vs idle art.
-			u._visual.scale = Vector2(3.5, 3.5)
+			u._visual.scale = Vector2(3.0, 3.0)
 			u._anchor_sprite_to_feet()
 		else:
 			u._apply_facing_texture()
+	if cam:
+		cam.set_zoom_clamped(2.4)
+		cam.center_at(origin + Vector2(10, -12))
 	await get_tree().process_frame
 	await get_tree().process_frame
 	print(
-		"[SHOT] walk sheet_v=%s vis=%s active=%s hframes=%d frame=%d tex=%s"
+		"[SHOT] walk sheet_v=%s active=%s hframes=%d frame=%d tint=%s"
 		% [
 			str(vill.has_walk_sheet()),
-			str(vill._visual != null),
 			str(vill.is_walk_animating()),
 			vill._visual.hframes if vill._visual else -1,
 			vill._visual.frame if vill._visual else -1,
-			vill._visual.texture.resource_path if vill._visual and vill._visual.texture else "?",
+			sol._visual.modulate if sol._visual else Color.BLACK,
 		]
 	)
 	_save_shot("t17_walk.png", 0)
