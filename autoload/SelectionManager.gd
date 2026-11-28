@@ -227,6 +227,56 @@ func issue_stop() -> void:
 		AudioManager.play_sfx("command")
 
 
+## RMB own garrison building: walk in and hide.
+func issue_garrison(building: Node) -> void:
+	if building == null or not is_instance_valid(building) or not GarrisonController.can_host(building):
+		return
+	var g := GarrisonController.ensure(building)
+	if g == null:
+		return
+	var any := false
+	for u in selected_units:
+		if not is_instance_valid(u) or not (u is Unit):
+			continue
+		var unit := u as Unit
+		if not GarrisonController.can_garrison_unit(unit):
+			continue
+		if g.is_full() and not unit.is_garrisoned:
+			continue
+		unit.command_garrison(building)
+		any = true
+	if any:
+		AudioManager.play_sfx("command")
+		NotificationManager.show_message("Posádka: %s" % g.summary_line())
+
+
+func eject_selected_building_garrison() -> int:
+	var b := selected_building
+	if b == null or not is_instance_valid(b):
+		return 0
+	var g := GarrisonController.of(b)
+	if g == null or g.count() <= 0:
+		return 0
+	var n := g.eject_all(true)
+	building_selection_changed.emit(selected_building)
+	return n
+
+
+func toggle_town_bell() -> void:
+	var hall := selected_building as DropOff
+	if hall == null or not is_instance_valid(hall) or hall.team != 0:
+		hall = null
+		var tree := get_tree()
+		if tree:
+			hall = tree.get_first_node_in_group("player_town_hall") as DropOff
+	if hall == null:
+		NotificationManager.show_message("Nemáš radnici.")
+		return
+	hall.toggle_town_bell()
+	if selected_building == hall:
+		building_selection_changed.emit(hall)
+
+
 func notify_unit_removed(unit: Node) -> void:
 	if selected_units.has(unit):
 		selected_units.erase(unit)
@@ -302,6 +352,8 @@ func get_control_group(slot: int) -> Array:
 
 func is_villager_idle(v: Villager) -> bool:
 	if v == null or not is_instance_valid(v) or v.team != 0:
+		return false
+	if v.is_garrisoned:
 		return false
 	return v.state == Villager.State.IDLE
 

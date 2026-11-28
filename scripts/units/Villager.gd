@@ -141,6 +141,10 @@ func _harvest_rate_for(resource_type: String) -> float:
 
 
 func _physics_process(delta: float) -> void:
+	if is_garrisoned:
+		return
+	if _try_garrison_approach():
+		return
 	match state:
 		State.MOVING:
 			_steer_toward_target()
@@ -213,6 +217,8 @@ func _physics_process(delta: float) -> void:
 
 
 func command_move(world_pos: Vector2, speed_cap: float = -1.0) -> void:
+	if is_garrisoned:
+		return
 	_leave_build_site()
 	_leave_repair()
 	_build_chain.clear()
@@ -221,7 +227,20 @@ func command_move(world_pos: Vector2, speed_cap: float = -1.0) -> void:
 	super.command_move(world_pos, speed_cap)
 
 
+func command_garrison(building: Node) -> void:
+	if is_garrisoned:
+		return
+	_leave_build_site()
+	_leave_repair()
+	_build_chain.clear()
+	_interrupt_gather_orders()
+	state = State.MOVING
+	super.command_garrison(building)
+
+
 func command_stop() -> void:
+	if is_garrisoned:
+		return
 	_leave_build_site()
 	_leave_repair()
 	_build_chain.clear()
@@ -234,6 +253,61 @@ func command_attack(target: Node2D) -> void:
 	# Villagers never attack; keep gather/move/build only.
 	print("[COMBAT] villager refuse attack -> %s" % (target.name if target else "null"))
 	return
+
+
+## Snapshot gather/build/repair for Town Bell return.
+func capture_work_snapshot() -> Dictionary:
+	var snap: Dictionary = {"kind": "idle", "pos": global_position}
+	if state == State.MOVE_TO_RESOURCE or state == State.HARVESTING or state == State.MOVE_TO_DROPOFF:
+		if target_resource != null and is_instance_valid(target_resource):
+			snap["kind"] = "gather"
+			snap["resource"] = target_resource
+			return snap
+	if state == State.MOVE_TO_BUILD or state == State.BUILDING:
+		if target_building != null and is_instance_valid(target_building):
+			snap["kind"] = "build"
+			snap["building"] = target_building
+			return snap
+	if state == State.MOVE_TO_REPAIR or state == State.REPAIRING:
+		if target_repair != null and is_instance_valid(target_repair):
+			snap["kind"] = "repair"
+			snap["building"] = target_repair
+			return snap
+	if state == State.MOVING:
+		snap["kind"] = "move"
+		if navigation_agent:
+			snap["pos"] = navigation_agent.target_position
+		return snap
+	return snap
+
+
+func restore_work_snapshot(snap: Dictionary) -> void:
+	if snap.is_empty():
+		command_stop()
+		return
+	match String(snap.get("kind", "idle")):
+		"gather":
+			var res = snap.get("resource")
+			if res != null and is_instance_valid(res):
+				assign_gather(res)
+			else:
+				command_stop()
+		"build":
+			var b = snap.get("building")
+			if b is Building and is_instance_valid(b) and not (b as Building).is_complete:
+				assign_build(b as Building)
+			else:
+				command_stop()
+		"repair":
+			var rb = snap.get("building")
+			if rb is Building and is_instance_valid(rb) and (rb as Building).needs_repair():
+				assign_repair(rb as Building)
+			else:
+				command_stop()
+		"move":
+			command_move(snap.get("pos", global_position))
+		_:
+			command_stop()
 
 
 func _interrupt_gather_orders() -> void:

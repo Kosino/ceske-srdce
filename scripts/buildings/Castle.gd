@@ -38,12 +38,15 @@ func _ready() -> void:
 	if is_complete and team == 0 and not _pop_granted:
 		GameManager.add_population_cap(POP_BONUS)
 		_pop_granted = true
+	if is_complete:
+		GarrisonController.ensure(self)
 
 
 func _on_construction_finished() -> void:
 	if team == 0 and not _pop_granted:
 		GameManager.add_population_cap(POP_BONUS)
 		_pop_granted = true
+	GarrisonController.ensure(self)
 
 
 func _process(delta: float) -> void:
@@ -128,9 +131,11 @@ func ai_enqueue_unit(unit_id: String) -> bool:
 
 
 func get_queue_summary() -> String:
-	if queue.is_empty():
-		return "fronta prázdná"
-	return "fronta %d | %.1fs" % [queue.size(), maxf(train_remaining, 0.0)]
+	var base := "fronta prázdná" if queue.is_empty() else "fronta %d | %.1fs" % [queue.size(), maxf(train_remaining, 0.0)]
+	var g := GarrisonController.of(self)
+	if g:
+		return "%s · %s" % [base, g.summary_line()]
+	return base
 
 
 func _complete_training() -> void:
@@ -181,14 +186,18 @@ func _try_auto_attack() -> void:
 	if target == null:
 		return
 	_attack_timer = ATTACK_COOLDOWN
-	var proj: Projectile = PROJECTILE_SCENE.instantiate() as Projectile
+	var garr := GarrisonController.of(self)
+	var arrows := garr.total_arrows(1) if garr else 1
 	var parent := spawn_parent if spawn_parent else get_parent()
 	if parent == null:
 		parent = get_tree().current_scene
-	parent.add_child(proj)
 	var origin := global_position + Vector2(0, -footprint.y * 0.25)
-	proj.setup(origin, target.global_position, ATTACK_DAMAGE, team, target)
-	print("[COMBAT] castle loosed arrow at %s" % target.name)
+	for i in arrows:
+		var proj: Projectile = PROJECTILE_SCENE.instantiate() as Projectile
+		parent.add_child(proj)
+		var aim := target.global_position + Vector2(float(i) * 3.0 - float(arrows) * 1.5, 0.0)
+		proj.setup(origin, aim, ATTACK_DAMAGE, team, target)
+	print("[COMBAT] castle loosed %d arrow(s) at %s" % [arrows, target.name])
 
 
 func _nearest_enemy() -> Node2D:
@@ -205,6 +214,8 @@ func _nearest_enemy() -> Node2D:
 	for g in groups:
 		for n in tree.get_nodes_in_group(g):
 			if not (n is Node2D) or not is_instance_valid(n):
+				continue
+			if n is Unit and (n as Unit).is_garrisoned:
 				continue
 			var d := global_position.distance_to((n as Node2D).global_position)
 			if d <= best_d:

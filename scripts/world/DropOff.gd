@@ -4,12 +4,19 @@ class_name DropOff
 signal destroyed(hall: DropOff)
 signal queue_changed
 signal research_changed
+signal bell_changed(active: bool)
 
 const VILLAGER_SCENE := preload("res://scenes/units/Villager.tscn")
+const PROJECTILE_SCENE := preload("res://scenes/combat/Projectile.tscn")
 ## DESIGN: Vesničan 50 J, 25 s.
 const VILLAGER_COST := {"food": 50}
 const VILLAGER_TIME := 25.0
 const MAX_QUEUE := 5
+## T-35: TC arrows from garrisoned villagers/archers only (base 0).
+const ATTACK_DAMAGE := 5.0
+const ATTACK_RANGE := 7.0 * 40.0
+const ATTACK_COOLDOWN := 1.0
+const BELL_RADIUS := 25.0 * 40.0
 
 @export var team: int = 0
 @export var dropoff_radius: float = 48.0
@@ -27,6 +34,10 @@ var spawn_parent: Node2D
 var researching_age: bool = false
 var research_remaining: float = 0.0
 var research_target_age: int = 0
+var _attack_timer: float = 0.0
+## Town Bell: villagers run to nearest garrison; second press restores work.
+var bell_active: bool = false
+var _bell_snapshots: Dictionary = {} # instance_id -> Dictionary
 
 
 func _ready() -> void:
@@ -45,6 +56,7 @@ func _ready() -> void:
 	_apply_team_visual()
 	if has_node("Label"):
 		$Label.text = building_name
+	GarrisonController.ensure(self)
 
 
 func _anchor_visual() -> void:
@@ -69,6 +81,8 @@ func accepts(resource_type: String) -> bool:
 
 
 func _process(delta: float) -> void:
+	_attack_timer = maxf(_attack_timer - delta, 0.0)
+	_try_auto_attack()
 	## Age research (player Radnice) + villager queues for any team (AI uses ai_enqueue).
 	if researching_age:
 		if team != 0:
@@ -85,6 +99,158 @@ func _process(delta: float) -> void:
 	train_remaining -= delta
 	if train_remaining <= 0.0:
 		_complete_training()
+
+
+func garrison() -> GarrisonController:
+	return GarrisonController.of(self)
+
+
+func garrison_summary() -> String:
+	var g := garrison()
+	return g.summary_line() if g else ""
+
+
+func toggle_town_bell() -> void:
+	if team != 0:
+		return
+	if bell_active:
+		_bell_return_to_work()
+	else:
+		_bell_call_villagers()
+
+
+func _bell_call_villagers() -> void:
+	_bell_snapshots.clear()
+	var tree := get_tree()
+	if tree == null:
+		return
+	var called := 0
+	for n in tree.get_nodes_in_group("villagers"):
+		if not (n is Villager):
+			continue
+		var v := n as Villager
+		if v.team != team or v.is_garrisoned:
+			continue
+		if global_position.distance_to(v.global_position) > BELL_RADIUS:
+			continue
+		_bell_snapshots[v.get_instance_id()] = v.capture_work_snapshot()
+		var host := _nearest_garrison_host_for(v)
+		if host == null:
+			continue
+		v.command_garrison(host)
+		called += 1
+	bell_active = true
+	bell_changed.emit(true)
+	NotificationManager.show_message("Zvonek: vesničané se ukrývají (%d)." % called)
+	print("[BELL] call villagers=%d" % called)
+
+
+func _bell_return_to_work() -> void:
+	var tree := get_tree()
+	var restored := 0
+	# Eject garrisoned villagers that we called, then restore work.
+	for host_n in tree.get_nodes_in_group("garrison_hosts"):
+		if "team" in host_n and int(host_n.get("team")) != team:
+			continue
+		var g := GarrisonController.of(host_n)
+		if g == null:
+			continue
+		var inside := g.garrisoned.duplicate()
+		for u in inside:
+			if u is Villager and _bell_snapshots.has(u.get_instance_id()):
+				g.eject_unit(u as Unit, false)
+	for id in _bell_snapshots.keys():
+		var snap: Dictionary = _bell_snapshots[id]
+		var found: Villager = null
+		for n in tree.get_nodes_in_group("villagers"):
+			if n is Villager and n.get_instance_id() == int(id):
+				found = n as Villager
+				break
+		if found == null or not is_instance_valid(found) or found.is_garrisoned:
+			continue
+		found.restore_work_snapshot(snap)
+		restored += 1
+	_bell_snapshots.clear()
+	bell_active = false
+	bell_changed.emit(false)
+	NotificationManager.show_message("Zvonek: zpět k práci (%d)." % restored)
+	print("[BELL] return villagers=%d" % restored)
+
+
+func _nearest_garrison_host_for(unit: Unit) -> Node:
+	var best: Node = null
+	var best_d := INF
+	var tree := get_tree()
+	if tree == null:
+		return null
+	for n in tree.get_nodes_in_group("garrison_hosts"):
+		if not is_instance_valid(n):
+			continue
+		if "team" in n and int(n.get("team")) != unit.team:
+			continue
+		if not GarrisonController.can_host(n):
+			continue
+		var g := GarrisonController.ensure(n)
+		if g == null or g.is_full():
+			continue
+		if not (n is Node2D):
+			continue
+		var d := unit.global_position.distance_to((n as Node2D).global_position)
+		if d < best_d:
+			best_d = d
+			best = n
+	return best
+
+
+func _try_auto_attack() -> void:
+	if _attack_timer > 0.0:
+		return
+	var g := garrison()
+	var arrows := g.total_arrows(0) if g else 0
+	if arrows <= 0:
+		return
+	var target := _nearest_enemy()
+	if target == null:
+		return
+	_attack_timer = ATTACK_COOLDOWN
+	_loose_arrows(target, arrows)
+
+
+func _loose_arrows(target: Node2D, count: int) -> void:
+	var parent := spawn_parent if spawn_parent else get_parent()
+	if parent == null:
+		parent = get_tree().current_scene
+	var origin := global_position + Vector2(0, -36.0)
+	for i in count:
+		var proj: Projectile = PROJECTILE_SCENE.instantiate() as Projectile
+		parent.add_child(proj)
+		var aim := target.global_position + Vector2(float(i) * 3.0 - float(count) * 1.5, float(i % 3) * 2.0)
+		proj.setup(origin, aim, ATTACK_DAMAGE, team, target)
+	print("[COMBAT] radnice loosed %d arrow(s) at %s" % [count, target.name])
+
+
+func _nearest_enemy() -> Node2D:
+	var best: Node2D = null
+	var best_d := ATTACK_RANGE
+	var groups: Array
+	if team == 0:
+		groups = ["enemy_units", "enemy_buildings", "enemy_town_hall"]
+	else:
+		groups = ["player_units", "player_buildings", "player_town_hall"]
+	var tree := get_tree()
+	if tree == null:
+		return null
+	for grp in groups:
+		for n in tree.get_nodes_in_group(grp):
+			if not (n is Node2D) or not is_instance_valid(n):
+				continue
+			if n is Unit and (n as Unit).is_garrisoned:
+				continue
+			var d := global_position.distance_to((n as Node2D).global_position)
+			if d <= best_d:
+				best_d = d
+				best = n as Node2D
+	return best
 
 
 func _has_ai_controller() -> bool:
@@ -175,11 +341,17 @@ func start_age_research(time_override: float = -1.0) -> bool:
 
 
 func get_queue_summary() -> String:
+	var gar := garrison_summary()
+	var base := ""
 	if researching_age:
-		return "věk %.1fs" % maxf(research_remaining, 0.0)
-	if queue.is_empty():
-		return "fronta prázdná"
-	return "fronta %d | %.1fs" % [queue.size(), maxf(train_remaining, 0.0)]
+		base = "věk %.1fs" % maxf(research_remaining, 0.0)
+	elif queue.is_empty():
+		base = "fronta prázdná"
+	else:
+		base = "fronta %d | %.1fs" % [queue.size(), maxf(train_remaining, 0.0)]
+	if gar != "":
+		return "%s · %s" % [base, gar]
+	return base
 
 
 func _complete_age_research() -> void:
@@ -246,6 +418,9 @@ func take_damage(amount: float, _dmg_type: String = "melee") -> void:
 
 
 func die() -> void:
+	var g := garrison()
+	if g:
+		g.on_host_destroyed()
 	destroyed.emit(self)
 	AudioManager.play_sfx("building_destroyed")
 	print("[COMBAT] radnice destroyed team=%d" % team)

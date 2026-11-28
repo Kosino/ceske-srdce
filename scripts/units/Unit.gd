@@ -55,6 +55,10 @@ var _move_speed_cap: float = -1.0
 ## Wall-aware waypoint path (tile centers); empty = use NavigationAgent alone.
 var _wall_waypoints: Array[Vector2] = []
 var _move_goal: Vector2 = Vector2.ZERO
+## T-35 garrison: walk-to building, or currently inside a host.
+var _garrison_target: Node = null
+var is_garrisoned: bool = false
+var garrison_host: Node = null
 
 @onready var navigation_agent: NavigationAgent2D = $NavigationAgent2D
 
@@ -226,6 +230,16 @@ func _register_team_groups() -> void:
 		BalanceSim.record_unit_trained(team, unit_id)
 
 
+## Re-add combat/selection groups after leaving garrison (no population delta).
+func _register_team_groups_soft() -> void:
+	if team == 0:
+		if not is_in_group("player_units"):
+			add_to_group("player_units")
+	else:
+		if not is_in_group("enemy_units"):
+			add_to_group("enemy_units")
+
+
 func _hp_fill_color() -> Color:
 	return Color(0.2, 0.85, 0.25, 0.95) if team == 0 else Color(0.9, 0.2, 0.15, 0.95)
 
@@ -313,11 +327,64 @@ func effective_move_speed() -> float:
 
 
 func command_move(world_pos: Vector2, speed_cap: float = -1.0) -> void:
+	if is_garrisoned:
+		return
+	_garrison_target = null
 	attack_target = null
 	_move_speed_cap = speed_cap
 	if navigation_agent:
 		navigation_agent.max_speed = effective_move_speed()
 	set_movement_target(world_pos)
+
+
+## Walk to a garrison host and enter when in range.
+func command_garrison(building: Node) -> void:
+	if is_garrisoned or not GarrisonController.can_garrison_unit(self):
+		return
+	if not GarrisonController.can_host(building):
+		return
+	if "team" in building and int(building.get("team")) != team:
+		return
+	var g := GarrisonController.ensure(building)
+	if g == null or g.is_full():
+		if g != null and g.is_full():
+			NotificationManager.show_message("Posádka je plná (%d)." % g.capacity)
+		return
+	attack_target = null
+	_garrison_target = building
+	_move_speed_cap = -1.0
+	if navigation_agent:
+		navigation_agent.max_speed = effective_move_speed()
+	var dest := (building as Node2D).global_position if building is Node2D else global_position
+	set_movement_target(dest)
+
+
+## Returns true if this frame was consumed by garrison approach / enter.
+func _try_garrison_approach() -> bool:
+	if is_garrisoned:
+		stop_movement()
+		return true
+	if _garrison_target == null:
+		return false
+	if not is_instance_valid(_garrison_target) or not GarrisonController.can_host(_garrison_target):
+		_garrison_target = null
+		return false
+	var dest := (_garrison_target as Node2D).global_position
+	var reach := GarrisonController.ENTER_RANGE
+	if _garrison_target is Building:
+		reach += (_garrison_target as Building).footprint.length() * 0.2
+	elif _garrison_target is DropOff:
+		reach += ( _garrison_target as DropOff).dropoff_radius * 0.35
+	if global_position.distance_to(dest) <= reach:
+		var g := GarrisonController.ensure(_garrison_target)
+		if g and g.try_enter(self):
+			return true
+		_garrison_target = null
+		stop_movement()
+		return true
+	set_movement_target(dest)
+	_steer_toward_target()
+	return true
 
 
 func is_friendly_target(target: Node2D) -> bool:
@@ -348,6 +415,8 @@ func is_structure_target(target: Node2D) -> bool:
 
 
 func command_attack(target: Node2D) -> void:
+	if is_garrisoned:
+		return
 	if not can_attack or target == null or not is_instance_valid(target):
 		return
 	if is_friendly_target(target):
@@ -356,6 +425,7 @@ func command_attack(target: Node2D) -> void:
 	if buildings_only and not is_structure_target(target):
 		print("[COMBAT] siege refuse non-building %s" % target.name)
 		return
+	_garrison_target = null
 	attack_target = target
 	_move_speed_cap = -1.0
 	_wall_waypoints.clear()
@@ -366,6 +436,9 @@ func command_attack(target: Node2D) -> void:
 
 
 func command_stop() -> void:
+	if is_garrisoned:
+		return
+	_garrison_target = null
 	attack_target = null
 	_move_speed_cap = -1.0
 	if navigation_agent:
@@ -374,7 +447,11 @@ func command_stop() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if is_garrisoned:
+		return
 	_attack_timer = maxf(_attack_timer - delta, 0.0)
+	if _try_garrison_approach():
+		return
 	if can_attack and is_instance_valid(attack_target):
 		if is_friendly_target(attack_target):
 			print("[COMBAT] clear friendly attack_target %s" % attack_target.name)
@@ -502,6 +579,10 @@ func take_damage(amount: float, dmg_type: String = "melee") -> void:
 
 
 func die() -> void:
+	if is_garrisoned and garrison_host != null:
+		var g := GarrisonController.of(garrison_host)
+		if g:
+			g.garrisoned.erase(self)
 	died.emit(self)
 	if team == 0:
 		GameManager.change_population(-1)

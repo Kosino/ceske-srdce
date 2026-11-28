@@ -31,6 +31,12 @@ func _ready() -> void:
 		_visual.texture = TEX_TOWER
 	super._ready()
 	add_to_group("watch_towers")
+	if is_complete:
+		GarrisonController.ensure(self)
+
+
+func _on_construction_finished() -> void:
+	GarrisonController.ensure(self)
 
 
 func apply_tower_attack_bonus(amount: float, tech_id: String = "") -> void:
@@ -70,14 +76,18 @@ func _try_auto_attack() -> void:
 	if target == null:
 		return
 	_attack_timer = ATTACK_COOLDOWN
-	var proj: Projectile = PROJECTILE_SCENE.instantiate() as Projectile
+	var garr := GarrisonController.of(self)
+	var arrows := garr.total_arrows(1) if garr else 1
 	var parent := spawn_parent if spawn_parent else get_parent()
 	if parent == null:
 		parent = get_tree().current_scene
-	parent.add_child(proj)
 	var origin := global_position + Vector2(0, -footprint.y * 0.35)
-	proj.setup(origin, target.global_position, attack_damage, team, target)
-	print("[COMBAT] tower loosed arrow at %s" % target.name)
+	for i in arrows:
+		var proj: Projectile = PROJECTILE_SCENE.instantiate() as Projectile
+		parent.add_child(proj)
+		var aim := target.global_position + Vector2(float(i) * 3.0 - float(arrows) * 1.5, 0.0)
+		proj.setup(origin, aim, attack_damage, team, target)
+	print("[COMBAT] tower loosed %d arrow(s) at %s" % [arrows, target.name])
 
 
 func _nearest_enemy() -> Node2D:
@@ -94,6 +104,8 @@ func _nearest_enemy() -> Node2D:
 	for g in groups:
 		for n in tree.get_nodes_in_group(g):
 			if not (n is Node2D) or not is_instance_valid(n):
+				continue
+			if n is Unit and (n as Unit).is_garrisoned:
 				continue
 			var d := global_position.distance_to((n as Node2D).global_position)
 			if d <= best_d:

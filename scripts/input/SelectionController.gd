@@ -61,6 +61,9 @@ func _handle_hotkey(key: InputEventKey) -> bool:
 	if code == KEY_PERIOD:
 		SelectionManager.select_next_idle_villager()
 		return true
+	if code == KEY_H:
+		SelectionManager.toggle_town_bell()
+		return true
 	return false
 
 
@@ -183,6 +186,11 @@ func _issue_right_click_command() -> void:
 					(u as Monk).assign_heal(ally)
 			NotificationManager.show_message("Léčení!")
 			return
+	# Garrison: RMB own TC / tower / castle.
+	var garrison_host := _find_garrison_host_at(world_pos)
+	if garrison_host:
+		SelectionManager.issue_garrison(garrison_host)
+		return
 	var resource := _find_resource_at(world_pos)
 	if resource:
 		SelectionManager.issue_gather(resource)
@@ -204,6 +212,28 @@ func _issue_right_click_command() -> void:
 		NotificationManager.show_message("Oprava: %s" % repair.display_name)
 		return
 	SelectionManager.issue_move(world_pos)
+
+
+func _find_garrison_host_at(world_pos: Vector2) -> Node:
+	var best: Node = null
+	var best_dist := 48.0
+	for node in get_tree().get_nodes_in_group("garrison_hosts"):
+		if not (node is Node2D) or not is_instance_valid(node):
+			continue
+		if "team" in node and int(node.get("team")) != 0:
+			continue
+		if not GarrisonController.can_host(node):
+			continue
+		var radius := 40.0
+		if node is DropOff:
+			radius = (node as DropOff).dropoff_radius
+		elif node is Building:
+			radius = (node as Building).footprint.length() * 0.35
+		var d := (node as Node2D).global_position.distance_to(world_pos)
+		if d < best_dist + radius * 0.35:
+			best_dist = d
+			best = node
+	return best
 
 
 func _try_set_rally(world_pos: Vector2) -> bool:
