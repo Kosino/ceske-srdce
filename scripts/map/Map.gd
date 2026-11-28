@@ -2674,28 +2674,71 @@ func _run_defeat_smoke() -> void:
 	victory.reset_for_test()
 
 
-## AI economy: places ≥1 building and launches a wave within timeout (Husité).
+## T-30 Standard AI: accelerated ~10 in-game minutes → ≥12 vills, ≥1 farm, age≥2, ≥1 wave.
 func _run_ai_economy_smoke() -> void:
 	var ai := get_node_or_null("SimpleEnemyAI") as SimpleEnemyAI
 	if ai == null:
 		print("[TEST] FAIL ai_economy: no SimpleEnemyAI")
 		return
-	# Wait for bootstrap + house/barracks (3s each) + 3×1.2s train + wave.
-	var placed := false
-	var waved := false
-	for _i in range(80):
-		await get_tree().create_timer(0.35).timeout
-		placed = ai.has_placed_building()
-		waved = ai.has_launched_wave()
-		if placed and waved:
+	## Keep victory from pausing the tree when a wave hits the player TC mid-smoke.
+	var victory := get_node_or_null("VictoryController") as VictoryController
+	if victory:
+		victory.set_process(false)
+	## Deterministic RNG; do not wipe buildings/age already earned during prior smokes.
+	ai.rng.seed = 4242 + ai.team * 7919
+	ai.timing_jitter = 1.0
+	var start_elapsed: float = ai._sim_elapsed
+	Engine.time_scale = 80.0
+	var ok := false
+	## Headless frames can have tiny wall deltas; allow many iterations for +10 min.
+	var frames := 0
+	while frames < 40000:
+		await get_tree().process_frame
+		frames += 1
+		## Keep player TC alive so later victory/defeat smokes still have a hall.
+		var ph := get_tree().get_first_node_in_group("player_town_hall") as DropOff
+		if ph != null and is_instance_valid(ph):
+			ph.hp = ph.max_hp
+		if ai.standard_smoke_ok():
+			ok = true
 			break
-	print("[TEST] ai_economy placed=%s waved=%s food=%d wood=%d gold=%d" % [
-		placed, waved, ai.food, ai.wood, ai.gold
+		if ai._sim_elapsed - start_elapsed >= 600.0:
+			ok = ai.standard_smoke_ok()
+			break
+	ai.print_ai_summary()
+	Engine.time_scale = 1.0
+	## Pull wave home, freeze AI, restore player hall for subsequent smokes.
+	ai._retreating = true
+	for u in ai._own_military():
+		if u is Unit and is_instance_valid(u):
+			(u as Unit).command_move(ai.base_position)
+	ai.set_process(false)
+	_ensure_player_hall_after_ai_smoke(victory)
+	if victory:
+		victory.set_process(true)
+		victory.reset_for_test()
+	print("[TEST] ai_economy vills=%d farms=%d age=%d waved=%s elapsed=%.0fs frames=%d" % [
+		ai._count_villagers(), ai._count_farms(), ai.age, ai.has_launched_wave(), ai._sim_elapsed, frames
 	])
-	if placed and waved:
+	if ok:
 		print("[TEST] PASS AI places building and launches wave")
 	else:
 		print("[TEST] FAIL AI places building and launches wave")
+
+
+func _ensure_player_hall_after_ai_smoke(victory_node: VictoryController) -> void:
+	var hall := get_tree().get_first_node_in_group("player_town_hall") as DropOff
+	if hall != null and is_instance_valid(hall):
+		hall.hp = hall.max_hp
+		return
+	hall = DROPOFF_SCENE.instantiate() as DropOff
+	hall.team = 0
+	hall.position = PLAYER_TC_POS
+	hall.spawn_parent = units
+	units.add_child(hall)
+	if victory_node:
+		victory_node.watch_new_hall(hall)
+	print("[TEST] ai_economy restored player town hall")
 
 
 ## Walls: segment cost, path block, gate pass own/block enemy, tower shot, repair.
